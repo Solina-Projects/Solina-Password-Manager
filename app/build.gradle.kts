@@ -48,6 +48,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
 
+    // Argon2id (فقط کلاس‌های مستقیم، بدون ثبت Provider در سیستم)
+    implementation(libs.bouncycastle.bcprov)
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)
