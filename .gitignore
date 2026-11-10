@@ -1,0 +1,17 @@
+# Gradle / Android
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+*.iml
+.idea/
+.DS_Store
+
+# هرگز کلید یا رمز را کامیت نکنید
+*.jks
+*.keystore
+*.p12
+*.pem
+secrets.properties
+google-services.json
