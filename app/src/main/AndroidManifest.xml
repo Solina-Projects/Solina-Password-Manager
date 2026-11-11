@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- عمداً هیچ مجوزی (از جمله INTERNET) ندارد: نسخهٔ پیش‌نمایش هیچ ارتباط شبکه‌ای ندارد. -->
+    <!-- عمداً هیچ مجوزی (از جمله INTERNET) ندارد: نسخهٔ پیش‌نمایش هیچ ارتباط شبکه‌ای ندارد.
+         (BIND_AUTOFILL_SERVICE روی خود سرویس است و مجوزی نیست که اپ بخواهد.) -->
 
     <application
         android:name=".SolinaApplication"
@@ -22,5 +23,26 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Autofill: فقط وقتی کاربر Solina را به‌عنوان سرویس Autofill انتخاب کند فعال می‌شود. -->
+        <service
+            android:name=".autofill.SolinaAutofillService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.autofill.AutofillService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.autofill"
+                android:resource="@xml/autofill_service" />
+        </service>
+
+        <activity
+            android:name=".autofill.AutofillAuthActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/Theme.Solina"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

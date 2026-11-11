@@ -7,6 +7,12 @@ import app.solina.passwordmanager.core.security.VaultSession
 import app.solina.passwordmanager.core.storage.RoomItemStore
 import app.solina.passwordmanager.core.storage.SolinaDatabase
 import app.solina.passwordmanager.core.storage.VaultRepository
+import android.os.Handler
+import android.os.Looper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 
 /** ظرف ساده برای وابستگی‌های سراسری (در M1 با Hilt جایگزین می‌شود). */
@@ -15,6 +21,24 @@ class AppContainer(context: Context) {
     val session = VaultSession()
     val database by lazy { SolinaDatabase.open(context) }
     val repository by lazy { VaultRepository(RoomItemStore(database), session) }
+
+    private val handler = Handler(Looper.getMainLooper())
+    private val lockCheck = Runnable { session.enforceTimeout() }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    init {
+        // هر وقت خزانه قفل شد (از هر مسیری)، فهرست رمزگشایی‌شده از حافظه پاک می‌شود.
+        scope.launch { session.unlocked.collect { if (!it) repository.clear() } }
+    }
+
+    /** شروع مهلت قفل خودکار؛ در پس‌زمینه هم (بدون نیاز به بازگشت به اپ) قفل انجام می‌شود. */
+    fun scheduleAutoLock() {
+        session.onBackgrounded()
+        handler.removeCallbacks(lockCheck)
+        handler.postDelayed(lockCheck, VaultSession.DEFAULT_TIMEOUT_MILLIS + 500)
+    }
+
+    fun cancelAutoLock() = handler.removeCallbacks(lockCheck)
 }
 
 class SolinaApplication : Application() {

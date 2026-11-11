@@ -38,6 +38,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import app.solina.passwordmanager.core.crypto.CreatedVault
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import android.view.autofill.AutofillManager
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import app.solina.passwordmanager.core.fa
 import app.solina.passwordmanager.core.storage.HistoryEntry
 import app.solina.passwordmanager.core.storage.ItemPayload
@@ -78,11 +85,12 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        container.session.onBackgrounded()
+        container.scheduleAutoLock()
     }
 
     override fun onStart() {
         super.onStart()
+        container.cancelAutoLock()
         container.session.onForegrounded()
     }
 }
@@ -91,12 +99,12 @@ private enum class Stage { Welcome, CreatePassword, ShowWords, ConfirmWords }
 
 private enum class UnlockMode { Password, Recovery }
 
-private fun waitText(millis: Long): String {
+internal fun waitText(millis: Long): String {
     val seconds = ((millis + 999) / 1000).toInt()
     return if (seconds >= 60) "${((seconds + 59) / 60).fa()} دقیقه" else "${seconds.fa()} ثانیه"
 }
 
-private fun messageFor(result: UnlockResult): String? = when (result) {
+internal fun messageFor(result: UnlockResult): String? = when (result) {
     UnlockResult.Success -> null
     UnlockResult.WrongPassword -> "رمز اصلی درست نیست."
     UnlockResult.InvalidPhrase -> "عبارت بازیابی معتبر نیست. تعداد کلمات و املای آن‌ها را بررسی کنید."
@@ -246,6 +254,13 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
     var history by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
     var toast by remember { mutableStateOf<String?>(null) }
     var biometricEnabled by remember { mutableStateOf(auth.hasBiometric()) }
+    fun autofillOn() = activity.getSystemService(AutofillManager::class.java)?.hasEnabledAutofillServices() == true
+    var autofillEnabled by remember { mutableStateOf(autofillOn()) }
+    DisposableEffect(activity) {
+        val observer = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) autofillEnabled = autofillOn() }
+        activity.lifecycle.addObserver(observer)
+        onDispose { activity.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(toast) {
         if (toast != null) {
@@ -352,6 +367,16 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                                     auth.disableBiometric()
                                     biometricEnabled = false
                                     toast = "اثر انگشت غیرفعال شد"
+                                }
+                            },
+                            autofillEnabled = autofillEnabled,
+                            onEnableAutofill = {
+                                try {
+                                    activity.startActivity(
+                                        Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE, Uri.parse("package:${activity.packageName}")),
+                                    )
+                                } catch (e: Exception) {
+                                    toast = "این دستگاه تنظیم Autofill را پشتیبانی نمی‌کند"
                                 }
                             },
                             onLock = { container.session.lock() },

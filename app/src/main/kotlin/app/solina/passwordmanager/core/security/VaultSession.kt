@@ -51,6 +51,13 @@ class VaultSession(private val clock: () -> Long = System::currentTimeMillis) {
         if (timeoutMillis == 0L || clock() - since >= timeoutMillis) lock()
     }
 
+    /** بررسی مهلت بدون تغییر وضعیت پس‌زمینه؛ برای سرویس Autofill و تایمر قفل خودکار. */
+    @Synchronized
+    fun enforceTimeout(timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS) {
+        val since = backgroundedAt ?: return
+        if (_unlocked.value && clock() - since >= timeoutMillis) lock()
+    }
+
     companion object {
         const val DEFAULT_TIMEOUT_MILLIS = 60_000L
     }
