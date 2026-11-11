@@ -51,7 +51,6 @@ import app.solina.passwordmanager.core.storage.ItemPayload
 import app.solina.passwordmanager.core.storage.SecurityAnalyzer
 import app.solina.passwordmanager.ui.components.SIcon
 import app.solina.passwordmanager.ui.screens.BiometricOfferScreen
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import app.solina.passwordmanager.core.backup.Backup
@@ -264,6 +263,7 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
     var detailId by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf(false) } // با detailId == null یعنی ورودی جدید
     var generator by remember { mutableStateOf(false) }
+    var toast by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
     var dataStep by remember { mutableStateOf<DataStep?>(null) }
     var dataBusy by remember { mutableStateOf(false) }
@@ -330,7 +330,6 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
     var prefill by remember { mutableStateOf<ItemPayload?>(null) }
     var saving by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
-    var toast by remember { mutableStateOf<String?>(null) }
     var biometricEnabled by remember { mutableStateOf(auth.hasBiometric()) }
     fun autofillOn() = activity.getSystemService(AutofillManager::class.java)?.hasEnabledAutofillServices() == true
     var autofillEnabled by remember { mutableStateOf(autofillOn()) }
