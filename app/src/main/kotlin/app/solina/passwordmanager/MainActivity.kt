@@ -39,12 +39,16 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import app.solina.passwordmanager.core.crypto.CreatedVault
 import app.solina.passwordmanager.core.fa
+import app.solina.passwordmanager.core.storage.HistoryEntry
+import app.solina.passwordmanager.core.storage.ItemPayload
+import app.solina.passwordmanager.core.storage.SecurityAnalyzer
 import app.solina.passwordmanager.ui.components.SIcon
 import app.solina.passwordmanager.ui.screens.BiometricOfferScreen
 import app.solina.passwordmanager.ui.screens.CodesScreen
 import app.solina.passwordmanager.ui.screens.ConfirmWordsScreen
 import app.solina.passwordmanager.ui.screens.CreatePasswordScreen
 import app.solina.passwordmanager.ui.screens.DetailScreen
+import app.solina.passwordmanager.ui.screens.EditScreen
 import app.solina.passwordmanager.ui.screens.GeneratorScreen
 import app.solina.passwordmanager.ui.screens.HomeScreen
 import app.solina.passwordmanager.ui.screens.RecoveryEntryScreen
@@ -104,6 +108,10 @@ private fun messageFor(result: UnlockResult): String? = when (result) {
 private fun Root(activity: FragmentActivity, container: AppContainer, auth: AuthController) {
     val scope = rememberCoroutineScope()
     val unlocked by container.session.unlocked.collectAsState()
+
+    LaunchedEffect(unlocked) {
+        if (unlocked) runCatching { container.repository.load() } else container.repository.clear()
+    }
 
     var hasVault by remember { mutableStateOf(auth.hasVault()) }
     var stage by remember { mutableStateOf(Stage.Welcome) }
@@ -224,9 +232,18 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: AuthController) {
     val c = Solina.colors
+    val scope = rememberCoroutineScope()
+    val repo = container.repository
+    val items by repo.items.collectAsState()
+    val unreadable by repo.unreadable.collectAsState()
+    val report = remember(items) { SecurityAnalyzer.analyze(items) }
+
     var tab by remember { mutableStateOf(Tab.Home) }
-    var detailId by remember { mutableStateOf<Int?>(null) }
+    var detailId by remember { mutableStateOf<String?>(null) }
+    var editing by remember { mutableStateOf(false) } // با detailId == null یعنی ورودی جدید
     var generator by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var history by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
     var toast by remember { mutableStateOf<String?>(null) }
     var biometricEnabled by remember { mutableStateOf(auth.hasBiometric()) }
 
@@ -237,26 +254,91 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
         }
     }
 
-    BackHandler(enabled = detailId != null || generator) {
-        if (detailId != null) detailId = null else generator = false
+    val detailItem = items.firstOrNull { it.id == detailId }
+    LaunchedEffect(detailId, detailItem?.rev) {
+        history = if (detailId != null && detailItem != null) runCatching { repo.history(detailId!!) }.getOrDefault(emptyList()) else emptyList()
+    }
+
+    val inSub = generator || editing || detailId != null
+    BackHandler(enabled = inSub) {
+        when {
+            editing -> editing = false
+            generator -> generator = false
+            else -> detailId = null
+        }
     }
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {
                 when {
+                    editing -> EditScreen(
+                        initial = if (detailId == null) null else detailItem?.payload,
+                        busy = saving,
+                        onCancel = { editing = false },
+                        onSave = { payload ->
+                            saving = true
+                            scope.launch {
+                                try {
+                                    val id = detailId
+                                    if (id == null) {
+                                        val added = repo.add(payload)
+                                        detailId = added.id
+                                        toast = "ورودی ذخیره شد"
+                                    } else {
+                                        repo.update(id, payload)
+                                        toast = "تغییرات ذخیره شد"
+                                    }
+                                    editing = false
+                                } catch (e: Exception) {
+                                    toast = "ذخیره نشد: خزانه قفل است یا خطای ذخیره‌سازی"
+                                } finally {
+                                    saving = false
+                                }
+                            }
+                        },
+                    )
                     generator -> GeneratorScreen(onBack = { generator = false }, onToast = { toast = it })
-                    detailId != null -> DetailScreen(detailId!!, onBack = { detailId = null }, onToast = { toast = it })
+                    detailId != null -> DetailScreen(
+                        item = detailItem,
+                        history = history,
+                        onBack = { detailId = null },
+                        onEdit = { editing = true },
+                        onDelete = {
+                            val id = detailId!!
+                            scope.launch {
+                                runCatching { repo.delete(id) }
+                                detailId = null
+                                toast = "ورودی حذف شد"
+                            }
+                        },
+                        onRestore = { entry ->
+                            scope.launch {
+                                runCatching { repo.restore(detailId!!, entry) }
+                                toast = "نسخهٔ قدیمی بازگردانده شد"
+                            }
+                        },
+                        onToast = { toast = it },
+                    )
                     else -> when (tab) {
                         Tab.Home -> HomeScreen(
+                            items = items,
+                            report = report,
                             onLock = { container.session.lock() },
                             onOpenItem = { detailId = it },
                             onGoVault = { tab = Tab.Vault },
                             onGoCodes = { tab = Tab.Codes },
                             onGoGenerator = { generator = true },
+                            onAdd = { detailId = null; editing = true },
                         )
-                        Tab.Vault -> VaultScreen(onOpenItem = { detailId = it })
-                        Tab.Codes -> CodesScreen(onToast = { toast = it })
+                        Tab.Vault -> VaultScreen(
+                            items = items,
+                            report = report,
+                            unreadable = unreadable,
+                            onOpenItem = { detailId = it },
+                            onAdd = { detailId = null; editing = true },
+                        )
+                        Tab.Codes -> CodesScreen(items = items, onToast = { toast = it }, onOpenItem = { detailId = it })
                         Tab.Settings -> SettingsScreen(
                             biometricAvailable = auth.biometricAvailable(activity),
                             biometricEnabled = biometricEnabled,
@@ -277,7 +359,7 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                     }
                 }
             }
-            if (!generator && detailId == null) {
+            if (!inSub) {
                 NavBar(tab) { tab = it }
             }
         }
@@ -287,7 +369,7 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                 Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(bottom = if (generator || detailId != null) 24.dp else 96.dp, start = 16.dp, end = 16.dp)
+                    .padding(bottom = if (inSub) 24.dp else 96.dp, start = 16.dp, end = 16.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(if (c.isDark) c.container else c.text)
                     .padding(horizontal = 18.dp, vertical = 14.dp),
