@@ -13,7 +13,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.0.1-preview"
+        versionName = "0.0.2-preview"
     }
 
     buildTypes {
@@ -50,6 +50,9 @@ dependencies {
 
     // Argon2id (فقط کلاس‌های مستقیم، بدون ثبت Provider در سیستم)
     implementation(libs.bouncycastle.bcprov)
+
+    // BiometricPrompt (نیازمند FragmentActivity که از این کتابخانه می‌آید)
+    implementation(libs.androidx.biometric)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

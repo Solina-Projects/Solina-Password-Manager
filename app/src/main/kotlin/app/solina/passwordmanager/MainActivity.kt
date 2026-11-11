@@ -2,7 +2,6 @@ package app.solina.passwordmanager
 
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -22,38 +21,196 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
+import app.solina.passwordmanager.core.crypto.CreatedVault
+import app.solina.passwordmanager.core.fa
 import app.solina.passwordmanager.ui.components.SIcon
+import app.solina.passwordmanager.ui.screens.BiometricOfferScreen
 import app.solina.passwordmanager.ui.screens.CodesScreen
+import app.solina.passwordmanager.ui.screens.ConfirmWordsScreen
+import app.solina.passwordmanager.ui.screens.CreatePasswordScreen
 import app.solina.passwordmanager.ui.screens.DetailScreen
 import app.solina.passwordmanager.ui.screens.GeneratorScreen
 import app.solina.passwordmanager.ui.screens.HomeScreen
+import app.solina.passwordmanager.ui.screens.RecoveryEntryScreen
+import app.solina.passwordmanager.ui.screens.RecoveryWordsScreen
+import app.solina.passwordmanager.ui.screens.ResetPasswordScreen
 import app.solina.passwordmanager.ui.screens.SettingsScreen
-import app.solina.passwordmanager.ui.screens.UnlockScreen
 import app.solina.passwordmanager.ui.screens.VaultScreen
+import app.solina.passwordmanager.ui.screens.VaultUnlockScreen
+import app.solina.passwordmanager.ui.screens.WelcomeScreen
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 import app.solina.passwordmanager.ui.theme.SolinaTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+    private val container get() = (application as SolinaApplication).container
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // جلوگیری از اسکرین‌شات و نمایش محتوا در پیش‌نمایش اپ‌های اخیر.
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
-        setContent { SolinaTheme { SolinaApp() } }
+        val auth = AuthController(container)
+        setContent { SolinaTheme { Root(this, container, auth) } }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        container.session.onBackgrounded()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        container.session.onForegrounded()
+    }
+}
+
+private enum class Stage { Welcome, CreatePassword, ShowWords, ConfirmWords }
+
+private enum class UnlockMode { Password, Recovery }
+
+private fun waitText(millis: Long): String {
+    val seconds = ((millis + 999) / 1000).toInt()
+    return if (seconds >= 60) "${((seconds + 59) / 60).fa()} دقیقه" else "${seconds.fa()} ثانیه"
+}
+
+private fun messageFor(result: UnlockResult): String? = when (result) {
+    UnlockResult.Success -> null
+    UnlockResult.WrongPassword -> "رمز اصلی درست نیست."
+    UnlockResult.InvalidPhrase -> "عبارت بازیابی معتبر نیست. تعداد کلمات و املای آن‌ها را بررسی کنید."
+    UnlockResult.Corrupt -> "فایل خزانه خراب یا دست‌کاری شده است."
+    is UnlockResult.Wait -> "به‌خاطر تلاش‌های ناموفق، ${waitText(result.millis)} صبر کنید و دوباره امتحان کنید."
+}
+
+@Composable
+private fun Root(activity: FragmentActivity, container: AppContainer, auth: AuthController) {
+    val scope = rememberCoroutineScope()
+    val unlocked by container.session.unlocked.collectAsState()
+
+    var hasVault by remember { mutableStateOf(auth.hasVault()) }
+    var stage by remember { mutableStateOf(Stage.Welcome) }
+    var created by remember { mutableStateOf<CreatedVault?>(null) }
+    var offerBiometric by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+
+    var mode by remember { mutableStateOf(UnlockMode.Password) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var mustReset by remember { mutableStateOf(false) }
+
+    when {
+        offerBiometric && unlocked -> BiometricOfferScreen(
+            onEnable = { auth.enableBiometric(activity) { offerBiometric = false } },
+            onSkip = { offerBiometric = false },
+        )
+
+        !hasVault -> when (stage) {
+            Stage.Welcome -> WelcomeScreen { stage = Stage.CreatePassword }
+            Stage.CreatePassword -> CreatePasswordScreen(busy) { password ->
+                busy = true
+                scope.launch {
+                    created = auth.create(password)
+                    password.fill('\u0000')
+                    busy = false
+                    stage = Stage.ShowWords
+                }
+            }
+            Stage.ShowWords -> RecoveryWordsScreen(created?.recoveryWords.orEmpty()) { stage = Stage.ConfirmWords }
+            Stage.ConfirmWords -> ConfirmWordsScreen(
+                words = created?.recoveryWords.orEmpty(),
+                onConfirmed = {
+                    created?.let { vault ->
+                        auth.commit(vault)
+                        created = null
+                        hasVault = true
+                        offerBiometric = auth.biometricAvailable(activity)
+                    }
+                },
+                onBack = { stage = Stage.ShowWords },
+            )
+        }
+
+        unlocked && mustReset -> ResetPasswordScreen(busy) { password ->
+            busy = true
+            scope.launch {
+                val ok = auth.setNewPassword(password)
+                password.fill('\u0000')
+                busy = false
+                if (ok) {
+                    mustReset = false
+                    // پس از بازیابی، میان‌بر اثر انگشت برای احتیاط غیرفعال می‌شود (از تنظیمات دوباره فعال می‌شود).
+                    auth.disableBiometric()
+                } else {
+                    container.session.lock()
+                    mustReset = false
+                }
+            }
+        }
+
+        !unlocked -> when (mode) {
+            UnlockMode.Password -> {
+                val biometricReady = auth.hasBiometric()
+                LaunchedEffect(Unit) {
+                    if (auth.hasBiometric()) {
+                        delay(300)
+                        auth.unlockWithBiometric(activity) { }
+                    }
+                }
+                VaultUnlockScreen(
+                    biometricReady = biometricReady,
+                    message = message,
+                    busy = busy,
+                    onPassword = { password ->
+                        busy = true
+                        message = null
+                        scope.launch {
+                            val result = auth.unlockWithPassword(password)
+                            password.fill('\u0000')
+                            busy = false
+                            message = messageFor(result)
+                        }
+                    },
+                    onBiometric = { auth.unlockWithBiometric(activity) { ok -> if (!ok) message = "با اثر انگشت باز نشد. از رمز اصلی استفاده کنید." } },
+                    onForgot = { message = null; mode = UnlockMode.Recovery },
+                )
+            }
+
+            UnlockMode.Recovery -> RecoveryEntryScreen(
+                message = message,
+                busy = busy,
+                onSubmit = { phrase ->
+                    busy = true
+                    message = null
+                    mustReset = true
+                    scope.launch {
+                        val result = auth.unlockWithRecovery(phrase)
+                        busy = false
+                        message = messageFor(result)
+                        if (result != UnlockResult.Success) mustReset = false else mode = UnlockMode.Password
+                    }
+                },
+                onBack = { message = null; mode = UnlockMode.Password },
+            )
+        }
+
+        else -> MainApp(activity, container, auth)
     }
 }
 
@@ -65,24 +222,19 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-private fun SolinaApp() {
+private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: AuthController) {
     val c = Solina.colors
-    var unlocked by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(Tab.Home) }
     var detailId by remember { mutableStateOf<Int?>(null) }
     var generator by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var biometricEnabled by remember { mutableStateOf(auth.hasBiometric()) }
 
     LaunchedEffect(toast) {
         if (toast != null) {
             delay(2200)
             toast = null
         }
-    }
-
-    if (!unlocked) {
-        UnlockScreen { unlocked = true }
-        return
     }
 
     BackHandler(enabled = detailId != null || generator) {
@@ -97,7 +249,7 @@ private fun SolinaApp() {
                     detailId != null -> DetailScreen(detailId!!, onBack = { detailId = null }, onToast = { toast = it })
                     else -> when (tab) {
                         Tab.Home -> HomeScreen(
-                            onLock = { unlocked = false },
+                            onLock = { container.session.lock() },
                             onOpenItem = { detailId = it },
                             onGoVault = { tab = Tab.Vault },
                             onGoCodes = { tab = Tab.Codes },
@@ -105,7 +257,23 @@ private fun SolinaApp() {
                         )
                         Tab.Vault -> VaultScreen(onOpenItem = { detailId = it })
                         Tab.Codes -> CodesScreen(onToast = { toast = it })
-                        Tab.Settings -> SettingsScreen()
+                        Tab.Settings -> SettingsScreen(
+                            biometricAvailable = auth.biometricAvailable(activity),
+                            biometricEnabled = biometricEnabled,
+                            onToggleBiometric = { wanted ->
+                                if (wanted) {
+                                    auth.enableBiometric(activity) { ok ->
+                                        biometricEnabled = ok
+                                        toast = if (ok) "اثر انگشت فعال شد" else "فعال‌سازی انجام نشد"
+                                    }
+                                } else {
+                                    auth.disableBiometric()
+                                    biometricEnabled = false
+                                    toast = "اثر انگشت غیرفعال شد"
+                                }
+                            },
+                            onLock = { container.session.lock() },
+                        )
                     }
                 }
             }
@@ -125,7 +293,7 @@ private fun SolinaApp() {
                     .padding(horizontal = 18.dp, vertical = 14.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SIcon(SolinaIcons.Check, c.primaryContainer.let { if (c.isDark) c.primary else androidx.compose.ui.graphics.Color(0xFF5EEAD4) }, 20.dp)
+                    SIcon(SolinaIcons.Check, if (c.isDark) c.primary else Color(0xFF5EEAD4), 20.dp)
                     Text(it, color = if (c.isDark) c.text else c.bg, fontSize = 14.sp)
                 }
             }
@@ -159,7 +327,7 @@ private fun NavBar(selected: Tab, onSelect: (Tab) -> Unit) {
                     Modifier
                         .size(width = 56.dp, height = 32.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(if (active) c.primaryContainer else androidx.compose.ui.graphics.Color.Transparent),
+                        .background(if (active) c.primaryContainer else Color.Transparent),
                     contentAlignment = Alignment.Center,
                 ) { SIcon(t.icon, if (active) c.onPrimaryContainer else c.muted, 22.dp) }
                 Text(

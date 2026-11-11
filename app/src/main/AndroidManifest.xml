@@ -4,6 +4,7 @@
     <!-- عمداً هیچ مجوزی (از جمله INTERNET) ندارد: نسخهٔ پیش‌نمایش هیچ ارتباط شبکه‌ای ندارد. -->
 
     <application
+        android:name=".SolinaApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"

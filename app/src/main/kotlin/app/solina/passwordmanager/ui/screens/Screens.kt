@@ -107,103 +107,6 @@ private fun ScreenTitle(text: String) {
     )
 }
 
-// ───────────────────────── باز کردن خزانه ─────────────────────────
-
-@Composable
-fun UnlockScreen(onUnlock: () -> Unit) {
-    val c = Solina.colors
-    var pass by remember { mutableStateOf("") }
-    var visible by remember { mutableStateOf(false) }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(c.bg)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 28.dp, vertical = 24.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(48.dp))
-        Box(
-            Modifier
-                .size(88.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(c.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) { SIcon(SolinaIcons.Shield, c.primary, 48.dp) }
-        Spacer(Modifier.height(18.dp))
-        Text("Solina", color = c.text, fontSize = 30.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(4.dp))
-        Text("خزانهٔ شما قفل است", color = c.muted, fontSize = 15.sp)
-        Spacer(Modifier.height(44.dp))
-
-        Box(
-            Modifier
-                .size(88.dp)
-                .clip(CircleShape)
-                .background(c.primary)
-                .clickable(role = Role.Button, onClickLabel = "باز کردن با اثر انگشت", onClick = onUnlock),
-            contentAlignment = Alignment.Center,
-        ) { SIcon(SolinaIcons.Fingerprint, c.onPrimary, 44.dp, "باز کردن با اثر انگشت") }
-        Spacer(Modifier.height(12.dp))
-        Text("با اثر انگشت باز کنید", color = c.muted, fontSize = 14.sp)
-        Spacer(Modifier.height(36.dp))
-
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(c.container)
-                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("رمز اصلی", color = c.muted, fontSize = 12.sp)
-                BasicTextField(
-                    value = pass,
-                    onValueChange = { pass = it },
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = c.text,
-                        fontSize = 18.sp,
-                        fontFamily = Mono,
-                        textAlign = TextAlign.Left,
-                    ),
-                    cursorBrush = SolidColor(c.primary),
-                    visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp),
-                )
-            }
-            IconAction(
-                if (visible) SolinaIcons.EyeOff else SolinaIcons.Eye,
-                if (visible) "پنهان کردن رمز" else "نمایش رمز",
-                tint = c.muted,
-            ) { visible = !visible }
-        }
-        Spacer(Modifier.height(14.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(c.primaryContainer)
-                .clickable(role = Role.Button, onClick = onUnlock),
-            contentAlignment = Alignment.Center,
-        ) { Text("باز کردن با رمز اصلی", color = c.onPrimaryContainer, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
-        Spacer(Modifier.height(28.dp))
-        Text(
-            "نسخهٔ پیش‌نمایش رابط: داده‌ها ساختگی‌اند و هیچ‌چیز ذخیره یا ارسال نمی‌شود. هر رمزی بزنید وارد می‌شوید.",
-            color = c.muted,
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 20.sp,
-        )
-    }
-}
-
 // ───────────────────────── خانه ─────────────────────────
 
 @Composable
@@ -733,15 +636,49 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 // ───────────────────────── تنظیمات ─────────────────────────
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    biometricAvailable: Boolean,
+    biometricEnabled: Boolean,
+    onToggleBiometric: (Boolean) -> Unit,
+    onLock: () -> Unit,
+) {
     val c = Solina.colors
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         ScreenTitle("تنظیمات")
+        Card {
+            Column {
+                Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("باز کردن با اثر انگشت", color = c.text, fontSize = 15.sp)
+                        if (!biometricAvailable) Text("در این دستگاه اثر انگشت فعال یا ثبت نشده است", color = c.muted, fontSize = 12.sp)
+                    }
+                    Switch(
+                        checked = biometricEnabled,
+                        onCheckedChange = onToggleBiometric,
+                        enabled = biometricAvailable || biometricEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = c.onPrimary, checkedTrackColor = c.primary,
+                            uncheckedThumbColor = c.outline, uncheckedTrackColor = c.container, uncheckedBorderColor = c.outline,
+                        ),
+                    )
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Row(
+                    Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onLock),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("قفل کردن خزانه", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    SIcon(SolinaIcons.Lock, c.muted, 20.dp)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Text("قفل خودکار: یک دقیقه پس از رفتن اپ به پس‌زمینه", color = c.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+            }
+        }
         Card(background = c.secondaryContainer) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("نسخهٔ پیش‌نمایش رابط", color = c.onSecondaryContainer, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("نسخهٔ پیش‌نمایش", color = c.onSecondaryContainer, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "این نسخه فقط برای دیدن و آزمودن ظاهر و حس رابط است. رمزنگاری، ذخیره‌سازی، Autofill و بکاپ هنوز پیاده‌سازی نشده‌اند. رمز واقعی در آن وارد نکنید.",
+                    "رمز اصلی، رمزنگاری خزانه، عبارت بازیابی و قفل واقعی‌اند، ولی فهرست رمزها و کدهای داخل برنامه هنوز نمایشی است و ذخیره نمی‌شود. ذخیره‌سازی رمزشدهٔ ورودی‌ها، Autofill و بکاپ هنوز پیاده‌سازی نشده‌اند. رمز واقعی خود را در برنامه وارد نکنید.",
                     color = c.onSecondaryContainer,
                     fontSize = 14.sp,
                     lineHeight = 24.sp,
@@ -756,8 +693,10 @@ fun SettingsScreen() {
                 Text("• کپی در کلیپ‌بورد با علامت «حساس» انجام می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• اسکرین‌شات و پیش‌نمایش اپ‌های اخیر مسدود است.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• اپ هیچ مجوز شبکه‌ای ندارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
+                Text("• خزانه با Argon2id و AES-256-GCM ساخته می‌شود و عبارت بازیابی ۲۴ کلمه‌ای (BIP-39) دارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
+                Text("• باز کردن با اثر انگشت از Android Keystore استفاده می‌کند و با افزودن اثر انگشت جدید باطل می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
             }
         }
-        Text("Solina 0.0.1-preview", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina 0.0.2-preview", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
