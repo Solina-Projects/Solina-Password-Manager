@@ -14,7 +14,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.0.4-preview"
+        versionName = "0.0.5-preview"
     }
 
     buildTypes {
@@ -61,6 +61,13 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // QR: ZXing (Apache-2.0، جاوای خالص، بدون سرویس گوگل) + CameraX برای دوربین
+    implementation(libs.zxing.core)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

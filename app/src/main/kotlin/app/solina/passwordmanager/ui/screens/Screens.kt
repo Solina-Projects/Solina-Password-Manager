@@ -92,10 +92,12 @@ private fun rememberNow(): Long {
 
 private fun secretBytes(p: ItemPayload): ByteArray? = if (p.totpSecret.isBlank()) null else Base32.decode(p.totpSecret)
 
-private fun codeFor(p: ItemPayload, now: Long): String? = secretBytes(p)?.let { Totp.generate(it, now) }
+private fun codeFor(p: ItemPayload, now: Long, offsetMillis: Long = 0L): String? = secretBytes(p)?.let {
+    runCatching { Totp.generate(it, now + offsetMillis, p.totpPeriod, p.totpDigits, "Hmac" + p.totpAlgorithm) }.getOrNull()
+}
 
-private fun faSecondsLeft(now: Long): String {
-    val s = ((Totp.remainingMillis(now) + 999) / 1000).toInt()
+private fun faSecondsLeft(now: Long, period: Int = 30): String {
+    val s = ((Totp.remainingMillis(now, period) + 999) / 1000).toInt()
     return s.fa()
 }
 
@@ -163,6 +165,7 @@ fun HomeScreen(
     onGoCodes: () -> Unit,
     onGoGenerator: () -> Unit,
     onAdd: () -> Unit,
+    onScan: () -> Unit,
 ) {
     val c = Solina.colors
     val now = rememberNow()
@@ -247,8 +250,8 @@ fun HomeScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(item.payload.title, color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
                                     TotpRing(
-                                        Totp.remainingMillis(now), 30, 34.dp, faSecondsLeft(now),
-                                        if (Totp.remainingMillis(now) <= 5000) c.secondary else c.primary,
+                                        Totp.remainingMillis(now, item.payload.totpPeriod), item.payload.totpPeriod, 34.dp, faSecondsLeft(now, item.payload.totpPeriod),
+                                        if (Totp.remainingMillis(now, item.payload.totpPeriod) <= 5000) c.secondary else c.primary,
                                         c.primary.copy(alpha = 0.2f), c.text,
                                     )
                                 }
@@ -270,6 +273,7 @@ fun HomeScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 QuickAction("ساخت رمز", SolinaIcons.Key, c.secondaryContainer, c.onSecondaryContainer, Modifier.weight(1f), onGoGenerator)
                 QuickAction("افزودن", SolinaIcons.Plus, c.container, c.text, Modifier.weight(1f), onAdd)
+                QuickAction("اسکن QR", SolinaIcons.Qr, c.container, c.text, Modifier.weight(1f), onScan)
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -544,14 +548,14 @@ fun DetailScreen(
         }
 
         if (code != null) {
-            val left = Totp.remainingMillis(now)
+            val left = Totp.remainingMillis(now, p.totpPeriod)
             Card(background = c.primaryContainer) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
                         Text("کد یک‌بارمصرف", color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 12.sp)
                         Text(Totp.group(code), color = c.onPrimaryContainer, fontFamily = Mono, fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Left)
                     }
-                    TotpRing(left, 30, 44.dp, faSecondsLeft(now), if (left <= 5000) c.secondary else c.primary, c.primary.copy(alpha = 0.2f), c.onPrimaryContainer)
+                    TotpRing(left, p.totpPeriod, 44.dp, faSecondsLeft(now, p.totpPeriod), if (left <= 5000) c.secondary else c.primary, c.primary.copy(alpha = 0.2f), c.onPrimaryContainer)
                     IconAction(SolinaIcons.Copy, "کپی کد", tint = c.onPrimaryContainer) {
                         copySensitive(ctx, "totp", code)
                         onToast("کد کپی شد")
@@ -638,27 +642,31 @@ fun DetailScreen(
 // ───────────────────────── کدها ─────────────────────────
 
 @Composable
-fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (String) -> Unit) {
+fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (String) -> Unit, onScan: () -> Unit) {
     val c = Solina.colors
     val ctx = LocalContext.current
     val now = rememberNow()
-    val left = Totp.remainingMillis(now)
-    val urgent = left <= 5000
-    val withTotp = items.filter { secretBytes(it.payload) != null }
+    val withTotp = items.filter { codeFor(it.payload, now) != null }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        ScreenTitle("کدها")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { ScreenTitle("کدها") }
+            Box(Modifier.statusBarsPadding().padding(top = 12.dp)) {
+                IconAction(SolinaIcons.Qr, "اسکن QR", tint = c.onPrimary, background = c.primary, onClick = onScan)
+            }
+        }
         if (withTotp.isEmpty()) {
             EmptyState(
                 "هنوز کدی ندارید",
-                "هنگام افزودن یا ویرایش یک ورودی، «راز TOTP» (کلید Base32 که سرویس نشان می‌دهد) را وارد کنید تا کد زنده اینجا بیاید. اسکن QR در نسخهٔ بعدی می‌آید.",
+                "هنگام افزودن یا ویرایش یک ورودی، «راز TOTP» (کلید Base32 که سرویس نشان می‌دهد) را وارد کنید تا کد زنده اینجا بیاید. یا با دکمهٔ اسکن QR بالای صفحه، QR سرویس (یا خروجی Google Authenticator) را بخوانید.",
             )
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(withTotp, key = { it.id }) { item ->
                 val p = item.payload
-                val secret = secretBytes(p) ?: return@items
-                val code = Totp.generate(secret, now)
+                val code = codeFor(p, now) ?: return@items
+                val left = Totp.remainingMillis(now, p.totpPeriod)
+                val urgent = left <= 5000
                 val accent = if (urgent) c.secondary else c.primary
                 Row(
                     Modifier
@@ -688,7 +696,7 @@ fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (
                         )
                         if (urgent) {
                             Text(
-                                "بعدی: " + Totp.group(Totp.generate(secret, now + 30_000L)),
+                                "بعدی: " + Totp.group(codeFor(p, now, p.totpPeriod * 1000L).orEmpty()),
                                 color = c.onSecondaryContainer,
                                 fontFamily = Mono,
                                 fontSize = 14.sp,
@@ -696,7 +704,7 @@ fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (
                             )
                         }
                     }
-                    TotpRing(left, 30, 52.dp, faSecondsLeft(now), accent, accent.copy(alpha = 0.2f), c.text)
+                    TotpRing(left, p.totpPeriod, 52.dp, faSecondsLeft(now, p.totpPeriod), accent, accent.copy(alpha = 0.2f), c.text)
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
@@ -910,7 +918,7 @@ fun SettingsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("نسخهٔ پیش‌نمایش", color = c.onSecondaryContainer, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "ورودی‌ها اکنون واقعی و رمزشده روی همین دستگاه ذخیره می‌شوند، ولی این نسخه هنوز بازبینی امنیتی مستقل نشده است. Autofill فقط پر کردن را پشتیبانی می‌کند (ذخیرهٔ رمز جدید از Autofill هنوز نیست). اسکن QR، بکاپ و همگام‌سازی هنوز نیستند. فعلاً رمزهای حیاتی خود را در آن نگه ندارید و حتماً کلمات بازیابی را جدا یادداشت کنید.",
+                    "ورودی‌ها اکنون واقعی و رمزشده روی همین دستگاه ذخیره می‌شوند، ولی این نسخه هنوز بازبینی امنیتی مستقل نشده است. Autofill فقط پر کردن را پشتیبانی می‌کند (ذخیرهٔ رمز جدید از Autofill هنوز نیست). بکاپ و همگام‌سازی هنوز نیستند. فعلاً رمزهای حیاتی خود را در آن نگه ندارید و حتماً کلمات بازیابی را جدا یادداشت کنید.",
                     color = c.onSecondaryContainer,
                     fontSize = 14.sp,
                     lineHeight = 24.sp,
@@ -927,11 +935,13 @@ fun SettingsScreen(
                 Text("• کپی در کلیپ‌بورد با علامت «حساس» انجام می‌شود و بعد از ۳۰ ثانیه پاک می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• اسکرین‌شات و پیش‌نمایش اپ‌های اخیر مسدود است.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• Autofill در صفحات وب فقط ورودی‌هایی را پیشنهاد می‌دهد که دامنه‌شان دقیقاً مطابقت دارد (یا زیردامنه است).", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
+                Text("• دوربین فقط هنگام باز بودن صفحهٔ اسکن روشن است؛ تصویری ذخیره یا ارسال نمی‌شود. اسکن از عکس گالری هم ممکن است.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
+                Text("• ورود از Google Authenticator (QR خروجی) و لینک‌های otpauth پشتیبانی می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• اپ هیچ مجوز شبکه‌ای ندارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• خزانه با Argon2id ساخته می‌شود و عبارت بازیابی ۲۴ کلمه‌ای (BIP-39) دارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• باز کردن با اثر انگشت از Android Keystore استفاده می‌کند و با افزودن اثر انگشت جدید باطل می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
             }
         }
-        Text("Solina 0.0.4-preview", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina 0.0.5-preview", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }

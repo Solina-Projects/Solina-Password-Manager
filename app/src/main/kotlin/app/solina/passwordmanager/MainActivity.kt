@@ -59,6 +59,8 @@ import app.solina.passwordmanager.ui.screens.EditScreen
 import app.solina.passwordmanager.ui.screens.GeneratorScreen
 import app.solina.passwordmanager.ui.screens.HomeScreen
 import app.solina.passwordmanager.ui.screens.RecoveryEntryScreen
+import app.solina.passwordmanager.ui.screens.ScanScreen
+import app.solina.passwordmanager.core.otp.OtpImport
 import app.solina.passwordmanager.ui.screens.RecoveryWordsScreen
 import app.solina.passwordmanager.ui.screens.ResetPasswordScreen
 import app.solina.passwordmanager.ui.screens.SettingsScreen
@@ -250,6 +252,8 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
     var detailId by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf(false) } // با detailId == null یعنی ورودی جدید
     var generator by remember { mutableStateOf(false) }
+    var scanning by remember { mutableStateOf(false) }
+    var prefill by remember { mutableStateOf<ItemPayload?>(null) }
     var saving by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
     var toast by remember { mutableStateOf<String?>(null) }
@@ -274,10 +278,28 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
         history = if (detailId != null && detailItem != null) runCatching { repo.history(detailId!!) }.getOrDefault(emptyList()) else emptyList()
     }
 
-    val inSub = generator || editing || detailId != null
+    fun onScanned(text: String) {
+        scanning = false
+        val parsed = OtpImport.parse(text)
+        if (parsed == null) {
+            toast = "این QR یک کد TOTP معتبر نیست"
+        } else if (parsed.size == 1) {
+            prefill = parsed[0]; detailId = null; editing = true
+        } else {
+            scope.launch {
+                val known = items.map { it.payload.totpSecret.uppercase() }.toSet()
+                var added = 0
+                for (p in parsed) if (p.totpSecret.uppercase() !in known) { runCatching { repo.add(p) }.onSuccess { added++ } }
+                toast = "${added.fa()} مورد افزوده شد" + if (added < parsed.size) " (${(parsed.size - added).fa()} تکراری یا ناموفق)" else ""
+            }
+        }
+    }
+
+    val inSub = generator || editing || detailId != null || scanning
     BackHandler(enabled = inSub) {
         when {
-            editing -> editing = false
+            scanning -> scanning = false
+            editing -> { editing = false; prefill = null }
             generator -> generator = false
             else -> detailId = null
         }
@@ -287,10 +309,12 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {
                 when {
+                    scanning -> ScanScreen(onResult = ::onScanned, onCancel = { scanning = false }, onToast = { toast = it })
                     editing -> EditScreen(
-                        initial = if (detailId == null) null else detailItem?.payload,
+                        initial = if (detailId == null) prefill else detailItem?.payload,
+                        isNew = detailId == null,
                         busy = saving,
-                        onCancel = { editing = false },
+                        onCancel = { editing = false; prefill = null },
                         onSave = { payload ->
                             saving = true
                             scope.launch {
@@ -305,6 +329,7 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                                         toast = "تغییرات ذخیره شد"
                                     }
                                     editing = false
+                                    prefill = null
                                 } catch (e: Exception) {
                                     toast = "ذخیره نشد: خزانه قفل است یا خطای ذخیره‌سازی"
                                 } finally {
@@ -344,16 +369,17 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                             onGoVault = { tab = Tab.Vault },
                             onGoCodes = { tab = Tab.Codes },
                             onGoGenerator = { generator = true },
-                            onAdd = { detailId = null; editing = true },
+                            onAdd = { detailId = null; prefill = null; editing = true },
+                            onScan = { scanning = true },
                         )
                         Tab.Vault -> VaultScreen(
                             items = items,
                             report = report,
                             unreadable = unreadable,
                             onOpenItem = { detailId = it },
-                            onAdd = { detailId = null; editing = true },
+                            onAdd = { detailId = null; prefill = null; editing = true },
                         )
-                        Tab.Codes -> CodesScreen(items = items, onToast = { toast = it }, onOpenItem = { detailId = it })
+                        Tab.Codes -> CodesScreen(items = items, onToast = { toast = it }, onOpenItem = { detailId = it }, onScan = { scanning = true })
                         Tab.Settings -> SettingsScreen(
                             biometricAvailable = auth.biometricAvailable(activity),
                             biometricEnabled = biometricEnabled,

@@ -93,14 +93,14 @@ private fun Field(
  * یادداشت‌های کوتاه: عنوان اجباری است؛ راز TOTP اگر پر شود باید Base32 معتبر باشد.
  */
 @Composable
-fun EditScreen(initial: ItemPayload?, busy: Boolean, onSave: (ItemPayload) -> Unit, onCancel: () -> Unit) {
+fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (ItemPayload) -> Unit, onCancel: () -> Unit) {
     val c = Solina.colors
     val start = initial ?: ItemPayload()
     var kind by remember { mutableStateOf(start.kind) }
     var title by remember { mutableStateOf(start.title) }
     var username by remember { mutableStateOf(start.username) }
     var password by remember { mutableStateOf(start.password) }
-    var showPw by remember { mutableStateOf(initial == null) }
+    var showPw by remember { mutableStateOf(isNew) }
     var website by remember { mutableStateOf(start.website) }
     var totp by remember { mutableStateOf(start.totpSecret) }
     var note by remember { mutableStateOf(start.note) }
@@ -119,10 +119,10 @@ fun EditScreen(initial: ItemPayload?, busy: Boolean, onSave: (ItemPayload) -> Un
     ) {
         Row(Modifier.statusBarsPadding().padding(top = 12.dp).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
             IconAction(SolinaIcons.ChevronRight, "انصراف", tint = c.text, onClick = onCancel)
-            Text(if (initial == null) "ورودی جدید" else "ویرایش", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(if (isNew) "ورودی جدید" else "ویرایش", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         }
 
-        if (initial == null) {
+        if (isNew) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip("ورود", kind == ItemKind.Login) { kind = ItemKind.Login }
                 FilterChip("کارت", kind == ItemKind.Card) { kind = ItemKind.Card }

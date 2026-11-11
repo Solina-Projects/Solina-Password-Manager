@@ -27,6 +27,10 @@ data class ItemPayload(
     val cardCvv: String = "",
     val createdAt: Long = 0,
     val editedAt: Long = 0,
+    /** پارامترهای TOTP؛ پیش‌فرض‌ها همان استاندارد رایج‌اند. */
+    val totpDigits: Int = 6,
+    val totpPeriod: Int = 30,
+    val totpAlgorithm: String = "SHA1",
 ) {
     fun toBytes(): ByteArray = JSONObject().apply {
         put("kind", kind.code)
@@ -43,6 +47,9 @@ data class ItemPayload(
         put("cardCvv", cardCvv)
         put("created", createdAt)
         put("edited", editedAt)
+        put("totpDigits", totpDigits)
+        put("totpPeriod", totpPeriod)
+        put("totpAlgo", totpAlgorithm)
     }.toString().toByteArray(Charsets.UTF_8)
 
     companion object {
@@ -65,6 +72,9 @@ data class ItemPayload(
                 cardCvv = o.optString("cardCvv"),
                 createdAt = o.optLong("created"),
                 editedAt = o.optLong("edited"),
+                totpDigits = o.optInt("totpDigits", 6),
+                totpPeriod = o.optInt("totpPeriod", 30),
+                totpAlgorithm = o.optString("totpAlgo", "SHA1"),
             )
         }
     }

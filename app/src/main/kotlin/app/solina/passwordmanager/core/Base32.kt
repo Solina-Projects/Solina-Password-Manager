@@ -25,4 +25,22 @@ object Base32 {
         val bytes = out.toByteArray()
         return if (bytes.isEmpty()) null else bytes
     }
+
+    /** رمزگذاری Base32 بدون padding، با حروف بزرگ (قالب رایج رازهای TOTP). */
+    fun encode(data: ByteArray): String {
+        val sb = StringBuilder()
+        var buffer = 0
+        var bits = 0
+        for (b in data) {
+            buffer = (buffer shl 8) or (b.toInt() and 0xff)
+            bits += 8
+            while (bits >= 5) {
+                bits -= 5
+                sb.append(ALPHABET[(buffer shr bits) and 31])
+            }
+            buffer = buffer and ((1 shl bits) - 1)
+        }
+        if (bits > 0) sb.append(ALPHABET[(buffer shl (5 - bits)) and 31])
+        return sb.toString()
+    }
 }

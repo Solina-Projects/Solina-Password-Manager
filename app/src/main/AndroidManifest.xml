@@ -4,6 +4,11 @@
     <!-- عمداً هیچ مجوزی (از جمله INTERNET) ندارد: نسخهٔ پیش‌نمایش هیچ ارتباط شبکه‌ای ندارد.
          (BIND_AUTOFILL_SERVICE روی خود سرویس است و مجوزی نیست که اپ بخواهد.) -->
 
+    <!-- فقط برای اسکن QR کدهای TOTP و فقط وقتی صفحهٔ اسکن باز است؛ دوربین اجباری نیست. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <application
         android:name=".SolinaApplication"
         android:allowBackup="false"
