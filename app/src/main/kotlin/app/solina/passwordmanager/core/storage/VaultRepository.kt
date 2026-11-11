@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
+class ImportStats(val added: Int, val skipped: Int)
+
 class VaultLockedException : IllegalStateException("vault is locked")
 
 /**
@@ -83,6 +85,31 @@ class VaultRepository(
         }
         publish(item)
         return item
+    }
+
+    private fun fingerprint(p: ItemPayload) =
+        listOf(p.kind.code, p.title, p.username, p.password, p.website, p.totpSecret, p.cardNumber, p.note).joinToString("\u0001")
+
+    /**
+     * افزودن دسته‌ای (ایمپورت/بازیابی). ورودی‌ای که عیناً مشابه موجود باشد رد می‌شود؛ تاریخ‌های اصلی حفظ می‌شوند.
+     */
+    suspend fun importItems(list: List<ItemPayload>): ImportStats {
+        val known = _items.value.map { fingerprint(it.payload) }.toHashSet()
+        val now = clock()
+        val created = ArrayList<VaultItem>()
+        var skipped = 0
+        withKey { key ->
+            for (p in list) {
+                if (!known.add(fingerprint(p))) { skipped++; continue }
+                val c = if (p.createdAt > 0) p.createdAt else now
+                val e = if (p.editedAt > 0) p.editedAt else c
+                val item = VaultItem(newId(), 1, p.copy(createdAt = c, editedAt = e))
+                store.save(seal(key, item, now), null, MAX_HISTORY)
+                created += item
+            }
+        }
+        _items.value = (_items.value + created).sortedBy { it.payload.title.lowercase() }
+        return ImportStats(created.size, skipped)
     }
 
     suspend fun delete(id: String) {

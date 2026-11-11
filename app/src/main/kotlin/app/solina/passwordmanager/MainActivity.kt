@@ -51,6 +51,18 @@ import app.solina.passwordmanager.core.storage.ItemPayload
 import app.solina.passwordmanager.core.storage.SecurityAnalyzer
 import app.solina.passwordmanager.ui.components.SIcon
 import app.solina.passwordmanager.ui.screens.BiometricOfferScreen
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import app.solina.passwordmanager.core.backup.Backup
+import app.solina.passwordmanager.core.backup.BackupFormatException
+import app.solina.passwordmanager.core.crypto.AuthenticationFailedException
+import app.solina.passwordmanager.core.importer.ImportException
+import app.solina.passwordmanager.core.importer.Importers
+import app.solina.passwordmanager.ui.screens.DataScreen
+import app.solina.passwordmanager.ui.screens.DataStep
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import app.solina.passwordmanager.ui.screens.CodesScreen
 import app.solina.passwordmanager.ui.screens.ConfirmWordsScreen
 import app.solina.passwordmanager.ui.screens.CreatePasswordScreen
@@ -253,6 +265,68 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
     var editing by remember { mutableStateOf(false) } // با detailId == null یعنی ورودی جدید
     var generator by remember { mutableStateOf(false) }
     var scanning by remember { mutableStateOf(false) }
+    var dataStep by remember { mutableStateOf<DataStep?>(null) }
+    var dataBusy by remember { mutableStateOf(false) }
+    var dataMessage by remember { mutableStateOf<String?>(null) }
+    var pendingExport by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingRestore by remember { mutableStateOf<ByteArray?>(null) }
+    val resolver = activity.contentResolver
+
+    fun readLimited(uri: Uri, max: Int): ByteArray? =
+        resolver.openInputStream(uri)?.use { input ->
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(16 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                out.write(buf, 0, n)
+                if (out.size() > max) return null
+            }
+            out.toByteArray()
+        }
+
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val bytes = pendingExport
+        pendingExport = null
+        if (uri != null && bytes != null) {
+            val ok = runCatching { resolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } != null }.getOrDefault(false)
+            toast = if (ok) "بکاپ ذخیره شد" else "ذخیرهٔ فایل انجام نشد"
+            if (ok) dataStep = DataStep.Menu
+        }
+        dataBusy = false
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val bytes = runCatching { readLimited(uri, 64 * 1024 * 1024) }.getOrNull()
+            if (bytes == null) dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
+            else { pendingRestore = bytes; dataMessage = null; dataStep = DataStep.RestorePassword }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            dataBusy = true
+            scope.launch {
+                try {
+                    val bytes = withContext(Dispatchers.IO) { runCatching { readLimited(uri, 20 * 1024 * 1024) }.getOrNull() }
+                    if (bytes == null) {
+                        dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
+                    } else {
+                        val r = Importers.parse(String(bytes, Charsets.UTF_8))
+                        val stats = repo.importItems(r.items)
+                        dataMessage = null
+                        toast = "${stats.added.fa()} مورد از ${r.source} وارد شد" +
+                            if (stats.skipped + r.skipped > 0) " (${(stats.skipped + r.skipped).fa()} رد شد)" else ""
+                    }
+                } catch (e: ImportException) {
+                    dataMessage = e.message
+                } catch (e: Exception) {
+                    dataMessage = "ورود از فایل ناموفق بود."
+                } finally {
+                    dataBusy = false
+                }
+            }
+        }
+    }
     var prefill by remember { mutableStateOf<ItemPayload?>(null) }
     var saving by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
@@ -295,9 +369,10 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
         }
     }
 
-    val inSub = generator || editing || detailId != null || scanning
+    val inSub = generator || editing || detailId != null || scanning || dataStep != null
     BackHandler(enabled = inSub) {
         when {
+            dataStep != null -> { if (dataStep == DataStep.Menu) dataStep = null else { dataStep = DataStep.Menu; pendingRestore = null }; dataMessage = null }
             scanning -> scanning = false
             editing -> { editing = false; prefill = null }
             generator -> generator = false
@@ -309,6 +384,58 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {
                 when {
+                    dataStep != null -> DataScreen(
+                        step = dataStep!!,
+                        busy = dataBusy,
+                        message = dataMessage,
+                        itemCount = items.size,
+                        onBack = { if (dataStep == DataStep.Menu) dataStep = null else { dataStep = DataStep.Menu; pendingRestore = null }; dataMessage = null },
+                        onStartExport = { dataMessage = null; dataStep = DataStep.ExportPassword },
+                        onSubmitExport = { pw ->
+                            dataBusy = true
+                            dataMessage = null
+                            scope.launch {
+                                try {
+                                    val payloads = items.map { it.payload }
+                                    val bytes = withContext(Dispatchers.Default) { Backup.encode(payloads, pw, System.currentTimeMillis()) }
+                                    pw.fill('\u0000')
+                                    pendingExport = bytes
+                                    val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
+                                    exportLauncher.launch("solina-backup-$stamp.slnb")
+                                } catch (e: Exception) {
+                                    dataMessage = "ساخت بکاپ ناموفق بود."
+                                    dataBusy = false
+                                }
+                            }
+                        },
+                        onPickRestore = { dataMessage = null; restoreLauncher.launch(arrayOf("*/*")) },
+                        onSubmitRestore = { pw ->
+                            val bytes = pendingRestore
+                            if (bytes != null) {
+                                dataBusy = true
+                                dataMessage = null
+                                scope.launch {
+                                    try {
+                                        val payloads = withContext(Dispatchers.Default) { Backup.decode(bytes, pw) }
+                                        val stats = repo.importItems(payloads)
+                                        pendingRestore = null
+                                        dataStep = DataStep.Menu
+                                        toast = "${stats.added.fa()} ورودی بازیابی شد" + if (stats.skipped > 0) " (${stats.skipped.fa()} تکراری)" else ""
+                                    } catch (e: AuthenticationFailedException) {
+                                        dataMessage = "رمز بکاپ درست نیست یا فایل دست‌کاری شده است."
+                                    } catch (e: BackupFormatException) {
+                                        dataMessage = e.message
+                                    } catch (e: Exception) {
+                                        dataMessage = "بازیابی ناموفق بود."
+                                    } finally {
+                                        pw.fill('\u0000')
+                                        dataBusy = false
+                                    }
+                                }
+                            }
+                        },
+                        onPickImport = { dataMessage = null; importLauncher.launch(arrayOf("*/*")) },
+                    )
                     scanning -> ScanScreen(onResult = ::onScanned, onCancel = { scanning = false }, onToast = { toast = it })
                     editing -> EditScreen(
                         initial = if (detailId == null) prefill else detailItem?.payload,
@@ -396,6 +523,7 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                                 }
                             },
                             autofillEnabled = autofillEnabled,
+                            onOpenData = { dataMessage = null; dataStep = DataStep.Menu },
                             onEnableAutofill = {
                                 try {
                                     activity.startActivity(

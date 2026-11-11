@@ -865,6 +865,7 @@ fun SettingsScreen(
     onToggleBiometric: (Boolean) -> Unit,
     autofillEnabled: Boolean,
     onEnableAutofill: () -> Unit,
+    onOpenData: () -> Unit,
     onLock: () -> Unit,
 ) {
     val c = Solina.colors
@@ -904,6 +905,14 @@ fun SettingsScreen(
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                 Row(
+                    Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onOpenData),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("بکاپ و ایمپورت", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    SIcon(SolinaIcons.ChevronRight, c.muted, 20.dp)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Row(
                     Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onLock),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -918,7 +927,7 @@ fun SettingsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("نسخهٔ پیش‌نمایش", color = c.onSecondaryContainer, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "ورودی‌ها اکنون واقعی و رمزشده روی همین دستگاه ذخیره می‌شوند، ولی این نسخه هنوز بازبینی امنیتی مستقل نشده است. Autofill فقط پر کردن را پشتیبانی می‌کند (ذخیرهٔ رمز جدید از Autofill هنوز نیست). بکاپ و همگام‌سازی هنوز نیستند. فعلاً رمزهای حیاتی خود را در آن نگه ندارید و حتماً کلمات بازیابی را جدا یادداشت کنید.",
+                    "ورودی‌ها اکنون واقعی و رمزشده روی همین دستگاه ذخیره می‌شوند، ولی این نسخه هنوز بازبینی امنیتی مستقل نشده است. Autofill فقط پر کردن را پشتیبانی می‌کند (ذخیرهٔ رمز جدید از Autofill هنوز نیست). همگام‌سازی هنوز نیست. فعلاً رمزهای حیاتی خود را در آن نگه ندارید و حتماً کلمات بازیابی را جدا یادداشت کنید.",
                     color = c.onSecondaryContainer,
                     fontSize = 14.sp,
                     lineHeight = 24.sp,
@@ -937,11 +946,12 @@ fun SettingsScreen(
                 Text("• Autofill در صفحات وب فقط ورودی‌هایی را پیشنهاد می‌دهد که دامنه‌شان دقیقاً مطابقت دارد (یا زیردامنه است).", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• دوربین فقط هنگام باز بودن صفحهٔ اسکن روشن است؛ تصویری ذخیره یا ارسال نمی‌شود. اسکن از عکس گالری هم ممکن است.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• ورود از Google Authenticator (QR خروجی) و لینک‌های otpauth پشتیبانی می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
+                Text("• بکاپ فقط با رمز جداگانهٔ خودتان رمز می‌شود (Argon2id + AES-256-GCM) و بدون مجوز ذخیره‌سازی، از طریق انتخاب‌گر فایل سیستم نوشته می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• اپ هیچ مجوز شبکه‌ای ندارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• خزانه با Argon2id ساخته می‌شود و عبارت بازیابی ۲۴ کلمه‌ای (BIP-39) دارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• باز کردن با اثر انگشت از Android Keystore استفاده می‌کند و با افزودن اثر انگشت جدید باطل می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
             }
         }
-        Text("Solina 0.0.5-preview", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina 0.0.6-preview", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }

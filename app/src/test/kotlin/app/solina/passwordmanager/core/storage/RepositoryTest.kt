@@ -144,6 +144,18 @@ class RepositoryTest {
         assertEquals(0, r2.unreadable.value)
     }
 
+    @Test fun importSkipsDuplicatesAndKeepsDates() = runBlocking {
+        val store = FakeStore(); val session = unlockedSession(); val r = repo(store, session)
+        r.add(login("A", "pw-a-xxxxxxxx"))
+        val dup = login("A", "pw-a-xxxxxxxx")
+        val fresh = login("B", "pw-b-xxxxxxxx").copy(createdAt = 111, editedAt = 222)
+        val stats = r.importItems(listOf(dup, fresh, fresh))
+        assertEquals(1, stats.added); assertEquals(2, stats.skipped)
+        assertEquals(111L, r.items.value.first { it.payload.title == "B" }.payload.createdAt)
+        val r2 = repo(store, session); r2.load()
+        assertEquals(2, r2.items.value.size)
+    }
+
     @Test fun clearEmptiesMemory() = runBlocking {
         val r = repo(); r.add(login("a")); r.clear()
         assertTrue(r.items.value.isEmpty())

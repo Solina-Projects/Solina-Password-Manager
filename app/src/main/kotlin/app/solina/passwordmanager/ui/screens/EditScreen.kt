@@ -49,7 +49,7 @@ import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 
 @Composable
-private fun Field(
+internal fun Field(
     label: String,
     value: String,
     onChange: (String) -> Unit,
