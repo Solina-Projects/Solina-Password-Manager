@@ -389,7 +389,7 @@ fun DetailScreen(itemId: Int, onBack: () -> Unit, onToast: (String) -> Unit) {
                     IconAction(if (shown) SolinaIcons.EyeOff else SolinaIcons.Eye, if (shown) "پنهان کردن رمز" else "نمایش رمز") { shown = !shown }
                     IconAction(SolinaIcons.Copy, "کپی رمز عبور") {
                         copySensitive(ctx, "password", item.password)
-                        onToast("رمز کپی شد")
+                        onToast("رمز کپی شد. ۳۰ ثانیهٔ دیگر پاک می‌شود.")
                     }
                 }
             }
@@ -542,7 +542,7 @@ fun GeneratorScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
                     OutlineButton("رمز تازه", SolinaIcons.Refresh, Modifier.weight(1f)) { seed++ }
                     OutlineButton("کپی", SolinaIcons.Copy, Modifier.weight(1f)) {
                         copySensitive(ctx, "generated", password)
-                        onToast("رمز کپی شد. به‌زودی پاک می‌شود.")
+                        onToast("رمز کپی شد. ۳۰ ثانیهٔ دیگر پاک می‌شود.")
                     }
                 }
             }
@@ -576,7 +576,7 @@ fun GeneratorScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
                 .background(c.primary)
                 .clickable(role = Role.Button) {
                     copySensitive(ctx, "generated", password)
-                    onToast("رمز کپی شد")
+                    onToast("رمز کپی شد. ۳۰ ثانیهٔ دیگر پاک می‌شود.")
                     onBack()
                 },
             contentAlignment = Alignment.Center,

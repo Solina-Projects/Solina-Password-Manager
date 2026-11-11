@@ -5,6 +5,8 @@ import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PersistableBundle
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -47,9 +49,22 @@ import app.solina.passwordmanager.ui.theme.Solina
 
 val Mono = FontFamily.Monospace
 
-/** کپی در کلیپ‌بورد با علامت «حساس» تا در پیش‌نمایش کلیپ‌بورد اندروید نمایش داده نشود. */
-fun copySensitive(context: Context, label: String, text: String) {
-    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+private val clipboardHandler = Handler(Looper.getMainLooper())
+private var pendingClear: Runnable? = null
+
+/** مدت پیش‌فرض ماندن مقدار حساس در کلیپ‌بورد. */
+const val CLIPBOARD_CLEAR_MILLIS = 30_000L
+
+/**
+ * کپی در کلیپ‌بورد با علامت «حساس» (تا در پیش‌نمایش کلیپ‌بورد اندروید ۱۳+ نمایش داده نشود)
+ * و پاک‌سازی خودکار بعد از [clearAfterMillis].
+ *
+ * محدودیت‌ها: اگر اپ در این مدت کشته شود پاک‌سازی انجام نمی‌شود؛ کیبوردهایی که تاریخچهٔ کلیپ‌بورد
+ * دارند ممکن است نسخهٔ خودشان را نگه دارند و از کنترل ما خارج است.
+ */
+fun copySensitive(context: Context, label: String, text: String, clearAfterMillis: Long = CLIPBOARD_CLEAR_MILLIS) {
+    val app = context.applicationContext
+    val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clip = ClipData.newPlainText(label, text)
     clip.description.extras = PersistableBundle().apply {
         if (Build.VERSION.SDK_INT >= 33) {
@@ -59,6 +74,19 @@ fun copySensitive(context: Context, label: String, text: String) {
         }
     }
     cm.setPrimaryClip(clip)
+
+    pendingClear?.let { clipboardHandler.removeCallbacks(it) }
+    val task = Runnable {
+        pendingClear = null
+        // اگر کاربر در این فاصله چیز دیگری کپی کرده باشد، آن را پاک نمی‌کنیم. خواندن کلیپ از پس‌زمینه
+        // در اندروید ۱۰+ ممکن است null بدهد؛ در آن حالت هم پاک می‌کنیم، چون مقدار حساس را نباید باقی گذاشت.
+        val current = runCatching { cm.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull()
+        if (current == null || current == text) {
+            if (Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip() else cm.setPrimaryClip(ClipData.newPlainText("", ""))
+        }
+    }
+    pendingClear = task
+    clipboardHandler.postDelayed(task, clearAfterMillis)
 }
 
 @Composable

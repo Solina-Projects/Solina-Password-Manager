@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +44,7 @@ import app.solina.passwordmanager.core.fa
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.Mono
 import app.solina.passwordmanager.ui.components.SIcon
+import app.solina.passwordmanager.ui.components.copySensitive
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 
@@ -177,6 +179,7 @@ fun WelcomeScreen(onCreate: () -> Unit) {
 // ───────────────────────── ساخت رمز اصلی ─────────────────────────
 
 private const val MIN_MASTER_LENGTH = 10
+private const val RECOVERY_CLIPBOARD_MILLIS = 60_000L
 
 @Composable
 fun CreatePasswordScreen(busy: Boolean, onSubmit: (CharArray) -> Unit) {
@@ -219,7 +222,7 @@ fun RecoveryWordsScreen(words: List<String>, onNext: () -> Unit) {
     Page {
         Heading(
             "عبارت بازیابی شما",
-            "این ۲۴ کلمه را به ترتیب روی کاغذ بنویسید و جایی امن نگه دارید. اسکرین‌شات ممکن نیست و نباید در گوشی یا ابر ذخیره شود.",
+            "این ۲۴ کلمه را به ترتیب نگه دارید. بهترین کار نوشتن روی کاغذ و نگه‌داری در جای امن است؛ اگر کاغذ در دسترس نیست، می‌توانید کلمات را کپی کنید. اسکرین‌شات در این صفحه ممکن نیست.",
         )
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(c.container).padding(14.dp),
@@ -236,8 +239,20 @@ fun RecoveryWordsScreen(words: List<String>, onNext: () -> Unit) {
                 }
             }
         }
-        Notice("هر کس این کلمات را داشته باشد می‌تواند خزانهٔ شما را باز کند. به هیچ‌کس نشان ندهید.", error = true)
-        PrimaryButton("نوشتم، ادامه", onClick = onNext)
+        val ctx = LocalContext.current
+        var copied by remember { mutableStateOf(false) }
+        SecondaryButton(if (copied) "کپی شد ✓" else "کپی کلمات") {
+            copySensitive(ctx, "recovery", words.joinToString(" "), clearAfterMillis = RECOVERY_CLIPBOARD_MILLIS)
+            copied = true
+        }
+        if (copied) {
+            Notice("کلمات کپی شدند و ۶۰ ثانیهٔ دیگر از کلیپ‌بورد پاک می‌شوند. همین حالا آن‌ها را جایی امن بچسبانید.")
+        }
+        Notice(
+            "هر کس این کلمات را داشته باشد می‌تواند خزانهٔ شما را باز کند. اگر کاغذ ندارید، کلمات را فقط در یادداشتی قفل‌شده یا رمزگذاری‌شده بچسبانید، نه در پیام‌رسان، ایمیل یا یادداشت معمولی. بعضی کیبوردها تاریخچهٔ کلیپ‌بورد را نگه می‌دارند؛ بعد از ذخیره، آن تاریخچه را هم پاک کنید.",
+            error = true,
+        )
+        PrimaryButton("ذخیره کردم، ادامه", onClick = onNext)
     }
 }
 
