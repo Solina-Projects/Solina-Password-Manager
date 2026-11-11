@@ -141,7 +141,7 @@ private fun CameraPreview(onText: (String) -> Unit) {
         future.addListener({
             val p = future.get()
             provider = p
-            val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
+            val preview = Preview.Builder().build().also { it.setSurfaceProvider(view.surfaceProvider) }
             val analysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
