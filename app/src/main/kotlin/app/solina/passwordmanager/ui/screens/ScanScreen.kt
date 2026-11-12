@@ -1,10 +1,11 @@
 package app.solina.passwordmanager.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
+import android.os.Build
+import android.provider.MediaStore
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import app.solina.passwordmanager.MainActivity
 import app.solina.passwordmanager.scan.QrDecoder
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.theme.Solina
@@ -57,7 +59,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [onResult] فقط یک‌بار با متن QR صدا زده می‌شود.
  */
 @Composable
-fun ScanScreen(onResult: (String) -> Unit, onCancel: () -> Unit, onToast: (String) -> Unit) {
+fun ScanScreen(activity: MainActivity, onResult: (String) -> Unit, onCancel: () -> Unit, onToast: (String) -> Unit) {
     val c = Solina.colors
     val ctx = LocalContext.current
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
@@ -65,17 +67,39 @@ fun ScanScreen(onResult: (String) -> Unit, onCancel: () -> Unit, onToast: (Strin
     val done = remember { AtomicBoolean(false) }
     fun deliver(text: String) { if (done.compareAndSet(false, true)) onResult(text) }
 
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        granted = ok
-        denied = !ok
+    // بدون ActivityResultLauncher: رجیستری androidx.activity کد تصادفی ‎>= 65536‎
+    // می‌سازد و FragmentActivity آن را رد می‌کند (کرش 0.0.11-alpha5 در ScanScreen.kt:78).
+    // مجوز دوربین فقط با ضربهٔ کاربر خواسته می‌شود، نه خودکار در LaunchedEffect.
+    fun requestCamera() {
+        activity.requestPermissionOnce(
+            Manifest.permission.CAMERA,
+            MainActivity.RC_CAMERA,
+            handler = { ok -> granted = ok; denied = !ok },
+            onFail = { denied = true; onToast("درخواست مجوز دوربین انجام نشد") },
+        )
     }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) {
-            val text = runCatching { QrDecoder.decodeImage(ctx.contentResolver, uri) }.getOrNull()
-            if (text != null) deliver(text) else onToast("در این عکس QR پیدا نشد")
+
+    fun pickGalleryImage() {
+        // معادل PickVisualMedia(ImageOnly): در اندروید ۱۳ به بعد انتخاب‌گر عکس سیستم،
+        // در نسخه‌های قدیمی‌تر انتخاب‌گر فایل با فیلتر عکس.
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*")
+        } else {
+            Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*")
         }
+        activity.launchForResult(
+            intent,
+            MainActivity.RC_GALLERY_IMAGE,
+            handler = { resultCode, data ->
+                val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
+                if (uri != null) {
+                    val text = runCatching { QrDecoder.decodeImage(ctx.contentResolver, uri) }.getOrNull()
+                    if (text != null) deliver(text) else onToast("در این عکس QR پیدا نشد")
+                }
+            },
+            onFail = { onToast("انتخاب‌گر عکس در دسترس نیست") },
+        )
     }
-    androidx.compose.runtime.LaunchedEffect(Unit) { if (!granted) permission.launch(Manifest.permission.CAMERA) }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (granted) CameraPreview(onText = ::deliver)
@@ -105,10 +129,10 @@ fun ScanScreen(onResult: (String) -> Unit, onCancel: () -> Unit, onToast: (Strin
                     else "برای اسکن QR به دوربین نیاز است.",
                     color = Color.White, fontSize = 15.sp, lineHeight = 26.sp, textAlign = TextAlign.Center,
                 )
-                if (denied) Text(
-                    "دوباره اجازه بده",
+                Text(
+                    if (denied) "دوباره اجازه بده" else "اجازهٔ دوربین",
                     color = c.primaryContainer, fontSize = 15.sp, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clickable(role = Role.Button) { permission.launch(Manifest.permission.CAMERA) }.padding(8.dp),
+                    modifier = Modifier.clickable(role = Role.Button) { requestCamera() }.padding(8.dp),
                 )
             } else {
                 Text("QR را داخل کادر بگیرید", color = Color.White, fontSize = 15.sp)
@@ -119,9 +143,7 @@ fun ScanScreen(onResult: (String) -> Unit, onCancel: () -> Unit, onToast: (Strin
                     .height(52.dp)
                     .clip(RoundedCornerShape(26.dp))
                     .background(c.primary)
-                    .clickable(role = Role.Button) {
-                        picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    },
+                    .clickable(role = Role.Button) { pickGalleryImage() },
                 contentAlignment = Alignment.Center,
             ) { Text("انتخاب عکس QR از گالری", color = c.onPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
         }

@@ -1,11 +1,13 @@
 package app.solina.passwordmanager
 
 import android.Manifest
-import android.content.Context
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -45,7 +47,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import app.solina.passwordmanager.core.crypto.CreatedVault
-import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.view.autofill.AutofillManager
@@ -58,8 +59,6 @@ import app.solina.passwordmanager.core.storage.ItemPayload
 import app.solina.passwordmanager.core.storage.SecurityAnalyzer
 import app.solina.passwordmanager.ui.components.SIcon
 import app.solina.passwordmanager.ui.screens.BiometricOfferScreen
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.backup.BackupFormatException
 import app.solina.passwordmanager.core.crypto.AuthenticationFailedException
@@ -99,9 +98,85 @@ class MainActivity : FragmentActivity() {
     companion object {
         /** وقتی نوتیف خطا زده شد، با این extra باز می‌شود تا مستقیم گزارش عیب‌یابی نشان داده شود. */
         const val EXTRA_SHOW_DIAGNOSTICS = "solina_show_diagnostics"
+
+        /**
+         * کدهای درخواست کوچک و ثابت برای startActivityForResult / requestPermissions.
+         * چرا ثابت و کوچک: ActivityResultRegistry در androidx.activity برای هر لانچر
+         * کد تصادفی ‎>= 65536‎ می‌سازد (Random.nextInt(2147418112) + 65536) و
+         * FragmentActivity فقط ۱۶ بیت پایین کد را قبول می‌کند؛ برای همین همهٔ لانچرهای
+         * Activity Result در این اپ با IllegalArgumentException
+         * «Can only use lower 16 bits for requestCode» می‌مردند (0.0.11-alpha5:
+         * کرش در شروع اپ، کرش اسکن QR، و باز نشدن انتخاب‌گر پوشه). این کدها همه
+         * زیر 0xFFFF هستند و چون دیگر هیچ لانچری در اپ نیست، با چیزی تداخل ندارند.
+         */
+        const val RC_JOIN_FOLDER = 1001
+        const val RC_CONNECT_FOLDER = 1002
+        const val RC_EXPORT_FILE = 1003
+        const val RC_RESTORE_FILE = 1004
+        const val RC_IMPORT_FILE = 1005
+        const val RC_NOTIFICATION = 1006
+        const val RC_CAMERA = 1007
+        const val RC_GALLERY_IMAGE = 1008
     }
 
     private val container get() = (application as SolinaApplication).container
+
+    /** نتیجهٔ startActivityForResult را به تابعی که هنگام شروع ثبت شد می‌رساند. */
+    private val activityResultHandlers = mutableMapOf<Int, (resultCode: Int, data: Intent?) -> Unit>()
+    private val permissionHandlers = mutableMapOf<Int, (granted: Boolean) -> Unit>()
+
+    /**
+     * جایگزین ActivityResultLauncher: اکتیویتی را با کد کوچک و ثابت شروع می‌کند و
+     * نتیجه را به [handler] می‌دهد. اگر شروع ناموفق بود (مثلاً هیچ برنامه‌ای برای
+     * آن Intent نیست)، خطا در گزارش عیب‌یابی ثبت می‌شود و [onFail] صدا زده می‌شود؛
+     * هیچ‌وقت کرش نمی‌کند.
+     */
+    @Suppress("DEPRECATION")
+    fun launchForResult(intent: Intent, requestCode: Int, handler: (resultCode: Int, data: Intent?) -> Unit, onFail: () -> Unit) {
+        try {
+            DiagLog.log("PICKER", "launching picker")
+            activityResultHandlers[requestCode] = handler
+            startActivityForResult(intent, requestCode)
+        } catch (e: Exception) {
+            activityResultHandlers.remove(requestCode)
+            DiagLog.logError("PICKER", e, "launchForResult")
+            onFail()
+        }
+    }
+
+    /**
+     * جایگزین RequestPermission: اگر مجوز از قبل داده شده، همان‌جا true برمی‌گرداند
+     * و دیالوگ سیستم باز نمی‌شود. فقط از ضربهٔ کاربر صدا زده می‌شود، هرگز خودکار
+     * در شروع اپ یا LaunchedEffect نیست.
+     */
+    fun requestPermissionOnce(permission: String, requestCode: Int, handler: (granted: Boolean) -> Unit, onFail: () -> Unit = {}) {
+        try {
+            if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
+                handler(true)
+                return
+            }
+            permissionHandlers[requestCode] = handler
+            ActivityCompat.requestPermissions(this, arrayOf(permission), requestCode)
+        } catch (e: Exception) {
+            permissionHandlers.remove(requestCode)
+            DiagLog.logError("PERM", e, "requestPermissionOnce")
+            onFail()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        // اول super: FragmentActivity نتیجه را به فرگمنت‌ها و رجیستری می‌رساند.
+        super.onActivityResult(requestCode, resultCode, data)
+        activityResultHandlers.remove(requestCode)?.invoke(resultCode, data)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        permissionHandlers.remove(requestCode)?.invoke(
+            grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED,
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -113,23 +188,9 @@ class MainActivity : FragmentActivity() {
         setContent {
             SolinaTheme {
                 var showDiag by remember { mutableStateOf(intent.getBooleanExtra(EXTRA_SHOW_DIAGNOSTICS, false)) }
-                // مجوز نوتیفیکیشن (اندروید ۱۳ به بعد): فقط یک‌بار، در اولین باز شدن اپ،
-                // از کاربر خواسته می‌شود تا وقتی خطایی ثبت شد نوتیف بیاید. اگر رد کرد،
-                // دیگر اصرار نمی‌شود؛ از تنظیمات برنامه می‌تواند فعالش کند.
-                val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                    DiagLog.log("NOTIF", "permission granted=$granted")
-                }
-                LaunchedEffect(Unit) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        val prefs = getSharedPreferences("solina", Context.MODE_PRIVATE)
-                        if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
-                            !prefs.getBoolean("notif_asked", false)
-                        ) {
-                            prefs.edit().putBoolean("notif_asked", true).apply()
-                            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                    }
-                }
+                // مجوز نوتیفیکیشن دیگر اینجا خودکار خواسته نمی‌شود: در 0.0.11-alpha5
+                // همان درخواست در اولین ترکیب‌بندی کرش می‌کرد و اپ اصلاً بالا نمی‌آمد.
+                // حالا فقط از تنظیمات و با ضربهٔ کاربر درخواست می‌شود (SettingsScreen).
                 Box(Modifier.fillMaxSize().background(Solina.colors.bg)) {
                     if (showDiag) {
                         DiagScreenHost(this@MainActivity) { showDiag = false }
@@ -220,20 +281,6 @@ private fun buildLog(context: android.content.Context): String {
     return head + crash + "== رویدادها ==\n" + DiagLog.read().takeLast(20_000)
 }
 
-private fun <I> androidx.activity.result.ActivityResultLauncher<I>.safeLaunch(input: I, onFail: () -> Unit) {
-    try {
-        DiagLog.log("PICKER", "launching picker")
-        launch(input)
-    } catch (e: Exception) {
-        // پیش از این، خطا اینجا قورت داده می‌شد و در لاگ هیچ ردی از آن نبود؛
-        // برای همین «انتخاب‌گر پوشه در دسترس نیست» بدون هیچ دلیلی نشان داده می‌شد.
-        // حالا نوع خطا (مثلاً ActivityNotFoundException یعنی هیچ برنامه‌ای برای
-        // انتخاب پوشه روی دستگاه نیست) در گزارش عیب‌یابی ثبت می‌شود و نوتیف می‌آید.
-        DiagLog.logError("PICKER", e, "safeLaunch")
-        onFail()
-    }
-}
-
 /** آیا روی این دستگاه برنامه‌ای برای انتخاب پوشه (ACTION_OPEN_DOCUMENT_TREE) هست؟ */
 @Suppress("DEPRECATION")
 private fun hasFolderPicker(activity: FragmentActivity): Boolean {
@@ -263,7 +310,7 @@ internal fun messageFor(result: UnlockResult): String? = when (result) {
 }
 
 @Composable
-private fun Root(activity: FragmentActivity, container: AppContainer, auth: AuthController, onDiagnostics: () -> Unit) {
+private fun Root(activity: MainActivity, container: AppContainer, auth: AuthController, onDiagnostics: () -> Unit) {
     val scope = rememberCoroutineScope()
     val unlocked by container.session.unlocked.collectAsState()
 
@@ -281,16 +328,29 @@ private fun Root(activity: FragmentActivity, container: AppContainer, auth: Auth
     var message by remember { mutableStateOf<String?>(null) }
     var mustReset by remember { mutableStateOf(false) }
     var joinMessage by remember { mutableStateOf<String?>(null) }
-    val joinLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        DiagLog.log("JOIN", "picker returned: ${if (uri == null) "cancelled" else "uri"}")
-        if (uri != null) scope.launch {
-            when (val r = container.sync.joinFromFolder(uri)) {
-                ConnectResult.Ok -> hasVault = true
-                ConnectResult.NoVaultInFolder -> joinMessage = "در این پوشه خزانه‌ای پیدا نشد. پوشه‌ای را انتخاب کنید که شامل «Solina-Sync» است (یعنی همان پوشه‌ای که در دستگاه اول انتخاب شد)."
-                ConnectResult.DifferentVault -> joinMessage = "پوشه خزانهٔ دیگری دارد."
-                is ConnectResult.Failed -> joinMessage = r.reason
-            }
+    fun launchJoinFolder() {
+        if (!hasFolderPicker(activity)) {
+            DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
+            joinMessage = NO_FOLDER_PICKER_MESSAGE
+            return
         }
+        activity.launchForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),
+            MainActivity.RC_JOIN_FOLDER,
+            handler = { resultCode, data ->
+                val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
+                DiagLog.log("JOIN", "picker returned: ${if (uri == null) "cancelled" else "uri"}")
+                if (uri != null) scope.launch {
+                    when (val r = container.sync.joinFromFolder(uri)) {
+                        ConnectResult.Ok -> hasVault = true
+                        ConnectResult.NoVaultInFolder -> joinMessage = "در این پوشه خزانه‌ای پیدا نشد. پوشه‌ای را انتخاب کنید که شامل «Solina-Sync» است (یعنی همان پوشه‌ای که در دستگاه اول انتخاب شد)."
+                        ConnectResult.DifferentVault -> joinMessage = "پوشه خزانهٔ دیگری دارد."
+                        is ConnectResult.Failed -> joinMessage = r.reason
+                    }
+                }
+            },
+            onFail = { joinMessage = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست." },
+        )
     }
 
     when {
@@ -303,12 +363,7 @@ private fun Root(activity: FragmentActivity, container: AppContainer, auth: Auth
             Stage.Welcome -> WelcomeScreen(message = joinMessage, onCreate = { joinMessage = null; stage = Stage.CreatePassword }, onDiagnostics = onDiagnostics, onJoin = {
                 joinMessage = null
                 DiagLog.log("JOIN", "button tapped")
-                if (!hasFolderPicker(activity)) {
-                    DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
-                    joinMessage = NO_FOLDER_PICKER_MESSAGE
-                } else {
-                    joinLauncher.safeLaunch(null) { joinMessage = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست." }
-                }
+                launchJoinFolder()
             })
             Stage.CreatePassword -> CreatePasswordScreen(busy) { password ->
                 busy = true
@@ -410,7 +465,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: AuthController, onDiagnostics: () -> Unit) {
+private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthController, onDiagnostics: () -> Unit) {
     val c = Solina.colors
     val scope = rememberCoroutineScope()
     val repo = container.repository
@@ -426,15 +481,28 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
     var scanning by remember { mutableStateOf(false) }
     val syncStatus by container.sync.status.collectAsState()
     val localRev by repo.localChanges.collectAsState()
-    val connectLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) scope.launch {
-            when (val r = container.sync.connect(uri)) {
-                ConnectResult.Ok -> { toast = "متصل شد؛ در حال همگام‌سازی…"; container.sync.syncNow() }
-                ConnectResult.DifferentVault -> toast = "این پوشه خزانهٔ دیگری دارد؛ وصل نشد"
-                ConnectResult.NoVaultInFolder -> toast = "خزانه‌ای در پوشه نیست"
-                is ConnectResult.Failed -> toast = r.reason
-            }
+    fun launchConnectFolder() {
+        if (!hasFolderPicker(activity)) {
+            DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
+            toast = NO_FOLDER_PICKER_MESSAGE
+            return
         }
+        activity.launchForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),
+            MainActivity.RC_CONNECT_FOLDER,
+            handler = { resultCode, data ->
+                val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
+                if (uri != null) scope.launch {
+                    when (val r = container.sync.connect(uri)) {
+                        ConnectResult.Ok -> { toast = "متصل شد؛ در حال همگام‌سازی…"; container.sync.syncNow() }
+                        ConnectResult.DifferentVault -> toast = "این پوشه خزانهٔ دیگری دارد؛ وصل نشد"
+                        ConnectResult.NoVaultInFolder -> toast = "خزانه‌ای در پوشه نیست"
+                        is ConnectResult.Failed -> toast = r.reason
+                    }
+                }
+            },
+            onFail = { toast = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست" },
+        )
     }
     // هم‌گام‌سازی خودکار: بعد از باز شدن خزانه، و ۱٫۵ ثانیه بعد از هر تغییر محلی (debounce).
     LaunchedEffect(Unit) { container.sync.syncNow() }
@@ -464,47 +532,82 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
             out.toByteArray()
         }
 
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        val bytes = pendingExport
-        pendingExport = null
-        if (uri != null && bytes != null) {
-            val ok = runCatching { resolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } != null }.getOrDefault(false)
-            toast = if (ok) "بکاپ ذخیره شد" else "ذخیرهٔ فایل انجام نشد"
-            if (ok) dataStep = DataStep.Menu
-        }
-        dataBusy = false
-    }
-    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            val bytes = runCatching { readLimited(uri, 64 * 1024 * 1024) }.getOrNull()
-            if (bytes == null) dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
-            else { pendingRestore = bytes; dataMessage = null; dataStep = DataStep.RestorePassword }
-        }
-    }
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            dataBusy = true
-            scope.launch {
-                try {
-                    val bytes = withContext(Dispatchers.IO) { runCatching { readLimited(uri, 20 * 1024 * 1024) }.getOrNull() }
-                    if (bytes == null) {
-                        dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
-                    } else {
-                        val r = Importers.parse(String(bytes, Charsets.UTF_8))
-                        val stats = repo.importItems(r.items)
-                        dataMessage = null
-                        toast = "${stats.added.fa()} مورد از ${r.source} وارد شد" +
-                            if (stats.skipped + r.skipped > 0) " (${(stats.skipped + r.skipped).fa()} رد شد)" else ""
-                    }
-                } catch (e: ImportException) {
-                    dataMessage = e.message
-                } catch (e: Exception) {
-                    dataMessage = "ورود از فایل ناموفق بود."
-                } finally {
-                    dataBusy = false
+    fun launchExportFile(fileName: String) {
+        activity.launchForResult(
+            Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/octet-stream")
+                .putExtra(Intent.EXTRA_TITLE, fileName),
+            MainActivity.RC_EXPORT_FILE,
+            handler = { resultCode, data ->
+                val bytes = pendingExport
+                pendingExport = null
+                val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
+                if (uri != null && bytes != null) {
+                    val ok = runCatching { resolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } != null }.getOrDefault(false)
+                    toast = if (ok) "بکاپ ذخیره شد" else "ذخیرهٔ فایل انجام نشد"
+                    if (ok) dataStep = DataStep.Menu
                 }
-            }
-        }
+                dataBusy = false
+            },
+            onFail = { dataMessage = "انتخاب‌گر فایل در دسترس نیست."; dataBusy = false },
+        )
+    }
+
+    fun launchRestoreFile() {
+        activity.launchForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("*/*")),
+            MainActivity.RC_RESTORE_FILE,
+            handler = { resultCode, data ->
+                val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
+                if (uri != null) {
+                    val bytes = runCatching { readLimited(uri, 64 * 1024 * 1024) }.getOrNull()
+                    if (bytes == null) dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
+                    else { pendingRestore = bytes; dataMessage = null; dataStep = DataStep.RestorePassword }
+                }
+            },
+            onFail = { dataMessage = "انتخاب‌گر فایل در دسترس نیست." },
+        )
+    }
+
+    fun launchImportFile() {
+        activity.launchForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("*/*")),
+            MainActivity.RC_IMPORT_FILE,
+            handler = { resultCode, data ->
+                val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
+                if (uri != null) {
+                    dataBusy = true
+                    scope.launch {
+                        try {
+                            val bytes = withContext(Dispatchers.IO) { runCatching { readLimited(uri, 20 * 1024 * 1024) }.getOrNull() }
+                            if (bytes == null) {
+                                dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
+                            } else {
+                                val r = Importers.parse(String(bytes, Charsets.UTF_8))
+                                val stats = repo.importItems(r.items)
+                                dataMessage = null
+                                toast = "${stats.added.fa()} مورد از ${r.source} وارد شد" +
+                                    if (stats.skipped + r.skipped > 0) " (${(stats.skipped + r.skipped).fa()} رد شد)" else ""
+                            }
+                        } catch (e: ImportException) {
+                            dataMessage = e.message
+                        } catch (e: Exception) {
+                            dataMessage = "ورود از فایل ناموفق بود."
+                        } finally {
+                            dataBusy = false
+                        }
+                    }
+                }
+            },
+            onFail = { dataMessage = "انتخاب‌گر فایل در دسترس نیست." },
+        )
     }
     var prefill by remember { mutableStateOf<ItemPayload?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -512,8 +615,23 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
     var biometricEnabled by remember { mutableStateOf(auth.hasBiometric()) }
     fun autofillOn() = activity.getSystemService(AutofillManager::class.java)?.hasEnabledAutofillServices() == true
     var autofillEnabled by remember { mutableStateOf(autofillOn()) }
+    // اعلان خطا (اندروید ۱۳ به بعد): فقط از تنظیمات و با ضربهٔ کاربر درخواست می‌شود؛
+    // درخواست خودکار در شروع اپ در 0.0.11-alpha5 باعث کرش می‌شد.
+    val notifSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    var notifGranted by remember {
+        mutableStateOf(
+            !notifSupported ||
+                ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
     DisposableEffect(activity) {
-        val observer = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) autofillEnabled = autofillOn() }
+        val observer = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) {
+                autofillEnabled = autofillOn()
+                notifGranted = !notifSupported ||
+                    ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            }
+        }
         activity.lifecycle.addObserver(observer)
         onDispose { activity.lifecycle.removeObserver(observer) }
     }
@@ -579,14 +697,14 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                                     pw.fill('\u0000')
                                     pendingExport = bytes
                                     val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
-                                    exportLauncher.safeLaunch("solina-backup-$stamp.slnb") { dataMessage = "انتخاب‌گر فایل در دسترس نیست."; dataBusy = false }
+                                    launchExportFile("solina-backup-$stamp.slnb")
                                 } catch (e: Exception) {
                                     dataMessage = "ساخت بکاپ ناموفق بود."
                                     dataBusy = false
                                 }
                             }
                         },
-                        onPickRestore = { dataMessage = null; restoreLauncher.safeLaunch(arrayOf("*/*")) { dataMessage = "انتخاب‌گر فایل در دسترس نیست." } },
+                        onPickRestore = { dataMessage = null; launchRestoreFile() },
                         onSubmitRestore = { pw ->
                             val bytes = pendingRestore
                             if (bytes != null) {
@@ -612,9 +730,9 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                                 }
                             }
                         },
-                        onPickImport = { dataMessage = null; importLauncher.safeLaunch(arrayOf("*/*")) { dataMessage = "انتخاب‌گر فایل در دسترس نیست." } },
+                        onPickImport = { dataMessage = null; launchImportFile() },
                     )
-                    scanning -> ScanScreen(onResult = ::onScanned, onCancel = { scanning = false }, onToast = { toast = it })
+                    scanning -> ScanScreen(activity, onResult = ::onScanned, onCancel = { scanning = false }, onToast = { toast = it })
                     editing -> EditScreen(
                         initial = if (detailId == null) prefill else detailItem?.payload,
                         isNew = detailId == null,
@@ -701,16 +819,23 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                                 }
                             },
                             autofillEnabled = autofillEnabled,
+                            notifSupported = notifSupported,
+                            notifGranted = notifGranted,
+                            onRequestNotifPermission = {
+                                activity.requestPermissionOnce(
+                                    Manifest.permission.POST_NOTIFICATIONS,
+                                    MainActivity.RC_NOTIFICATION,
+                                    handler = { granted ->
+                                        notifGranted = granted
+                                        DiagLog.log("NOTIF", "permission granted=$granted")
+                                        toast = if (granted) "اعلان خطا فعال شد" else "اعلان خطا فعال نشد"
+                                    },
+                                    onFail = { toast = "درخواست مجوز انجام نشد" },
+                                )
+                            },
                             onOpenData = { dataMessage = null; dataStep = DataStep.Menu },
                             syncStatus = syncStatus,
-                            onSyncConnect = {
-                                if (!hasFolderPicker(activity)) {
-                                    DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
-                                    toast = NO_FOLDER_PICKER_MESSAGE
-                                } else {
-                                    connectLauncher.safeLaunch(null) { toast = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست" }
-                                }
-                            },
+                            onSyncConnect = { launchConnectFolder() },
                             onSyncNow = {
                                 scope.launch {
                                     toast = when (val r = container.sync.syncNow()) {

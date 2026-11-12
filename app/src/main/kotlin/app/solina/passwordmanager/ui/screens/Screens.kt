@@ -866,6 +866,9 @@ fun SettingsScreen(
     onToggleBiometric: (Boolean) -> Unit,
     autofillEnabled: Boolean,
     onEnableAutofill: () -> Unit,
+    notifSupported: Boolean,
+    notifGranted: Boolean,
+    onRequestNotifPermission: () -> Unit,
     onOpenData: () -> Unit,
     syncStatus: app.solina.passwordmanager.sync.SyncStatus,
     onSyncConnect: () -> Unit,
@@ -908,6 +911,23 @@ fun SettingsScreen(
                         )
                     }
                     Pill(if (autofillEnabled) "فعال" else "فعال‌سازی", if (autofillEnabled) c.primaryContainer else c.secondaryContainer, if (autofillEnabled) c.onPrimaryContainer else c.onSecondaryContainer)
+                }
+                if (notifSupported) {
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                    Row(
+                        Modifier.fillMaxWidth().height(64.dp).clickable(role = Role.Button, onClick = onRequestNotifPermission),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("اعلان خطا", color = c.text, fontSize = 15.sp)
+                            Text(
+                                if (notifGranted) "فعال است؛ وقتی خطایی ثبت شد نوتیف می‌آید تا گزارش را بخوانید."
+                                else "غیرفعال؛ برای اینکه هنگام خطا نوتیف بیاید بزنید",
+                                color = c.muted, fontSize = 12.sp, lineHeight = 18.sp,
+                            )
+                        }
+                        Pill(if (notifGranted) "فعال" else "فعال‌سازی", if (notifGranted) c.primaryContainer else c.secondaryContainer, if (notifGranted) c.onPrimaryContainer else c.onSecondaryContainer)
+                    }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                 Row(
@@ -993,6 +1013,6 @@ fun SettingsScreen(
                 Text("• باز کردن با اثر انگشت از Android Keystore استفاده می‌کند و با افزودن اثر انگشت جدید باطل می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
             }
         }
-        Text("Solina 0.0.11-alpha5", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina 0.0.12-alpha6", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
