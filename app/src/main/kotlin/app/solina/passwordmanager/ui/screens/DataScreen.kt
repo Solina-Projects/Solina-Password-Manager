@@ -34,7 +34,7 @@ import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 
-enum class DataStep { Menu, ExportPassword, RestorePassword }
+enum class DataStep { Menu, ExportPassword, RestorePassword, ImportPassword }
 
 private const val MIN_BACKUP_PASSWORD = 10
 
@@ -74,6 +74,7 @@ fun DataScreen(
     onPickRestore: () -> Unit,
     onSubmitRestore: (CharArray) -> Unit,
     onPickImport: () -> Unit,
+    onSubmitImport: (CharArray) -> Unit,
 ) {
     val c = Solina.colors
     var pw by remember(step) { mutableStateOf("") }
@@ -102,7 +103,8 @@ fun DataScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("ورود از برنامهٔ دیگر", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            "پشتیبانی: Bitwarden (JSON بدون رمز و CSV)، Aegis (JSON بدون رمز)، CSV مرورگرها (Chrome، Edge، Firefox)، 1Password (CSV) و لینک‌های otpauth.\n" +
+                            "بدون رمز: Bitwarden (JSON/CSV)، Aegis، 2FAS، andOTP، Raivo، Proton Pass (ZIP/JSON/CSV)، Proton Authenticator، Ente Auth (متن ساده)، Google Authenticator (کد QR انتقال)، CSV مرورگرها و گوگل، LastPass، KeePass، Dashlane، NordPass، 1Password و لینک‌های otpauth.\n" +
+                                "رمزشده (با رمز خود فایل): Aegis، 2FAS و Bitwarden. خروجی رمزشدهٔ Ente و PGP پروتون هنوز پشتیبانی نمی‌شود.\n" +
                                 "ورودی‌های عیناً تکراری اضافه نمی‌شوند.",
                             color = c.muted, fontSize = 14.sp, lineHeight = 24.sp,
                         )
@@ -131,6 +133,14 @@ fun DataScreen(
                 BigButton(if (busy) "در حال رمزگذاری…" else "ساخت و ذخیرهٔ فایل", enabled = !busy && pw.length >= MIN_BACKUP_PASSWORD && pw == pw2) {
                     onSubmitExport(pw.toCharArray())
                 }
+            }
+
+            DataStep.ImportPassword -> {
+                Header("ورود از فایل رمزشده", onBack)
+                Text("این فایل رمزشده است. رمزی را که هنگام خروجی گرفتن از آن برنامه انتخاب کرده بودید وارد کنید. رمز جایی ذخیره نمی‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
+                Field("رمز فایل", pw, { pw = it }, hidden = true)
+                if (message != null) Text(message, color = c.secondary, fontSize = 14.sp, lineHeight = 24.sp)
+                BigButton(if (busy) "در حال بازگشایی…" else "وارد کردن", enabled = !busy && pw.isNotEmpty()) { onSubmitImport(pw.toCharArray()) }
             }
 
             DataStep.RestorePassword -> {

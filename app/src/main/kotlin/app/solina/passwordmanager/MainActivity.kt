@@ -532,6 +532,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
     var dataMessage by remember { mutableStateOf<String?>(null) }
     var pendingExport by remember { mutableStateOf<ByteArray?>(null) }
     var pendingRestore by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingImport by remember { mutableStateOf<ByteArray?>(null) }
     val resolver = activity.contentResolver
 
     fun readLimited(uri: Uri, max: Int): ByteArray? =
@@ -588,6 +589,31 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
         )
     }
 
+    suspend fun runImport(bytes: ByteArray, password: CharArray?) {
+        try {
+            val r = withContext(Dispatchers.Default) { Importers.parseBytes(bytes, password) }
+            val stats = repo.importItems(r.items)
+            pendingImport = null
+            dataMessage = null
+            dataStep = DataStep.Menu
+            toast = "${stats.added.fa()} مورد از ${r.source} وارد شد" +
+                if (stats.skipped + r.skipped > 0) " (${(stats.skipped + r.skipped).fa()} رد شد)" else ""
+        } catch (e: app.solina.passwordmanager.core.importer.ImportPasswordRequired) {
+            pendingImport = bytes
+            dataMessage = null
+            dataStep = DataStep.ImportPassword
+        } catch (e: app.solina.passwordmanager.core.importer.WrongImportPasswordException) {
+            dataMessage = "رمز درست نیست یا فایل دست‌کاری شده است."
+        } catch (e: ImportException) {
+            dataMessage = e.message
+        } catch (e: Exception) {
+            DiagLog.logError("IMPORT", e, "runImport")
+            dataMessage = "ورود از فایل ناموفق بود."
+        } finally {
+            password?.fill('\u0000')
+        }
+    }
+
     fun launchImportFile() {
         activity.launchForResult(
             Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -605,11 +631,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             if (bytes == null) {
                                 dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
                             } else {
-                                val r = Importers.parse(String(bytes, Charsets.UTF_8))
-                                val stats = repo.importItems(r.items)
-                                dataMessage = null
-                                toast = "${stats.added.fa()} مورد از ${r.source} وارد شد" +
-                                    if (stats.skipped + r.skipped > 0) " (${(stats.skipped + r.skipped).fa()} رد شد)" else ""
+                                runImport(bytes, null)
                             }
                         } catch (e: ImportException) {
                             dataMessage = e.message
@@ -691,7 +713,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
     val inSub = generator || editing || detailId != null || scanning || dataStep != null
     BackHandler(enabled = inSub) {
         when {
-            dataStep != null -> { if (dataStep == DataStep.Menu) dataStep = null else { dataStep = DataStep.Menu; pendingRestore = null }; dataMessage = null }
+            dataStep != null -> { if (dataStep == DataStep.Menu) dataStep = null else { dataStep = DataStep.Menu; pendingRestore = null; pendingImport = null }; dataMessage = null }
             scanning -> scanning = false
             editing -> { editing = false; prefill = null }
             generator -> generator = false
@@ -708,7 +730,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                         busy = dataBusy,
                         message = dataMessage,
                         itemCount = items.size,
-                        onBack = { if (dataStep == DataStep.Menu) dataStep = null else { dataStep = DataStep.Menu; pendingRestore = null }; dataMessage = null },
+                        onBack = { if (dataStep == DataStep.Menu) dataStep = null else { dataStep = DataStep.Menu; pendingRestore = null; pendingImport = null }; dataMessage = null },
                         onStartExport = { dataMessage = null; dataStep = DataStep.ExportPassword },
                         onSubmitExport = { pw ->
                             dataBusy = true
@@ -754,6 +776,14 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             }
                         },
                         onPickImport = { dataMessage = null; launchImportFile() },
+                        onSubmitImport = { pw ->
+                            val bytes = pendingImport
+                            if (bytes != null) {
+                                dataBusy = true
+                                dataMessage = null
+                                scope.launch { try { runImport(bytes, pw) } finally { dataBusy = false } }
+                            }
+                        },
                     )
                     scanning -> ScanScreen(activity, onResult = ::onScanned, onCancel = { scanning = false }, onToast = { toast = it })
                     editing -> EditScreen(
