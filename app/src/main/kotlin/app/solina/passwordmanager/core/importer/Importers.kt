@@ -224,7 +224,8 @@ object Importers {
         for (vk in vaults.keys()) {
             val items = vaults.getJSONObject(vk).optJSONArray("items") ?: continue
             for (i in 0 until items.length()) {
-                val data = items.getJSONObject(i).optJSONObject("data") ?: run { skipped++; continue }
+                val data = items.getJSONObject(i).optJSONObject("data")
+                if (data == null) { skipped++; continue }
                 val meta = data.optJSONObject("metadata")
                 val name = meta?.optString("name").orEmpty()
                 val note = meta?.optString("note").orEmpty()
