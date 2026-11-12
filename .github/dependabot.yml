@@ -1,0 +1,12 @@
+# به‌روزرسانی خودکار وابستگی‌ها: وصلهٔ امنیتی کتابخانه‌ها (BouncyCastle، Room، CameraX، ZXing ...) و Actionها
+version: 2
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -26,7 +26,29 @@ object Importers {
 
     // ───── JSON ─────
 
+    /** عمق تودرتویی JSON را بدون بازگشت می‌شمارد؛ org.json بازگشتی است و ورودی بسیار عمیق StackOverflow می‌دهد. */
+    private fun jsonTooDeep(text: String, limit: Int = 64): Boolean {
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for (ch in text) {
+            if (inString) {
+                when {
+                    escaped -> escaped = false
+                    ch == '\\' -> escaped = true
+                    ch == '"' -> inString = false
+                }
+            } else when (ch) {
+                '"' -> inString = true
+                '{', '[' -> if (++depth > limit) return true
+                '}', ']' -> depth--
+            }
+        }
+        return false
+    }
+
     private fun parseJson(text: String): ImportResult {
+        if (jsonTooDeep(text)) throw ImportException("ساختار JSON بیش از حد تودرتو است.")
         val o = try { JSONObject(text) } catch (e: JSONException) { throw ImportException("فایل JSON خراب است.") }
         return when {
             o.has("items") && (o.has("folders") || o.has("encrypted")) -> bitwarden(o)

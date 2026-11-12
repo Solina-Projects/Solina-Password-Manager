@@ -35,6 +35,15 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
+      # مطمئن می‌شویم نسخهٔ release (با R8 و حذف منابع) هم ساخته می‌شود و قوانین shrink چیزی را نمی‌شکند.
+      - name: Build release (unsigned, R8 minified)
+        run: gradle :app:assembleRelease --stacktrace
+
+      # lint فعلاً گزارش‌دهنده است (مسدودکننده نیست)؛ بعد از پاک‌سازی هشدارها سخت‌گیر می‌شود.
+      - name: Android lint
+        continue-on-error: true
+        run: gradle :app:lintDebug --stacktrace
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -42,6 +51,15 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload test report
         if: always()
