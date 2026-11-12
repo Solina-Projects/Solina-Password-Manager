@@ -42,9 +42,9 @@ Last updated: 2026-11-12
 - Run: [Build Solina APK #37](https://github.com/Solina-Projects/Solina-Password-Manager/actions/runs/43298374564)
 - Trigger: push to `preview/rebuild-phase-01`.
 - Initial observation: checkout and Java/Gradle setup completed; unit tests started.
-- Existing preview baseline run #35: success; all listed steps passed (unit tests, debug APK, unsigned/minified release build, Android Lint and artifact uploads).\n- Current audit-branch workflow runs: new commits have triggered CI; final results remain pending.
+- Existing preview baseline run #35: success; all listed steps passed (unit tests, debug APK, unsigned/minified release build, Android Lint and artifact uploads).\n- The current audit branch has also triggered fresh runs; latest run links are visible in GitHub Actions and remain in progress at the time of this update.\n- Current audit-branch workflow runs: new commits have triggered CI; final results remain pending.
 
-## Reporting rule
+## Repository governance observations\n\n- Branches API reports `main` and `preview/ui` as unprotected; repository rulesets endpoint returned an empty list.\n- No published releases were found.\n- The connected GitHub integration could not read the detailed branch-protection endpoint (403), so exact protection settings remain unverified.\n- Gradle Wrapper files were not found in the preview branch; CI installs Gradle 8.10.2 directly.\n\n## Reporting rule
 
 At the end of every phase, update this file and `docs/MASTER_PROMPT.md` with:
 1. What was implemented.
