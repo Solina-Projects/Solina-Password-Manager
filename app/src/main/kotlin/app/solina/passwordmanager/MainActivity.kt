@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import app.solina.passwordmanager.ui.components.copySensitive
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -96,7 +98,14 @@ class MainActivity : FragmentActivity() {
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         val auth = AuthController(container)
-        setContent { SolinaTheme { Root(this, container, auth) } }
+        setContent {
+            SolinaTheme {
+                Box(Modifier.fillMaxSize()) {
+                    Root(this@MainActivity, container, auth)
+                    CrashBanner(this@MainActivity)
+                }
+            }
+        }
     }
 
     override fun onStop() {
@@ -109,6 +118,47 @@ class MainActivity : FragmentActivity() {
         container.cancelAutoLock()
         container.session.onForegrounded()
     }
+}
+
+/** اگر دفعهٔ قبل برنامه ناگهان بسته شده، گزارش (بدون داده‌های شخصی) را برای کپی نشان می‌دهد. */
+@Composable
+private fun CrashBanner(activity: FragmentActivity) {
+    val c = Solina.colors
+    var report by remember { mutableStateOf(CrashReporter.read(activity)) }
+    val text = report ?: return
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            Modifier
+                .statusBarsPadding()
+                .padding(12.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(c.secondaryContainer)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("دفعهٔ قبل برنامه ناگهان بسته شد", color = c.onSecondaryContainer, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "برای رفع اشکال، گزارش را کپی کنید و بفرستید. گزارش فقط نام کلاس‌ها و خطوط کد است، بدون رمز و داده‌های شما.",
+                color = c.onSecondaryContainer, fontSize = 13.sp, lineHeight = 20.sp,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    "کپی گزارش",
+                    color = c.primary, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable { copySensitive(activity, "crash", text, 120_000L) }.padding(8.dp),
+                )
+                Text(
+                    "بستن",
+                    color = c.onSecondaryContainer, fontSize = 14.sp,
+                    modifier = Modifier.clickable { CrashReporter.clear(activity); report = null }.padding(8.dp),
+                )
+            }
+        }
+    }
+}
+
+private fun <I> androidx.activity.result.ActivityResultLauncher<I>.safeLaunch(input: I, onFail: () -> Unit) {
+    try { launch(input) } catch (e: Exception) { onFail() }
 }
 
 private enum class Stage { Welcome, CreatePassword, ShowWords, ConfirmWords }
@@ -165,7 +215,7 @@ private fun Root(activity: FragmentActivity, container: AppContainer, auth: Auth
         )
 
         !hasVault -> when (stage) {
-            Stage.Welcome -> WelcomeScreen(message = joinMessage, onCreate = { joinMessage = null; stage = Stage.CreatePassword }, onJoin = { joinMessage = null; joinLauncher.launch(null) })
+            Stage.Welcome -> WelcomeScreen(message = joinMessage, onCreate = { joinMessage = null; stage = Stage.CreatePassword }, onJoin = { joinMessage = null; joinLauncher.safeLaunch(null) { joinMessage = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست." } })
             Stage.CreatePassword -> CreatePasswordScreen(busy) { password ->
                 busy = true
                 scope.launch {
@@ -435,14 +485,14 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                                     pw.fill('\u0000')
                                     pendingExport = bytes
                                     val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
-                                    exportLauncher.launch("solina-backup-$stamp.slnb")
+                                    exportLauncher.safeLaunch("solina-backup-$stamp.slnb") { dataMessage = "انتخاب‌گر فایل در دسترس نیست."; dataBusy = false }
                                 } catch (e: Exception) {
                                     dataMessage = "ساخت بکاپ ناموفق بود."
                                     dataBusy = false
                                 }
                             }
                         },
-                        onPickRestore = { dataMessage = null; restoreLauncher.launch(arrayOf("*/*")) },
+                        onPickRestore = { dataMessage = null; restoreLauncher.safeLaunch(arrayOf("*/*")) { dataMessage = "انتخاب‌گر فایل در دسترس نیست." } },
                         onSubmitRestore = { pw ->
                             val bytes = pendingRestore
                             if (bytes != null) {
@@ -468,7 +518,7 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                                 }
                             }
                         },
-                        onPickImport = { dataMessage = null; importLauncher.launch(arrayOf("*/*")) },
+                        onPickImport = { dataMessage = null; importLauncher.safeLaunch(arrayOf("*/*")) { dataMessage = "انتخاب‌گر فایل در دسترس نیست." } },
                     )
                     scanning -> ScanScreen(onResult = ::onScanned, onCancel = { scanning = false }, onToast = { toast = it })
                     editing -> EditScreen(
@@ -540,7 +590,7 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                             onOpenItem = { detailId = it },
                             onAdd = { detailId = null; prefill = null; editing = true },
                         )
-                        Tab.Codes -> CodesScreen(items = items, onToast = { toast = it }, onOpenItem = { detailId = it }, onScan = { scanning = true })
+                        Tab.Codes -> CodesScreen(items = items, onToast = { toast = it }, onOpenItem = { detailId = it }, onScan = { scanning = true }, onAdd = { detailId = null; prefill = null; editing = true })
                         Tab.Settings -> SettingsScreen(
                             biometricAvailable = auth.biometricAvailable(activity),
                             biometricEnabled = biometricEnabled,
@@ -559,7 +609,7 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                             autofillEnabled = autofillEnabled,
                             onOpenData = { dataMessage = null; dataStep = DataStep.Menu },
                             syncStatus = syncStatus,
-                            onSyncConnect = { connectLauncher.launch(null) },
+                            onSyncConnect = { connectLauncher.safeLaunch(null) { toast = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست" } },
                             onSyncNow = {
                                 scope.launch {
                                     toast = when (val r = container.sync.syncNow()) {

@@ -642,7 +642,7 @@ fun DetailScreen(
 // ───────────────────────── کدها ─────────────────────────
 
 @Composable
-fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (String) -> Unit, onScan: () -> Unit) {
+fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (String) -> Unit, onScan: () -> Unit, onAdd: () -> Unit) {
     val c = Solina.colors
     val ctx = LocalContext.current
     val now = rememberNow()
@@ -651,14 +651,15 @@ fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { ScreenTitle("کدها") }
-            Box(Modifier.statusBarsPadding().padding(top = 12.dp)) {
+            Row(Modifier.statusBarsPadding().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconAction(SolinaIcons.Plus, "افزودن دستی کد", tint = c.text, background = c.container, onClick = onAdd)
                 IconAction(SolinaIcons.Qr, "اسکن QR", tint = c.onPrimary, background = c.primary, onClick = onScan)
             }
         }
         if (withTotp.isEmpty()) {
             EmptyState(
                 "هنوز کدی ندارید",
-                "هنگام افزودن یا ویرایش یک ورودی، «راز TOTP» (کلید Base32 که سرویس نشان می‌دهد) را وارد کنید تا کد زنده اینجا بیاید. یا با دکمهٔ اسکن QR بالای صفحه، QR سرویس (یا خروجی Google Authenticator) را بخوانید.",
+                "هنگام افزودن یا ویرایش یک ورودی، «راز TOTP» (کلید Base32 که سرویس نشان می‌دهد) را وارد کنید تا کد زنده اینجا بیاید. با دکمهٔ + (افزودن دستی) یا دکمهٔ اسکن QR بالای صفحه می‌توانید کد اضافه کنید.",
             )
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -983,6 +984,6 @@ fun SettingsScreen(
                 Text("• باز کردن با اثر انگشت از Android Keystore استفاده می‌کند و با افزودن اثر انگشت جدید باطل می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
             }
         }
-        Text("Solina 0.0.8-alpha2", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina 0.0.9-alpha3", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
