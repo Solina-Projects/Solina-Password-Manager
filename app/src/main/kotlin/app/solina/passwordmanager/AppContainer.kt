@@ -49,7 +49,10 @@ class SolinaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        DiagLog.init(this)
         CrashReporter.install(this)
+        DiagLog.startWatchdog(this)
+        DiagLog.log("APP", "start")
         container = AppContainer(this)
     }
 }

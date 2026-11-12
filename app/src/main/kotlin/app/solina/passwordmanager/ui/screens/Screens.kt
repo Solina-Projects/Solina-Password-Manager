@@ -871,6 +871,7 @@ fun SettingsScreen(
     onSyncConnect: () -> Unit,
     onSyncNow: () -> Unit,
     onSyncDisconnect: () -> Unit,
+    onDiagnostics: () -> Unit,
     onLock: () -> Unit,
 ) {
     val c = Solina.colors
@@ -944,6 +945,14 @@ fun SettingsScreen(
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                 Row(
+                    Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onDiagnostics),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("گزارش عیب‌یابی", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    SIcon(SolinaIcons.ChevronRight, c.muted, 20.dp)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Row(
                     Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onLock),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -984,6 +993,6 @@ fun SettingsScreen(
                 Text("• باز کردن با اثر انگشت از Android Keystore استفاده می‌کند و با افزودن اثر انگشت جدید باطل می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
             }
         }
-        Text("Solina 0.0.9-alpha3", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina 0.0.10-alpha4", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }

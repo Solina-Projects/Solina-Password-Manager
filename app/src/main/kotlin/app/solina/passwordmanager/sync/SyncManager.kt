@@ -3,6 +3,7 @@ package app.solina.passwordmanager.sync
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import app.solina.passwordmanager.DiagLog
 import app.solina.passwordmanager.core.crypto.CorruptVaultException
 import app.solina.passwordmanager.core.crypto.VaultHeader
 import app.solina.passwordmanager.core.crypto.wipe
@@ -79,23 +80,30 @@ class SyncManager(
             _status.value = load()
             ConnectResult.Ok
         } catch (e: Exception) {
+            DiagLog.logError("CONNECT", e, "connect")
             ConnectResult.Failed("پوشه در دسترس نیست یا نوشتن ممکن نشد.")
         }
     }
 
     /** دستگاه جدید بدون خزانه: هدر را از پوشه می‌گیرد؛ سپس کاربر با رمز اصلی همان خزانه را باز می‌کند. */
     suspend fun joinFromFolder(uri: Uri): ConnectResult {
+        DiagLog.log("JOIN", "folder selected")
         if (files.hasVault()) return ConnectResult.Failed("روی این دستگاه از قبل خزانه وجود دارد.")
         return try {
-            val bytes = FolderRemote(context, uri).readHeader() ?: return ConnectResult.NoVaultInFolder
+            val bytes = FolderRemote(context, uri).readHeader()
+            DiagLog.log("JOIN", "header read: ${if (bytes == null) "absent" else "${bytes.size} bytes"}")
+            if (bytes == null) return ConnectResult.NoVaultInFolder
             val header = try { VaultHeader.decode(bytes) } catch (e: CorruptVaultException) {
                 return ConnectResult.Failed("فایل vault.hdr داخل پوشه خراب است.")
             }
             files.writeHeader(header)
+            DiagLog.log("JOIN", "header written; persisting permission")
             persist(uri)
             _status.value = load()
+            DiagLog.log("JOIN", "ok")
             ConnectResult.Ok
         } catch (e: Exception) {
+            DiagLog.logError("JOIN", e, "joinFromFolder")
             ConnectResult.Failed("خواندن پوشه ممکن نشد.")
         }
     }
@@ -114,6 +122,7 @@ class SyncManager(
     suspend fun syncNow(): StatusMessage {
         val uri = treeUri() ?: return StatusMessage.NotConfigured
         val key = session.keyCopy() ?: return StatusMessage.Locked
+        DiagLog.log("SYNC", "start")
         if (!mutex.tryLock()) { key.wipe(); return StatusMessage.Busy }
         _status.value = _status.value.copy(syncing = true, message = null)
         try {
@@ -122,6 +131,7 @@ class SyncManager(
             val report = repo.lock.withLock { SyncEngine(store(), remote).sync(key) }
             if (report.changedLocal) repo.load()
             val now = System.currentTimeMillis()
+            DiagLog.log("SYNC", "done pulled=${report.pulled} pushed=${report.pushed} conflicts=${report.conflicts} rejected=${report.rejected}")
             prefs.edit().putLong("last", now).apply()
             val msg = buildString {
                 append("دریافت ${report.pulled}، ارسال ${report.pushed}")
@@ -131,6 +141,7 @@ class SyncManager(
             _status.value = _status.value.copy(syncing = false, lastSyncAt = now, message = msg)
             return StatusMessage.Done(report.pulled, report.pushed, report.conflicts, report.rejected)
         } catch (e: Exception) {
+            DiagLog.logError("SYNC", e, "syncNow")
             _status.value = _status.value.copy(syncing = false, message = "همگام‌سازی ناموفق بود؛ پوشه در دسترس نیست؟")
             return StatusMessage.Failed
         } finally {

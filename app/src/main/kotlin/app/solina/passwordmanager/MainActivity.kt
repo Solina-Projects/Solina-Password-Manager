@@ -61,6 +61,7 @@ import app.solina.passwordmanager.core.crypto.AuthenticationFailedException
 import app.solina.passwordmanager.core.importer.ImportException
 import app.solina.passwordmanager.core.importer.Importers
 import app.solina.passwordmanager.ui.screens.DataScreen
+import app.solina.passwordmanager.ui.screens.DiagnosticsScreen
 import app.solina.passwordmanager.sync.ConnectResult
 import app.solina.passwordmanager.sync.SyncManager
 import kotlinx.coroutines.flow.first
@@ -98,11 +99,17 @@ class MainActivity : FragmentActivity() {
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         val auth = AuthController(container)
+        DiagLog.log("ACT", "onCreate")
         setContent {
             SolinaTheme {
-                Box(Modifier.fillMaxSize()) {
-                    Root(this@MainActivity, container, auth)
-                    CrashBanner(this@MainActivity)
+                var showDiag by remember { mutableStateOf(false) }
+                Box(Modifier.fillMaxSize().background(Solina.colors.bg)) {
+                    if (showDiag) {
+                        DiagScreenHost(this@MainActivity) { showDiag = false }
+                    } else {
+                        Root(this@MainActivity, container, auth, onDiagnostics = { showDiag = true })
+                        CrashBanner(this@MainActivity) { showDiag = true }
+                    }
                 }
             }
         }
@@ -110,11 +117,13 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
+        DiagLog.log("ACT", "onStop")
         container.scheduleAutoLock()
     }
 
     override fun onStart() {
         super.onStart()
+        DiagLog.log("ACT", "onStart")
         container.cancelAutoLock()
         container.session.onForegrounded()
     }
@@ -122,7 +131,7 @@ class MainActivity : FragmentActivity() {
 
 /** اگر دفعهٔ قبل برنامه ناگهان بسته شده، گزارش (بدون داده‌های شخصی) را برای کپی نشان می‌دهد. */
 @Composable
-private fun CrashBanner(activity: FragmentActivity) {
+private fun CrashBanner(activity: FragmentActivity, onOpenLog: () -> Unit) {
     val c = Solina.colors
     var report by remember { mutableStateOf(CrashReporter.read(activity)) }
     val text = report ?: return
@@ -148,6 +157,11 @@ private fun CrashBanner(activity: FragmentActivity) {
                     modifier = Modifier.clickable { copySensitive(activity, "crash", text, 120_000L) }.padding(8.dp),
                 )
                 Text(
+                    "گزارش کامل",
+                    color = c.primary, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable { onOpenLog() }.padding(8.dp),
+                )
+                Text(
                     "بستن",
                     color = c.onSecondaryContainer, fontSize = 14.sp,
                     modifier = Modifier.clickable { CrashReporter.clear(activity); report = null }.padding(8.dp),
@@ -155,6 +169,28 @@ private fun CrashBanner(activity: FragmentActivity) {
             }
         }
     }
+}
+
+@Composable
+private fun DiagScreenHost(activity: FragmentActivity, onBack: () -> Unit) {
+    var text by remember { mutableStateOf(buildLog(activity)) }
+    BackHandler { onBack() }
+    DiagnosticsScreen(
+        text = text,
+        onBack = onBack,
+        onCopy = { copySensitive(activity, "solina-diagnostics", text, 120_000L) },
+        onShare = {
+            val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }
+            runCatching { activity.startActivity(Intent.createChooser(send, "ارسال گزارش")) }
+        },
+        onClear = { DiagLog.clear(); CrashReporter.clear(activity); text = buildLog(activity) },
+    )
+}
+
+private fun buildLog(context: android.content.Context): String {
+    val head = "Solina ${runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()} | Android ${android.os.Build.VERSION.SDK_INT} | ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n\n"
+    val crash = CrashReporter.read(context)?.let { "== آخرین خطا ==\n$it\n" }.orEmpty()
+    return head + crash + "== رویدادها ==\n" + DiagLog.read().takeLast(20_000)
 }
 
 private fun <I> androidx.activity.result.ActivityResultLauncher<I>.safeLaunch(input: I, onFail: () -> Unit) {
@@ -179,7 +215,7 @@ internal fun messageFor(result: UnlockResult): String? = when (result) {
 }
 
 @Composable
-private fun Root(activity: FragmentActivity, container: AppContainer, auth: AuthController) {
+private fun Root(activity: FragmentActivity, container: AppContainer, auth: AuthController, onDiagnostics: () -> Unit) {
     val scope = rememberCoroutineScope()
     val unlocked by container.session.unlocked.collectAsState()
 
@@ -198,6 +234,7 @@ private fun Root(activity: FragmentActivity, container: AppContainer, auth: Auth
     var mustReset by remember { mutableStateOf(false) }
     var joinMessage by remember { mutableStateOf<String?>(null) }
     val joinLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        DiagLog.log("JOIN", "picker returned: ${if (uri == null) "cancelled" else "uri"}")
         if (uri != null) scope.launch {
             when (val r = container.sync.joinFromFolder(uri)) {
                 ConnectResult.Ok -> hasVault = true
@@ -215,7 +252,7 @@ private fun Root(activity: FragmentActivity, container: AppContainer, auth: Auth
         )
 
         !hasVault -> when (stage) {
-            Stage.Welcome -> WelcomeScreen(message = joinMessage, onCreate = { joinMessage = null; stage = Stage.CreatePassword }, onJoin = { joinMessage = null; joinLauncher.safeLaunch(null) { joinMessage = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست." } })
+            Stage.Welcome -> WelcomeScreen(message = joinMessage, onCreate = { joinMessage = null; stage = Stage.CreatePassword }, onDiagnostics = onDiagnostics, onJoin = { joinMessage = null; DiagLog.log("JOIN", "button tapped"); joinLauncher.safeLaunch(null) { joinMessage = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست." } })
             Stage.CreatePassword -> CreatePasswordScreen(busy) { password ->
                 busy = true
                 scope.launch {
@@ -304,7 +341,7 @@ private fun Root(activity: FragmentActivity, container: AppContainer, auth: Auth
             )
         }
 
-        else -> MainApp(activity, container, auth)
+        else -> MainApp(activity, container, auth, onDiagnostics)
     }
 }
 
@@ -316,7 +353,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: AuthController) {
+private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: AuthController, onDiagnostics: () -> Unit) {
     val c = Solina.colors
     val scope = rememberCoroutineScope()
     val repo = container.repository
@@ -621,6 +658,7 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                                 }
                             },
                             onSyncDisconnect = { container.sync.disconnect(); toast = "اتصال قطع شد" },
+                            onDiagnostics = onDiagnostics,
                             onEnableAutofill = {
                                 try {
                                     activity.startActivity(

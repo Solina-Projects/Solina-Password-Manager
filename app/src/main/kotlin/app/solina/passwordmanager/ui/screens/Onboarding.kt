@@ -160,7 +160,7 @@ private fun Notice(text: String, error: Boolean = false) {
 // ───────────────────────── خوش‌آمدگویی ─────────────────────────
 
 @Composable
-fun WelcomeScreen(message: String? = null, onCreate: () -> Unit, onJoin: () -> Unit) {
+fun WelcomeScreen(message: String? = null, onCreate: () -> Unit, onJoin: () -> Unit, onDiagnostics: () -> Unit = {}) {
     val c = Solina.colors
     Page {
         Spacer(Modifier.height(24.dp))
@@ -174,7 +174,8 @@ fun WelcomeScreen(message: String? = null, onCreate: () -> Unit, onJoin: () -> U
         if (message != null) Notice(message, error = true)
         Spacer(Modifier.height(8.dp))
         PrimaryButton("ساخت خزانهٔ جدید", onClick = onCreate)
-        SecondaryButton("اتصال به خزانهٔ همگام‌شده (پوشهٔ Solina-Sync)", onClick = onJoin)
+        SecondaryButton("اتصال به خزانهٔ همگام‌شده", onClick = onJoin)
+        TextLink("گزارش عیب‌یابی", onDiagnostics)
     }
 }
 

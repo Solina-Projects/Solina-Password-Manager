@@ -15,8 +15,17 @@ object CrashReporter {
         val app = context.applicationContext
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            runCatching { file(app).writeText(describe(app, thread, error)) }
+            val text = describe(app, thread, error)
+            runCatching { file(app).writeText(text) }
+            DiagLog.log("CRASH", "\n$text")
             previous?.uncaughtException(thread, error)
+        }
+    }
+
+    fun writeHang(context: Context, stack: String) {
+        val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+        runCatching {
+            file(context).writeText("HANG (برنامه پاسخ نمی‌داد) | Solina $version | Android ${Build.VERSION.SDK_INT} | ${Build.MANUFACTURER} ${Build.MODEL}\nمحل گیر کردن نخ اصلی:\n$stack\n")
         }
     }
 
