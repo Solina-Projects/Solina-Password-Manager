@@ -174,7 +174,7 @@ fun WelcomeScreen(message: String? = null, onCreate: () -> Unit, onJoin: () -> U
         if (message != null) Notice(message, error = true)
         Spacer(Modifier.height(8.dp))
         PrimaryButton("ساخت خزانهٔ جدید", onClick = onCreate)
-        SecondaryButton("اتصال به خزانهٔ همگام‌شده", onClick = onJoin)
+        SecondaryButton("بازیابی از فضای ابری / پوشهٔ پشتیبان", onClick = onJoin)
         TextLink("گزارش عیب‌یابی", onDiagnostics)
     }
 }

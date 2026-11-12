@@ -874,6 +874,7 @@ fun SettingsScreen(
     onSyncConnect: () -> Unit,
     onSyncNow: () -> Unit,
     onSyncDisconnect: () -> Unit,
+    onSetSchedule: (app.solina.passwordmanager.core.sync.BackupSchedule) -> Unit,
     onDiagnostics: () -> Unit,
     onLock: () -> Unit,
 ) {
@@ -943,9 +944,9 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(if (syncStatus.configured) "همگام‌سازی اکنون" else "همگام‌سازی (انتخاب پوشه)", color = c.text, fontSize = 15.sp)
+                        Text(if (syncStatus.configured) "پشتیبان‌گیری / همگام‌سازی اکنون" else "پشتیبان ابری (انتخاب پوشه)", color = c.text, fontSize = 15.sp)
                         Text(
-                            if (!syncStatus.configured) "پوشه‌ای را انتخاب کنید که با Syncthing، Drive، Nextcloud یا ... بین دستگاه‌هایتان همگام می‌شود. فقط داده‌های رمزشده در آن نوشته می‌شود."
+                            if (!syncStatus.configured) "پوشه‌ای در فضای ابری خودتان (Google Drive، Nextcloud، Syncthing یا هر ارائه‌دهندهٔ فایل) انتخاب کنید. فقط داده‌های رمزشده نوشته می‌شود؛ با همان پوشه و رمز اصلی یا ۲۴ کلمه روی دستگاه جدید بازیابی می‌شود."
                             else buildString {
                                 append("پوشه: ${syncStatus.folderName}")
                                 if (syncStatus.lastSyncAt > 0) append(" · آخرین: ${app.solina.passwordmanager.core.formatJalali(syncStatus.lastSyncAt)}")
@@ -957,6 +958,23 @@ fun SettingsScreen(
                     }
                 }
                 if (syncStatus.configured) {
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                    Text("زمان‌بندی پشتیبان (فقط وقتی خزانه باز است اجرا می‌شود)", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                    for ((option, label) in listOf(
+                        app.solina.passwordmanager.core.sync.BackupSchedule.OnChange to "با هر تغییر",
+                        app.solina.passwordmanager.core.sync.BackupSchedule.Daily to "روزانه",
+                        app.solina.passwordmanager.core.sync.BackupSchedule.Weekly to "هفتگی",
+                        app.solina.passwordmanager.core.sync.BackupSchedule.Monthly to "ماهانه",
+                        app.solina.passwordmanager.core.sync.BackupSchedule.Manual to "فقط دستی",
+                    )) {
+                        Row(
+                            Modifier.fillMaxWidth().height(44.dp).clickable(role = Role.RadioButton) { onSetSchedule(option) },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(label, color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                            if (syncStatus.schedule == option) Text("●", color = c.primary, fontSize = 14.sp)
+                        }
+                    }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                     Row(
                         Modifier.fillMaxWidth().height(52.dp).clickable(role = Role.Button, onClick = onSyncDisconnect),

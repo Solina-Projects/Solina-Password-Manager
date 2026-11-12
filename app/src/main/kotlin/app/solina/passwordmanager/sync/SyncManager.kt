@@ -11,7 +11,10 @@ import app.solina.passwordmanager.core.security.VaultFiles
 import app.solina.passwordmanager.core.security.VaultSession
 import app.solina.passwordmanager.core.storage.ItemStore
 import app.solina.passwordmanager.core.storage.VaultRepository
+import app.solina.passwordmanager.core.sync.BackupSchedule
+import app.solina.passwordmanager.core.sync.BackupTrigger
 import app.solina.passwordmanager.core.sync.SyncEngine
+import app.solina.passwordmanager.core.sync.shouldRunAutomatically
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +26,7 @@ data class SyncStatus(
     val folderName: String = "",
     val syncing: Boolean = false,
     val lastSyncAt: Long = 0,
+    val schedule: BackupSchedule = BackupSchedule.OnChange,
     /** پیام آخرین نتیجه یا خطا؛ برای نمایش در تنظیمات. */
     val message: String? = null,
 )
@@ -51,7 +55,7 @@ class SyncManager(
 
     private fun load(): SyncStatus {
         val uri = treeUri() ?: return SyncStatus()
-        return SyncStatus(true, FolderRemote(context, uri).displayName(), false, prefs.getLong("last", 0), null)
+        return SyncStatus(true, FolderRemote(context, uri).displayName(), false, prefs.getLong("last", 0), BackupSchedule.parse(prefs.getString("schedule", null)), null)
     }
 
     private fun persist(uri: Uri) {
@@ -106,6 +110,19 @@ class SyncManager(
             DiagLog.logError("JOIN", e, "joinFromFolder")
             ConnectResult.Failed("خواندن پوشه ممکن نشد.")
         }
+    }
+
+    fun setSchedule(schedule: BackupSchedule) {
+        prefs.edit().putString("schedule", schedule.name).apply()
+        _status.value = _status.value.copy(schedule = schedule)
+    }
+
+    /** اجرای خودکار بر اساس زمان‌بندی؛ برای حالت دستی هیچ کاری نمی‌کند. */
+    suspend fun syncIfDue(trigger: BackupTrigger): StatusMessage? {
+        val st = _status.value
+        if (!st.configured) return null
+        if (!shouldRunAutomatically(st.schedule, st.lastSyncAt, System.currentTimeMillis(), trigger)) return null
+        return syncNow()
     }
 
     fun disconnect() {

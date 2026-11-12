@@ -505,11 +505,12 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
         )
     }
     // هم‌گام‌سازی خودکار: بعد از باز شدن خزانه، و ۱٫۵ ثانیه بعد از هر تغییر محلی (debounce).
-    LaunchedEffect(Unit) { container.sync.syncNow() }
+    // زمان‌بندی کاربر اعمال می‌شود: هر تغییر / روزانه / هفتگی / ماهانه / دستی.
+    LaunchedEffect(Unit) { container.sync.syncIfDue(app.solina.passwordmanager.core.sync.BackupTrigger.Unlock) }
     LaunchedEffect(localRev) {
         if (localRev > 0) {
             delay(1500)
-            container.sync.syncNow()
+            container.sync.syncIfDue(app.solina.passwordmanager.core.sync.BackupTrigger.Change)
         }
     }
     var dataStep by remember { mutableStateOf<DataStep?>(null) }
@@ -847,6 +848,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                                 }
                             },
                             onSyncDisconnect = { container.sync.disconnect(); toast = "اتصال قطع شد" },
+                            onSetSchedule = { container.sync.setSchedule(it) },
                             onDiagnostics = onDiagnostics,
                             onEnableAutofill = {
                                 try {
