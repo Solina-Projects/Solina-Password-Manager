@@ -100,7 +100,7 @@ object Importers {
         val o = try { JSONObject(text) } catch (e: JSONException) { throw ImportException("فایل JSON خراب است.") }
         return try {
             when {
-                o.has("items") && (o.has("folders") || o.has("encrypted")) -> bitwarden(o, password)
+                (o.has("items") && (o.has("folders") || o.has("encrypted"))) || (o.optBoolean("encrypted") && o.has("data")) -> bitwarden(o, password)
                 o.has("db") && o.has("header") -> aegis(o, password)
                 o.has("services") || o.has("servicesEncrypted") -> twoFas(o, password)
                 o.has("vaults") -> protonPass(o)
@@ -425,7 +425,8 @@ object Importers {
         val rows = csvRows(text)
         if (rows.size < 2) throw ImportException("فایل CSV داده‌ای ندارد یا قالبش شناخته نشد.")
         val head = rows[0].map { it.trim().lowercase() }
-        fun col(names: List<String>) = head.indexOfFirst { it in names }
+        // اولویت با ترتیب نام‌ها در فهرست است (مثلاً «username» بر «email» مقدم است)، نه ترتیب ستون‌ها در فایل.
+        fun col(names: List<String>) = names.firstNotNullOfOrNull { n -> head.indexOf(n).takeIf { it >= 0 } } ?: -1
         val cTitle = col(TITLE); val cUrl = col(URL); val cUser = col(USER); val cPass = col(PASS)
         val cNote = col(NOTE); val cTotp = col(TOTP); val cType = col(listOf("type"))
         if (cPass < 0 && cUser < 0) throw ImportException("ستون‌های نام کاربری/رمز در فایل پیدا نشد. قالب‌های CSV پشتیبانی‌شده: Google/Chrome/Edge/Firefox، Bitwarden، 1Password، LastPass، KeePass، Dashlane، NordPass و Proton Pass.")
