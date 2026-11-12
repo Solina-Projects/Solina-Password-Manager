@@ -13,8 +13,11 @@ class ImportResult(val items: List<ItemPayload>, val source: String, val skipped
 
 /** ایمپورت از فایل‌های متنی رایج. فایل‌های رمزشدهٔ دیگر برنامه‌ها پشتیبانی نمی‌شوند (باید ابتدا بدون رمز خروجی گرفت). */
 object Importers {
+    /** نشانهٔ ترتیب بایت UTF-8 که بعضی برنامه‌ها اول CSV می‌گذارند. */
+    private val BOM = 0xFEFF.toChar()
+
     fun parse(textIn: String): ImportResult {
-        val text = textIn.removePrefix("﻿").trim()
+        val text = textIn.removePrefix(BOM.toString()).trim()
         if (text.isEmpty()) throw ImportException("فایل خالی است.")
         return when {
             text.startsWith("{") -> parseJson(text)

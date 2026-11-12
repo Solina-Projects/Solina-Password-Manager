@@ -55,10 +55,10 @@ jobs:
       - name: Lint summary
         if: always()
         run: |
-          f=app/build/reports/lint-results-debug.xml
+          f=app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
           if [ -f "$f" ]; then
-            echo "== lint issues by id/severity =="
-            grep -o '<issue id="[^"]*" severity="[^"]*"' "$f" | sed 's/<issue id=//' | sort | uniq -c | sort -rn | head -40
+            echo "== lint findings =="
+            grep -E "(Error|Warning): " "$f" | sed 's#.*/passwordmanager/##' | head -80
           fi
 
       - name: Upload lint report
