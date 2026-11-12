@@ -50,11 +50,15 @@ object Importers {
     private fun parseJson(text: String): ImportResult {
         if (jsonTooDeep(text)) throw ImportException("ساختار JSON بیش از حد تودرتو است.")
         val o = try { JSONObject(text) } catch (e: JSONException) { throw ImportException("فایل JSON خراب است.") }
-        return when {
-            o.has("items") && (o.has("folders") || o.has("encrypted")) -> bitwarden(o)
-            o.has("db") && o.has("header") -> aegis(o)
-            else -> throw ImportException("قالب این فایل شناخته نشد. فعلاً Bitwarden (JSON) ، Aegis (JSON بدون رمز) و CSV پشتیبانی می‌شود.")
-        }
+        return try {
+            when {
+                o.has("items") && (o.has("folders") || o.has("encrypted")) -> bitwarden(o)
+                o.has("db") && o.has("header") -> aegis(o)
+                else -> null
+            }
+        } catch (e: JSONException) {
+            throw ImportException("ساختار فایل با قالب انتظار‌رفته نمی‌خواند.")
+        } ?: throw ImportException("قالب این فایل شناخته نشد. فعلاً Bitwarden (JSON) ، Aegis (JSON بدون رمز) و CSV پشتیبانی می‌شود.")
     }
 
     private fun totpFields(raw: String): ItemPayload? {

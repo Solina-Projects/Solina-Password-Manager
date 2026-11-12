@@ -13,7 +13,8 @@ class GuardTest {
         return d
     }
 
-    private val manifest get() = File(moduleDir(), "src/main/AndroidManifest.xml").readText()
+    /** متن مانیفست بدون کامنت‌های XML (تا اشاره‌ها در توضیحات باعث مثبت کاذب نشود). */
+    private val manifest get() = File(moduleDir(), "src/main/AndroidManifest.xml").readText().replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "")
 
     @Test fun onlyCameraPermissionAndNoNetwork() {
         val perms = Regex("""<uses-permission[^>]*android:name="([^"]+)"""").findAll(manifest).map { it.groupValues[1] }.toSet()
