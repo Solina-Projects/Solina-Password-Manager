@@ -52,6 +52,15 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Lint summary
+        if: always()
+        run: |
+          f=app/build/reports/lint-results-debug.xml
+          if [ -f "$f" ]; then
+            echo "== lint issues by id/severity =="
+            grep -o '<issue id="[^"]*" severity="[^"]*"' "$f" | sed 's/<issue id=//' | sort | uniq -c | sort -rn | head -40
+          fi
+
       - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@v4
