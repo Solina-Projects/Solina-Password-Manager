@@ -212,6 +212,53 @@ The current generator implements TOTP. The import parser explicitly ignores HOTP
 Required remediation:
 - Either implement HOTP with counter persistence, atomic counter advancement and RFC 4226 tests, or mark HOTP as not yet supported in product documentation and UI.
 
+### P1 — No protected branch or repository ruleset is configured
+
+Repository metadata:
+- The GitHub branches endpoint reports `main`, `preview/ui` and the audit branches as `protected: false`.
+- The repository rulesets endpoint returns an empty list.
+- The releases endpoint returns no published releases.
+- The open-issues endpoint currently returns no open issues.
+
+Impact:
+- A direct push or accidental force-push can alter the default branch without a required review/check gate.
+- CI success is not enforced as a merge condition by a repository ruleset.
+- The project has no formal release artifact history yet.
+
+Required remediation:
+- Configure a ruleset for `main`: require pull requests, require CI checks, block force pushes and deletion, and require review for security-sensitive changes.
+- Consider a lighter protection policy for `preview/ui`.
+- Use a dedicated release workflow and signed, traceable release artifacts.
+- Note: the branch-protection details endpoint itself returned 403 through the connected integration, so individual protection settings could not be inspected; the branches response and empty rulesets response are the evidence used here.
+
+### P2 — Gradle Wrapper is absent from the reviewed preview branch
+
+Paths checked:
+- `gradlew`
+- `gradlew.bat`
+- `gradle/wrapper/gradle-wrapper.properties`
+
+None was found. The workflow installs a fixed Gradle version using `gradle/actions/setup-gradle` and invokes `gradle` directly. This can work in CI, but developers do not have a repository-pinned wrapper for consistent local and CI builds.
+
+Required remediation:
+- Add the Gradle Wrapper using the version compatible with the current Android Gradle Plugin.
+- Configure CI to use `./gradlew`.
+- Verify wrapper distribution checksum and document the JDK/Gradle/AGP matrix.
+
+### P2 — License identifier is inconsistent
+
+Files:
+- `LICENSE`
+- `README.md`
+- `docs/reference-audit.md`
+
+The checked-in license text is the GNU GPL version 3 text, while project documentation describes the project as GPL-3.0-or-later. The repository does not clearly show the additional “or later” grant in the license notice.
+
+Required remediation:
+- Confirm the intended license with the copyright holder(s).
+- Make the README, SPDX identifier, source headers (if used), and LICENSE grant consistent.
+- Preserve contributor copyright/CLA policy clarity before accepting external contributions.
+
 ## Not yet verified
 
 - No local Gradle build or test execution has been performed in this review.
