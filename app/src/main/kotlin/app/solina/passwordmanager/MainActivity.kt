@@ -328,7 +328,8 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
     var message by remember { mutableStateOf<String?>(null) }
     var mustReset by remember { mutableStateOf(false) }
     var joinMessage by remember { mutableStateOf<String?>(null) }
-    fun launchJoinFolder() {
+    var showJoinCloud by remember { mutableStateOf(false) }
+    fun launchJoinFolder(kind: String) {
         if (!hasFolderPicker(activity)) {
             DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
             joinMessage = NO_FOLDER_PICKER_MESSAGE
@@ -341,7 +342,7 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
                 val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
                 DiagLog.log("JOIN", "picker returned: ${if (uri == null) "cancelled" else "uri"}")
                 if (uri != null) scope.launch {
-                    when (val r = container.sync.joinFromFolder(uri)) {
+                    when (val r = container.sync.joinFromFolder(uri, kind)) {
                         ConnectResult.Ok -> hasVault = true
                         ConnectResult.NoVaultInFolder -> joinMessage = "در این پوشه خزانه‌ای پیدا نشد. پوشه‌ای را انتخاب کنید که شامل «Solina-Sync» است (یعنی همان پوشه‌ای که در دستگاه اول انتخاب شد)."
                         ConnectResult.DifferentVault -> joinMessage = "پوشه خزانهٔ دیگری دارد."
@@ -360,11 +361,23 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
         )
 
         !hasVault -> when (stage) {
-            Stage.Welcome -> WelcomeScreen(message = joinMessage, onCreate = { joinMessage = null; stage = Stage.CreatePassword }, onDiagnostics = onDiagnostics, onJoin = {
-                joinMessage = null
-                DiagLog.log("JOIN", "button tapped")
-                launchJoinFolder()
-            })
+            Stage.Welcome -> {
+                WelcomeScreen(
+                    message = joinMessage,
+                    onCreate = { joinMessage = null; stage = Stage.CreatePassword },
+                    onDiagnostics = onDiagnostics,
+                    onJoinCloud = { joinMessage = null; DiagLog.log("JOIN", "cloud button tapped"); showJoinCloud = true },
+                    onJoinStorage = { joinMessage = null; DiagLog.log("JOIN", "storage button tapped"); launchJoinFolder("storage") },
+                )
+                if (showJoinCloud) {
+                    val providers = remember { app.solina.passwordmanager.sync.listCloudProviders(activity) }
+                    app.solina.passwordmanager.ui.screens.CloudProviderDialog(
+                        providers = providers,
+                        onPick = { showJoinCloud = false; launchJoinFolder("cloud") },
+                        onDismiss = { showJoinCloud = false },
+                    )
+                }
+            }
             Stage.CreatePassword -> CreatePasswordScreen(busy) { password ->
                 busy = true
                 scope.launch {
@@ -481,7 +494,8 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
     var scanning by remember { mutableStateOf(false) }
     val syncStatus by container.sync.status.collectAsState()
     val localRev by repo.localChanges.collectAsState()
-    fun launchConnectFolder() {
+    var showConnectCloud by remember { mutableStateOf(false) }
+    fun launchConnectFolder(kind: String) {
         if (!hasFolderPicker(activity)) {
             DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
             toast = NO_FOLDER_PICKER_MESSAGE
@@ -493,7 +507,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
             handler = { resultCode, data ->
                 val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
                 if (uri != null) scope.launch {
-                    when (val r = container.sync.connect(uri)) {
+                    when (val r = container.sync.connect(uri, kind)) {
                         ConnectResult.Ok -> { toast = "متصل شد؛ در حال همگام‌سازی…"; container.sync.syncNow() }
                         ConnectResult.DifferentVault -> toast = "این پوشه خزانهٔ دیگری دارد؛ وصل نشد"
                         ConnectResult.NoVaultInFolder -> toast = "خزانه‌ای در پوشه نیست"
@@ -666,6 +680,14 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
         }
     }
 
+    if (showConnectCloud) {
+        val providers = remember { app.solina.passwordmanager.sync.listCloudProviders(activity) }
+        app.solina.passwordmanager.ui.screens.CloudProviderDialog(
+            providers = providers,
+            onPick = { showConnectCloud = false; launchConnectFolder("cloud") },
+            onDismiss = { showConnectCloud = false },
+        )
+    }
     val inSub = generator || editing || detailId != null || scanning || dataStep != null
     BackHandler(enabled = inSub) {
         when {
@@ -836,7 +858,8 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             },
                             onOpenData = { dataMessage = null; dataStep = DataStep.Menu },
                             syncStatus = syncStatus,
-                            onSyncConnect = { launchConnectFolder() },
+                            onSyncConnectCloud = { showConnectCloud = true },
+                            onSyncConnectStorage = { launchConnectFolder("storage") },
                             onSyncNow = {
                                 scope.launch {
                                     toast = when (val r = container.sync.syncNow()) {

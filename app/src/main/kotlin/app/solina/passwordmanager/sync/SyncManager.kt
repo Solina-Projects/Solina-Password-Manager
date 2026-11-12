@@ -27,6 +27,8 @@ data class SyncStatus(
     val syncing: Boolean = false,
     val lastSyncAt: Long = 0,
     val schedule: BackupSchedule = BackupSchedule.OnChange,
+    /** "cloud" یا "storage". */
+    val kind: String = "storage",
     /** پیام آخرین نتیجه یا خطا؛ برای نمایش در تنظیمات. */
     val message: String? = null,
 )
@@ -55,18 +57,18 @@ class SyncManager(
 
     private fun load(): SyncStatus {
         val uri = treeUri() ?: return SyncStatus()
-        return SyncStatus(true, FolderRemote(context, uri).displayName(), false, prefs.getLong("last", 0), BackupSchedule.parse(prefs.getString("schedule", null)), null)
+        return SyncStatus(true, FolderRemote(context, uri).displayName(), false, prefs.getLong("last", 0), BackupSchedule.parse(prefs.getString("schedule", null)), prefs.getString("kind", "storage") ?: "storage", null)
     }
 
-    private fun persist(uri: Uri) {
+    private fun persist(uri: Uri, kind: String) {
         runCatching {
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
-        prefs.edit().putString("tree", uri.toString()).putLong("last", 0).apply()
+        prefs.edit().putString("tree", uri.toString()).putString("kind", kind).putLong("last", 0).apply()
     }
 
     /** اتصال یک دستگاهِ دارای خزانه به پوشه (ایجاد یا تأیید vault.hdr). */
-    suspend fun connect(uri: Uri): ConnectResult {
+    suspend fun connect(uri: Uri, kind: String = "storage"): ConnectResult {
         return try {
             val remote = FolderRemote(context, uri)
             val local = files.readHeader()
@@ -80,7 +82,7 @@ class SyncManager(
                 // هویت خزانه = بستهٔ کلید بازیابی؛ با تغییر رمز اصلی عوض نمی‌شود.
                 if (!other.wrappedVkByRecovery.contentEquals(local.wrappedVkByRecovery)) return ConnectResult.DifferentVault
             }
-            persist(uri)
+            persist(uri, kind)
             _status.value = load()
             ConnectResult.Ok
         } catch (e: Exception) {
@@ -90,7 +92,7 @@ class SyncManager(
     }
 
     /** دستگاه جدید بدون خزانه: هدر را از پوشه می‌گیرد؛ سپس کاربر با رمز اصلی همان خزانه را باز می‌کند. */
-    suspend fun joinFromFolder(uri: Uri): ConnectResult {
+    suspend fun joinFromFolder(uri: Uri, kind: String = "storage"): ConnectResult {
         DiagLog.log("JOIN", "folder selected")
         if (files.hasVault()) return ConnectResult.Failed("روی این دستگاه از قبل خزانه وجود دارد.")
         return try {
@@ -102,7 +104,7 @@ class SyncManager(
             }
             files.writeHeader(header)
             DiagLog.log("JOIN", "header written; persisting permission")
-            persist(uri)
+            persist(uri, kind)
             _status.value = load()
             DiagLog.log("JOIN", "ok")
             ConnectResult.Ok

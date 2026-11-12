@@ -871,7 +871,8 @@ fun SettingsScreen(
     onRequestNotifPermission: () -> Unit,
     onOpenData: () -> Unit,
     syncStatus: app.solina.passwordmanager.sync.SyncStatus,
-    onSyncConnect: () -> Unit,
+    onSyncConnectCloud: () -> Unit,
+    onSyncConnectStorage: () -> Unit,
     onSyncNow: () -> Unit,
     onSyncDisconnect: () -> Unit,
     onSetSchedule: (app.solina.passwordmanager.core.sync.BackupSchedule) -> Unit,
@@ -940,21 +941,33 @@ fun SettingsScreen(
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                 Row(
-                    Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = if (syncStatus.configured) onSyncNow else onSyncConnect).padding(vertical = 12.dp),
+                    Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = if (syncStatus.configured) onSyncNow else onSyncConnectCloud).padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(if (syncStatus.configured) "پشتیبان‌گیری / همگام‌سازی اکنون" else "پشتیبان ابری (انتخاب پوشه)", color = c.text, fontSize = 15.sp)
+                        Text(if (syncStatus.configured) "پشتیبان‌گیری / همگام‌سازی اکنون" else "پشتیبان در فضای ابری", color = c.text, fontSize = 15.sp)
                         Text(
                             if (!syncStatus.configured) "پوشه‌ای در فضای ابری خودتان (Google Drive، Nextcloud، Syncthing یا هر ارائه‌دهندهٔ فایل) انتخاب کنید. فقط داده‌های رمزشده نوشته می‌شود؛ با همان پوشه و رمز اصلی یا ۲۴ کلمه روی دستگاه جدید بازیابی می‌شود."
                             else buildString {
-                                append("پوشه: ${syncStatus.folderName}")
+                                append((if (syncStatus.kind == "cloud") "فضای ابری: " else "فضای ذخیره‌سازی: ") + syncStatus.folderName)
                                 if (syncStatus.lastSyncAt > 0) append(" · آخرین: ${app.solina.passwordmanager.core.formatJalali(syncStatus.lastSyncAt)}")
                                 if (syncStatus.syncing) append(" · در حال همگام‌سازی…")
                                 syncStatus.message?.let { append("\n$it") }
                             },
                             color = c.muted, fontSize = 12.sp, lineHeight = 18.sp,
                         )
+                    }
+                }
+                if (!syncStatus.configured) {
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                    Row(
+                        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onSyncConnectStorage).padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("پشتیبان در فضای ذخیره‌سازی", color = c.text, fontSize = 15.sp)
+                            Text("پوشه‌ای در حافظهٔ داخلی، کارت حافظه یا فلش.", color = c.muted, fontSize = 12.sp)
+                        }
                     }
                 }
                 if (syncStatus.configured) {
@@ -1031,6 +1044,6 @@ fun SettingsScreen(
                 Text("• باز کردن با اثر انگشت از Android Keystore استفاده می‌کند و با افزودن اثر انگشت جدید باطل می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
             }
         }
-        Text("Solina 0.0.13-alpha7", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina 0.0.14-alpha8", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
