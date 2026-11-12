@@ -160,7 +160,7 @@ private fun Notice(text: String, error: Boolean = false) {
 // ───────────────────────── خوش‌آمدگویی ─────────────────────────
 
 @Composable
-fun WelcomeScreen(onCreate: () -> Unit) {
+fun WelcomeScreen(message: String? = null, onCreate: () -> Unit, onJoin: () -> Unit) {
     val c = Solina.colors
     Page {
         Spacer(Modifier.height(24.dp))
@@ -170,9 +170,11 @@ fun WelcomeScreen(onCreate: () -> Unit) {
         ) { SIcon(SolinaIcons.Shield, c.primary, 48.dp) }
         Heading("به Solina خوش آمدید", "گاوصندوق دیجیتال شما. همه‌چیز فقط روی همین دستگاه رمزگذاری و نگه‌داری می‌شود.")
         Notice("فقط روی دستگاه شما، بدون نیاز به حساب، و شما تنها کسی هستید که کلید را دارید.")
-        Notice("نسخهٔ پیش‌نمایش: خزانه و رمزنگاری واقعی‌اند، ولی فهرست رمزها هنوز نمایشی است و ذخیره نمی‌شود. رمز واقعی خود را وارد نکنید.", error = true)
+        Notice("نسخهٔ آزمایشی: رمزنگاری و ذخیره‌سازی واقعی‌اند ولی هنوز بازبینی امنیتی مستقل نشده‌اند. فعلاً رمزهای حیاتی خود را در آن نگه ندارید.", error = true)
+        if (message != null) Notice(message, error = true)
         Spacer(Modifier.height(8.dp))
         PrimaryButton("ساخت خزانهٔ جدید", onClick = onCreate)
+        SecondaryButton("اتصال به خزانهٔ همگام‌شده (پوشهٔ Solina-Sync)", onClick = onJoin)
     }
 }
 

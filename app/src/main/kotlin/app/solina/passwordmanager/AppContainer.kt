@@ -20,7 +20,9 @@ class AppContainer(context: Context) {
     val files = VaultFiles(File(context.filesDir, "solina"))
     val session = VaultSession()
     val database by lazy { SolinaDatabase.open(context) }
-    val repository by lazy { VaultRepository(RoomItemStore(database), session) }
+    val itemStore by lazy { RoomItemStore(database) }
+    val repository by lazy { VaultRepository(itemStore, session) }
+    val sync = app.solina.passwordmanager.sync.SyncManager(context.applicationContext, files, session, { itemStore }, { repository })
 
     private val handler = Handler(Looper.getMainLooper())
     private val lockCheck = Runnable { session.enforceTimeout() }

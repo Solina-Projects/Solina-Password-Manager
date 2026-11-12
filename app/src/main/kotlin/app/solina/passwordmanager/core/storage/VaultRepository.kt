@@ -7,6 +7,8 @@ import app.solina.passwordmanager.core.security.VaultSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 class ImportStats(val added: Int, val skipped: Int)
@@ -25,6 +27,13 @@ class VaultRepository(
 ) {
     private val _items = MutableStateFlow<List<VaultItem>>(emptyList())
     val items: StateFlow<List<VaultItem>> = _items.asStateFlow()
+
+    /** تغییرات محلی را با همگام‌سازی سریالی می‌کند (برای جلوگیری از «به‌روزرسانی گم‌شده»). */
+    val lock = Mutex()
+
+    private val _localChanges = MutableStateFlow(0L)
+    /** با هر افزودن/ویرایش/حذف/ایمپورت محلی بالا می‌رود؛ برای راه‌اندازی همگام‌سازی خودکار. */
+    val localChanges: StateFlow<Long> = _localChanges.asStateFlow()
 
     private val _unreadable = MutableStateFlow(0)
     /** تعداد ردیف‌هایی که رمزگشایی نشدند (خراب یا دستکاری‌شده). */
@@ -61,22 +70,23 @@ class VaultRepository(
         _items.value = list.sortedBy { it.payload.title.lowercase() }
     }
 
-    suspend fun add(payload: ItemPayload): VaultItem {
+    suspend fun add(payload: ItemPayload): VaultItem = lock.withLock {
         val now = clock()
         val id = newId()
         val p = payload.copy(createdAt = now, editedAt = now)
         val item = VaultItem(id, 1, p)
         withKey { key -> store.save(seal(key, item, now), null, MAX_HISTORY) }
         publish(item)
-        return item
+        _localChanges.value++
+        item
     }
 
     /** اگر چیزی تغییر نکرده باشد چیزی ذخیره نمی‌شود. */
-    suspend fun update(id: String, payload: ItemPayload): VaultItem {
+    suspend fun update(id: String, payload: ItemPayload): VaultItem = lock.withLock {
         val current = _items.value.firstOrNull { it.id == id } ?: error("item not found")
         val now = clock()
         val next = payload.copy(createdAt = current.payload.createdAt, editedAt = current.payload.editedAt)
-        if (next == current.payload) return current
+        if (next == current.payload) return@withLock current
         val item = VaultItem(id, current.rev + 1, next.copy(editedAt = now))
         withKey { key ->
             val old = store.get(id) ?: error("item not found")
@@ -84,7 +94,8 @@ class VaultRepository(
             store.save(seal(key, item, now), archived, MAX_HISTORY)
         }
         publish(item)
-        return item
+        _localChanges.value++
+        item
     }
 
     private fun fingerprint(p: ItemPayload) =
@@ -93,7 +104,7 @@ class VaultRepository(
     /**
      * افزودن دسته‌ای (ایمپورت/بازیابی). ورودی‌ای که عیناً مشابه موجود باشد رد می‌شود؛ تاریخ‌های اصلی حفظ می‌شوند.
      */
-    suspend fun importItems(list: List<ItemPayload>): ImportStats {
+    suspend fun importItems(list: List<ItemPayload>): ImportStats = lock.withLock {
         val known = _items.value.map { fingerprint(it.payload) }.toHashSet()
         val now = clock()
         val created = ArrayList<VaultItem>()
@@ -109,13 +120,15 @@ class VaultRepository(
             }
         }
         _items.value = (_items.value + created).sortedBy { it.payload.title.lowercase() }
-        return ImportStats(created.size, skipped)
+        if (created.isNotEmpty()) _localChanges.value++
+        ImportStats(created.size, skipped)
     }
 
-    suspend fun delete(id: String) {
-        val current = _items.value.firstOrNull { it.id == id } ?: return
+    suspend fun delete(id: String) = lock.withLock {
+        val current = _items.value.firstOrNull { it.id == id } ?: return@withLock
         store.delete(id, clock(), current.rev + 1)
         _items.value = _items.value.filterNot { it.id == id }
+        _localChanges.value++
     }
 
     suspend fun history(id: String): List<HistoryEntry> = withKey { key ->

@@ -59,6 +59,9 @@ import app.solina.passwordmanager.core.crypto.AuthenticationFailedException
 import app.solina.passwordmanager.core.importer.ImportException
 import app.solina.passwordmanager.core.importer.Importers
 import app.solina.passwordmanager.ui.screens.DataScreen
+import app.solina.passwordmanager.sync.ConnectResult
+import app.solina.passwordmanager.sync.SyncManager
+import kotlinx.coroutines.flow.first
 import app.solina.passwordmanager.ui.screens.DataStep
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -143,6 +146,17 @@ private fun Root(activity: FragmentActivity, container: AppContainer, auth: Auth
     var mode by remember { mutableStateOf(UnlockMode.Password) }
     var message by remember { mutableStateOf<String?>(null) }
     var mustReset by remember { mutableStateOf(false) }
+    var joinMessage by remember { mutableStateOf<String?>(null) }
+    val joinLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) scope.launch {
+            when (val r = container.sync.joinFromFolder(uri)) {
+                ConnectResult.Ok -> hasVault = true
+                ConnectResult.NoVaultInFolder -> joinMessage = "در این پوشه خزانه‌ای پیدا نشد. پوشه‌ای را انتخاب کنید که شامل «Solina-Sync» است (یعنی همان پوشه‌ای که در دستگاه اول انتخاب شد)."
+                ConnectResult.DifferentVault -> joinMessage = "پوشه خزانهٔ دیگری دارد."
+                is ConnectResult.Failed -> joinMessage = r.reason
+            }
+        }
+    }
 
     when {
         offerBiometric && unlocked -> BiometricOfferScreen(
@@ -151,7 +165,7 @@ private fun Root(activity: FragmentActivity, container: AppContainer, auth: Auth
         )
 
         !hasVault -> when (stage) {
-            Stage.Welcome -> WelcomeScreen { stage = Stage.CreatePassword }
+            Stage.Welcome -> WelcomeScreen(message = joinMessage, onCreate = { joinMessage = null; stage = Stage.CreatePassword }, onJoin = { joinMessage = null; joinLauncher.launch(null) })
             Stage.CreatePassword -> CreatePasswordScreen(busy) { password ->
                 busy = true
                 scope.launch {
@@ -184,6 +198,7 @@ private fun Root(activity: FragmentActivity, container: AppContainer, auth: Auth
                 busy = false
                 if (ok) {
                     mustReset = false
+                    container.sync.pushHeader()
                     // پس از بازیابی، میان‌بر اثر انگشت برای احتیاط غیرفعال می‌شود (از تنظیمات دوباره فعال می‌شود).
                     auth.disableBiometric()
                 } else {
@@ -265,6 +280,26 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
     var generator by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
+    val syncStatus by container.sync.status.collectAsState()
+    val localRev by repo.localChanges.collectAsState()
+    val connectLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) scope.launch {
+            when (val r = container.sync.connect(uri)) {
+                ConnectResult.Ok -> { toast = "متصل شد؛ در حال همگام‌سازی…"; container.sync.syncNow() }
+                ConnectResult.DifferentVault -> toast = "این پوشه خزانهٔ دیگری دارد؛ وصل نشد"
+                ConnectResult.NoVaultInFolder -> toast = "خزانه‌ای در پوشه نیست"
+                is ConnectResult.Failed -> toast = r.reason
+            }
+        }
+    }
+    // هم‌گام‌سازی خودکار: بعد از باز شدن خزانه، و ۱٫۵ ثانیه بعد از هر تغییر محلی (debounce).
+    LaunchedEffect(Unit) { container.sync.syncNow() }
+    LaunchedEffect(localRev) {
+        if (localRev > 0) {
+            delay(1500)
+            container.sync.syncNow()
+        }
+    }
     var dataStep by remember { mutableStateOf<DataStep?>(null) }
     var dataBusy by remember { mutableStateOf(false) }
     var dataMessage by remember { mutableStateOf<String?>(null) }
@@ -523,6 +558,19 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                             },
                             autofillEnabled = autofillEnabled,
                             onOpenData = { dataMessage = null; dataStep = DataStep.Menu },
+                            syncStatus = syncStatus,
+                            onSyncConnect = { connectLauncher.launch(null) },
+                            onSyncNow = {
+                                scope.launch {
+                                    toast = when (val r = container.sync.syncNow()) {
+                                        is SyncManager.StatusMessage.Done -> "همگام‌سازی انجام شد"
+                                        SyncManager.StatusMessage.Busy -> "همگام‌سازی در حال انجام است"
+                                        SyncManager.StatusMessage.Failed -> "همگام‌سازی ناموفق بود"
+                                        else -> "همگام‌سازی ممکن نشد"
+                                    }
+                                }
+                            },
+                            onSyncDisconnect = { container.sync.disconnect(); toast = "اتصال قطع شد" },
                             onEnableAutofill = {
                                 try {
                                     activity.startActivity(

@@ -866,6 +866,10 @@ fun SettingsScreen(
     autofillEnabled: Boolean,
     onEnableAutofill: () -> Unit,
     onOpenData: () -> Unit,
+    syncStatus: app.solina.passwordmanager.sync.SyncStatus,
+    onSyncConnect: () -> Unit,
+    onSyncNow: () -> Unit,
+    onSyncDisconnect: () -> Unit,
     onLock: () -> Unit,
 ) {
     val c = Solina.colors
@@ -913,6 +917,32 @@ fun SettingsScreen(
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                 Row(
+                    Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = if (syncStatus.configured) onSyncNow else onSyncConnect).padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(if (syncStatus.configured) "همگام‌سازی اکنون" else "همگام‌سازی (انتخاب پوشه)", color = c.text, fontSize = 15.sp)
+                        Text(
+                            if (!syncStatus.configured) "پوشه‌ای را انتخاب کنید که با Syncthing، Drive، Nextcloud یا ... بین دستگاه‌هایتان همگام می‌شود. فقط داده‌های رمزشده در آن نوشته می‌شود."
+                            else buildString {
+                                append("پوشه: ${syncStatus.folderName}")
+                                if (syncStatus.lastSyncAt > 0) append(" · آخرین: ${app.solina.passwordmanager.core.formatJalali(syncStatus.lastSyncAt)}")
+                                if (syncStatus.syncing) append(" · در حال همگام‌سازی…")
+                                syncStatus.message?.let { append("\n$it") }
+                            },
+                            color = c.muted, fontSize = 12.sp, lineHeight = 18.sp,
+                        )
+                    }
+                }
+                if (syncStatus.configured) {
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                    Row(
+                        Modifier.fillMaxWidth().height(52.dp).clickable(role = Role.Button, onClick = onSyncDisconnect),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) { Text("قطع اتصال همگام‌سازی (فایل‌های پوشه پاک نمی‌شوند)", color = c.secondary, fontSize = 14.sp) }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Row(
                     Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onLock),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -927,7 +957,7 @@ fun SettingsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("نسخهٔ پیش‌نمایش", color = c.onSecondaryContainer, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "ورودی‌ها اکنون واقعی و رمزشده روی همین دستگاه ذخیره می‌شوند، ولی این نسخه هنوز بازبینی امنیتی مستقل نشده است. Autofill فقط پر کردن را پشتیبانی می‌کند (ذخیرهٔ رمز جدید از Autofill هنوز نیست). همگام‌سازی هنوز نیست. فعلاً رمزهای حیاتی خود را در آن نگه ندارید و حتماً کلمات بازیابی را جدا یادداشت کنید.",
+                    "ورودی‌ها اکنون واقعی و رمزشده روی همین دستگاه ذخیره می‌شوند، ولی این نسخه هنوز بازبینی امنیتی مستقل نشده است. Autofill فقط پر کردن را پشتیبانی می‌کند (ذخیرهٔ رمز جدید از Autofill هنوز نیست). همگام‌سازی فقط پوشه‌ای است (WebDAV و Drive هنوز نیستند). فعلاً رمزهای حیاتی خود را در آن نگه ندارید و حتماً کلمات بازیابی را جدا یادداشت کنید.",
                     color = c.onSecondaryContainer,
                     fontSize = 14.sp,
                     lineHeight = 24.sp,
@@ -947,11 +977,12 @@ fun SettingsScreen(
                 Text("• دوربین فقط هنگام باز بودن صفحهٔ اسکن روشن است؛ تصویری ذخیره یا ارسال نمی‌شود. اسکن از عکس گالری هم ممکن است.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• ورود از Google Authenticator (QR خروجی) و لینک‌های otpauth پشتیبانی می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• بکاپ فقط با رمز جداگانهٔ خودتان رمز می‌شود (Argon2id + AES-256-GCM) و بدون مجوز ذخیره‌سازی، از طریق انتخاب‌گر فایل سیستم نوشته می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
+                Text("• همگام‌سازی: هر نسخه از هر ورودی یک فایل تغییرناپذیر و احراز‌شده (HMAC) است. در ویرایش هم‌زمان هیچ نسخه‌ای گم نمی‌شود (بازنده در تاریخچه می‌ماند). فایل vault.hdr هم در پوشه است؛ پس رمز اصلی قوی لازم است.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• اپ هیچ مجوز شبکه‌ای ندارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• خزانه با Argon2id ساخته می‌شود و عبارت بازیابی ۲۴ کلمه‌ای (BIP-39) دارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Text("• باز کردن با اثر انگشت از Android Keystore استفاده می‌کند و با افزودن اثر انگشت جدید باطل می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
             }
         }
-        Text("Solina 0.0.7-alpha1", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina 0.0.8-alpha2", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }

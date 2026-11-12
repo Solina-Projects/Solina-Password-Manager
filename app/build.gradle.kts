@@ -14,7 +14,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.0.7-alpha1"
+        versionName = "0.0.8-alpha2"
     }
 
     buildTypes {
@@ -74,6 +74,8 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+
+    implementation(libs.androidx.documentfile)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
