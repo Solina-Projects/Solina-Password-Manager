@@ -194,7 +194,7 @@ private fun buildLog(context: android.content.Context): String {
 }
 
 private fun <I> androidx.activity.result.ActivityResultLauncher<I>.safeLaunch(input: I, onFail: () -> Unit) {
-    try { launch(input) } catch (e: Exception) { onFail() }
+    try { DiagLog.log("LAUNCH", "launching picker"); launch(input) } catch (e: Exception) { DiagLog.logError("LAUNCH", e, "picker"); onFail() }
 }
 
 private enum class Stage { Welcome, CreatePassword, ShowWords, ConfirmWords }
