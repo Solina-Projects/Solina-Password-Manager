@@ -39,9 +39,8 @@ jobs:
       - name: Build release (unsigned, R8 minified)
         run: gradle :app:assembleRelease --stacktrace
 
-      # lint فعلاً گزارش‌دهنده است (مسدودکننده نیست)؛ بعد از پاک‌سازی هشدارها سخت‌گیر می‌شود.
+      # هر خطای lint بیلد را می‌شکند.
       - name: Android lint
-        continue-on-error: true
         run: gradle :app:lintDebug --stacktrace
 
       - name: Upload APK
