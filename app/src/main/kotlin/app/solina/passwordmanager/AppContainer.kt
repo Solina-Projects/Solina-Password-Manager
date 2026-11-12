@@ -50,6 +50,7 @@ class SolinaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         DiagLog.init(this)
+        ErrorNotifier.createChannel(this)
         CrashReporter.install(this)
         DiagLog.startWatchdog(this)
         DiagLog.log("APP", "start")

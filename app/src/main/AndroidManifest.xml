@@ -6,6 +6,26 @@
 
     <!-- فقط برای اسکن QR کدهای TOTP و فقط وقتی صفحهٔ اسکن باز است؛ دوربین اجباری نیست. -->
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- نوتیفیکیشن خطا: فقط وقتی خطایی در گزارش عیب‌یابی ثبت شد، یک نوتیف محلی می‌آید
+         («خطایی ثبت شد — گزارش عیب‌یابی را ببینید») تا کاربر بداند باید لاگ را بخواند.
+         هیچ داده‌ای ارسال نمی‌شود و متن خطا (که ممکن است ورودی کاربر باشد) در نوتیف نمی‌آید. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- برای اینکه پیش از باز کردن انتخاب‌گر پوشه/فایل بتوانیم بفهمیم روی دستگاه
+         برنامه‌ای برای آن هست یا نه (در اندروید ۱۱ به بعد بدون این بخش،
+         resolveActivity همیشه خالی برمی‌گرداند). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.OPEN_DOCUMENT_TREE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.OPEN_DOCUMENT" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+        </intent>
+    </queries>
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 

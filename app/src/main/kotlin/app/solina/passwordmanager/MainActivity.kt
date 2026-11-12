@@ -1,7 +1,12 @@
 package app.solina.passwordmanager
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -91,6 +96,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
+    companion object {
+        /** وقتی نوتیف خطا زده شد، با این extra باز می‌شود تا مستقیم گزارش عیب‌یابی نشان داده شود. */
+        const val EXTRA_SHOW_DIAGNOSTICS = "solina_show_diagnostics"
+    }
+
     private val container get() = (application as SolinaApplication).container
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,7 +112,24 @@ class MainActivity : FragmentActivity() {
         DiagLog.log("ACT", "onCreate")
         setContent {
             SolinaTheme {
-                var showDiag by remember { mutableStateOf(false) }
+                var showDiag by remember { mutableStateOf(intent.getBooleanExtra(EXTRA_SHOW_DIAGNOSTICS, false)) }
+                // مجوز نوتیفیکیشن (اندروید ۱۳ به بعد): فقط یک‌بار، در اولین باز شدن اپ،
+                // از کاربر خواسته می‌شود تا وقتی خطایی ثبت شد نوتیف بیاید. اگر رد کرد،
+                // دیگر اصرار نمی‌شود؛ از تنظیمات برنامه می‌تواند فعالش کند.
+                val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                    DiagLog.log("NOTIF", "permission granted=$granted")
+                }
+                LaunchedEffect(Unit) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val prefs = getSharedPreferences("solina", Context.MODE_PRIVATE)
+                        if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+                            !prefs.getBoolean("notif_asked", false)
+                        ) {
+                            prefs.edit().putBoolean("notif_asked", true).apply()
+                            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                }
                 Box(Modifier.fillMaxSize().background(Solina.colors.bg)) {
                     if (showDiag) {
                         DiagScreenHost(this@MainActivity) { showDiag = false }
@@ -194,8 +221,28 @@ private fun buildLog(context: android.content.Context): String {
 }
 
 private fun <I> androidx.activity.result.ActivityResultLauncher<I>.safeLaunch(input: I, onFail: () -> Unit) {
-    try { DiagLog.log("LAUNCH", "launching picker"); launch(input) } catch (e: Exception) { DiagLog.logError("LAUNCH", e, "picker"); onFail() }
+    try {
+        launch(input)
+    } catch (e: Exception) {
+        // پیش از این، خطا اینجا قورت داده می‌شد و در لاگ هیچ ردی از آن نبود؛
+        // برای همین «انتخاب‌گر پوشه در دسترس نیست» بدون هیچ دلیلی نشان داده می‌شد.
+        // حالا نوع خطا (مثلاً ActivityNotFoundException یعنی هیچ برنامه‌ای برای
+        // انتخاب پوشه روی دستگاه نیست) در گزارش عیب‌یابی ثبت می‌شود و نوتیف می‌آید.
+        DiagLog.logError("PICKER", e, "safeLaunch")
+        onFail()
+    }
 }
+
+/** آیا روی این دستگاه برنامه‌ای برای انتخاب پوشه (ACTION_OPEN_DOCUMENT_TREE) هست؟ */
+@Suppress("DEPRECATION")
+private fun hasFolderPicker(activity: FragmentActivity): Boolean {
+    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+    return activity.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) != null
+}
+
+private const val NO_FOLDER_PICKER_MESSAGE =
+    "روی این دستگاه برنامه‌ای برای انتخاب پوشه نیست (Files / DocumentsUI). " +
+        "آن را فعال کنید یا «Files by Google» را نصب کنید، بعد دوباره بزنید."
 
 private enum class Stage { Welcome, CreatePassword, ShowWords, ConfirmWords }
 
@@ -252,7 +299,16 @@ private fun Root(activity: FragmentActivity, container: AppContainer, auth: Auth
         )
 
         !hasVault -> when (stage) {
-            Stage.Welcome -> WelcomeScreen(message = joinMessage, onCreate = { joinMessage = null; stage = Stage.CreatePassword }, onDiagnostics = onDiagnostics, onJoin = { joinMessage = null; DiagLog.log("JOIN", "button tapped"); joinLauncher.safeLaunch(null) { joinMessage = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست." } })
+            Stage.Welcome -> WelcomeScreen(message = joinMessage, onCreate = { joinMessage = null; stage = Stage.CreatePassword }, onDiagnostics = onDiagnostics, onJoin = {
+                joinMessage = null
+                DiagLog.log("JOIN", "button tapped")
+                if (!hasFolderPicker(activity)) {
+                    DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
+                    joinMessage = NO_FOLDER_PICKER_MESSAGE
+                } else {
+                    joinLauncher.safeLaunch(null) { joinMessage = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست." }
+                }
+            })
             Stage.CreatePassword -> CreatePasswordScreen(busy) { password ->
                 busy = true
                 scope.launch {
@@ -646,7 +702,14 @@ private fun MainApp(activity: FragmentActivity, container: AppContainer, auth: A
                             autofillEnabled = autofillEnabled,
                             onOpenData = { dataMessage = null; dataStep = DataStep.Menu },
                             syncStatus = syncStatus,
-                            onSyncConnect = { connectLauncher.safeLaunch(null) { toast = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست" } },
+                            onSyncConnect = {
+                                if (!hasFolderPicker(activity)) {
+                                    DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
+                                    toast = NO_FOLDER_PICKER_MESSAGE
+                                } else {
+                                    connectLauncher.safeLaunch(null) { toast = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست" }
+                                }
+                            },
                             onSyncNow = {
                                 scope.launch {
                                     toast = when (val r = container.sync.syncNow()) {

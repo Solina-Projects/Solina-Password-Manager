@@ -16,9 +16,11 @@ import java.util.Locale
 object DiagLog {
     private const val MAX_BYTES = 64 * 1024
     private var file: File? = null
+    private var appContext: Context? = null
     private val fmt = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         file = File(context.applicationContext.filesDir, "diag.log")
     }
 
@@ -34,6 +36,9 @@ object DiagLog {
     fun logError(tag: String, error: Throwable, where: String = "") {
         val top = error.stackTrace.take(8).joinToString(" <- ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
         log(tag, "ERROR ${error.javaClass.name} $where @ $top")
+        // هر خطای ثبت‌شده یک نوتیف محلی می‌خواهد تا کاربر بداند باید گزارش را بخواند.
+        // (ErrorNotifier خودش جلوی اسپم را می‌گیرد: حداکثر هر ۵ دقیقه یک نوتیف.)
+        appContext?.let { ErrorNotifier.notifyError(it) }
     }
 
     @Synchronized
@@ -64,6 +69,7 @@ object DiagLog {
                         logged = true
                         val st = Looper.getMainLooper().thread.stackTrace.take(25).joinToString("\n") { "  at $it" }
                         log("HANG", "نخ اصلی ${waited / 1000}s پاسخ نمی‌دهد:\n$st")
+                        ErrorNotifier.notifyError(app)
                     }
                     if (waited == 10_000) {
                         val st = Looper.getMainLooper().thread.stackTrace.take(30).joinToString("\n") { "  at $it" }

@@ -18,6 +18,8 @@ object CrashReporter {
             val text = describe(app, thread, error)
             runCatching { file(app).writeText(text) }
             DiagLog.log("CRASH", "\n$text")
+            // کرش: نوتیف می‌آید تا بعد از باز شدن دوباره، کاربر گزارش را ببیند.
+            ErrorNotifier.notifyError(app)
             previous?.uncaughtException(thread, error)
         }
     }
