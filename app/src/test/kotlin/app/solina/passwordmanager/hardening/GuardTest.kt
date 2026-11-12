@@ -16,9 +16,11 @@ class GuardTest {
     /** متن مانیفست بدون کامنت‌های XML (تا اشاره‌ها در توضیحات باعث مثبت کاذب نشود). */
     private val manifest get() = File(moduleDir(), "src/main/AndroidManifest.xml").readText().replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "")
 
-    @Test fun onlyCameraPermissionAndNoNetwork() {
+    @Test fun onlyCameraAndNotificationPermissionsAndNoNetwork() {
         val perms = Regex("""<uses-permission[^>]*android:name="([^"]+)"""").findAll(manifest).map { it.groupValues[1] }.toSet()
-        assertEquals(setOf("android.permission.CAMERA"), perms)
+        // POST_NOTIFICATIONS فقط برای نوتیف محلی خطا است (0.0.11-alpha5، به درخواست کاربر):
+        // هیچ داده‌ای ارسال نمی‌شود و متن خطا در نوتیف نمی‌آید. INTERNET همچنان ممنوع است.
+        assertEquals(setOf("android.permission.CAMERA", "android.permission.POST_NOTIFICATIONS"), perms)
         assertTrue("INTERNET نباید اضافه شود", !manifest.contains("INTERNET"))
     }
 

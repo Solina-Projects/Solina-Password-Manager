@@ -222,6 +222,7 @@ private fun buildLog(context: android.content.Context): String {
 
 private fun <I> androidx.activity.result.ActivityResultLauncher<I>.safeLaunch(input: I, onFail: () -> Unit) {
     try {
+        DiagLog.log("PICKER", "launching picker")
         launch(input)
     } catch (e: Exception) {
         // پیش از این، خطا اینجا قورت داده می‌شد و در لاگ هیچ ردی از آن نبود؛
