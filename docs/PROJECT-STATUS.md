@@ -28,12 +28,12 @@ Last updated: 2026-11-12
 
 ## Current blockers (ordered)
 
-1. P0: Strictly validate KDF cost parameters before Argon2id on vault unlock and backup import.
+1. P0: Strictly validate KDF cost parameters before Argon2id on vault unlock, backup import and third-party import (Bitwarden/Aegis).
 2. P1: Align the backup format with the promised recovery phrase behavior.
 3. P1: Make export secret cleanup exception-safe.
 4. P1: Make batch import/restore all-or-nothing.
 5. P1: Make SAF sync writes resilient to interruption and concurrent writers.
-6. P1: Correct UI success messages after failed storage operations.
+6. P1: Correct UI success messages after failed storage operations.\n7. P1: Enforce PSL/eTLD+1 and package-signature checks in Autofill; remove unknown-app all-credential fallback.\n8. P2: Do not report Autofill save success while save is unsupported.\n9. P2: Align HOTP claims with actual TOTP-only implementation.
 7. P2: Reconcile planned identity item type with the implemented Login/Card/Note model.
 8. P2: Improve CI supply-chain controls and verify wrapper/build reproducibility.
 
@@ -42,7 +42,7 @@ Last updated: 2026-11-12
 - Run: [Build Solina APK #37](https://github.com/Solina-Projects/Solina-Password-Manager/actions/runs/43298374564)
 - Trigger: push to `preview/rebuild-phase-01`.
 - Initial observation: checkout and Java/Gradle setup completed; unit tests started.
-- Final conclusion: pending at time of this update.
+- Existing preview baseline run #35: success; all listed steps passed (unit tests, debug APK, unsigned/minified release build, Android Lint and artifact uploads).\n- Current audit-branch workflow runs: new commits have triggered CI; final results remain pending.
 
 ## Reporting rule
 
