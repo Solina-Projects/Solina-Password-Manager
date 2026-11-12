@@ -30,7 +30,20 @@ Observed on the default branch during the initial review:
 
 ## Phase 1 — Product definition and architecture
 
-**Status: In progress.**
+**Status: Partially completed.**
+
+Completed in `rebuild/phase-01-foundation`:
+- `docs/PRODUCT-SCOPE.md` — proposed MVP scope, product principles, user journeys and acceptance criteria.
+- `docs/architecture/ADR-0001-platform-architecture.md` — proposed Android/Kotlin/Compose architecture and unresolved decisions.
+- `docs/security/THREAT-MODEL.md` — initial assets, adversaries, trust boundaries and mitigations.
+- `docs/security/SECURITY-REQUIREMENTS.md` — mandatory security requirements and release-blocking gates.
+- `docs/ROADMAP.md` — phased delivery plan and live status board.
+
+Remaining:
+- Complete the repository-wide inventory and inspect CI, release artifacts, repository settings and dependencies.
+- Confirm product decisions and Android support policy.
+- Select cryptographic dependencies only after maintenance, platform and supply-chain review.
+- Finalize recovery, backup, biometric and agent permission decisions before coding those features.
 
 Deliverables:
 - Product scope and non-goals.
