@@ -160,6 +160,58 @@ Remaining:
 - Review workflow permissions and artifact provenance.
 - Verify release signing remains external to source control.
 
+### P0 — Third-party import KDF limits are too permissive
+
+File:
+- `app/src/main/kotlin/app/solina/passwordmanager/core/importer/Importers.kt`
+- `app/src/main/kotlin/app/solina/passwordmanager/core/importer/ForeignCrypto.kt`
+
+The Bitwarden import path accepts PBKDF2 iteration counts up to 10,000,000 and Argon2id settings up to 1 GiB memory, 64 iterations and 16 lanes. The Aegis scrypt path permits a calculated memory cost up to 512 MiB. These limits are much higher than the app's own calibrated vault KDF profile and can make importing a crafted file exhaust memory or stall the device.
+
+Required remediation:
+- Establish import-specific resource ceilings and reject hostile values before allocating KDF resources.
+- Where compatibility requires high-cost exports, provide an explicit bounded/isolated import flow with cancellation and clear user feedback; do not let untrusted files trigger unbounded work.
+- Add tests for maximum accepted parameters, over-limit parameters, cancellation and out-of-memory-safe behavior.
+
+### P1 — Autofill origin matching is weaker than the architecture promises
+
+Files:
+- `app/src/main/kotlin/app/solina/passwordmanager/autofill/AutofillLogic.kt`
+- `app/src/main/kotlin/app/solina/passwordmanager/autofill/AutofillParser.kt`
+- `app/src/main/kotlin/app/solina/passwordmanager/autofill/AutofillResponses.kt`
+- `docs/ARCHITECTURE.md` §8
+
+The architecture promises Public Suffix List/eTLD+1 validation and native-app package plus signing-certificate association. The current implementation uses a string suffix check for web hosts and does not bind native app credentials to a signing-certificate fingerprint. For native apps with no package-name match, `AutofillMatcher` deliberately falls back to offering every login. This does not prove credentials are automatically filled, but it increases phishing and accidental-disclosure risk and does not meet the documented trust model.
+
+Required remediation:
+- Use a maintained Public Suffix List implementation and a clearly defined exact registrable-domain policy; do not rely on raw suffix matching.
+- Bind native app entries to package name plus signing certificate digest, and verify on every fill.
+- Remove the fallback that offers all credentials to an unknown app; require explicit user-mediated selection with clear origin disclosure if a safe match is unavailable.
+- Add adversarial tests for subdomain boundaries, public suffixes, lookalike domains, package-name collisions and changed app signatures.
+
+### P2 — Autofill save callback reports success although saving is not implemented
+
+File:
+- `app/src/main/kotlin/app/solina/passwordmanager/autofill/SolinaAutofillService.kt`
+
+The service comment says saving a new credential is not supported, but `onSaveRequest` calls `callback.onSuccess()`. This can tell Android that a save request succeeded even though Solina did not persist anything.
+
+Required remediation:
+- Return a clear unsupported/failure response until save support exists, or implement the save flow with explicit user confirmation and tests.
+
+### P2 — TOTP/HOTP feature claims exceed the implementation
+
+Files:
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `app/src/main/kotlin/app/solina/passwordmanager/core/Totp.kt`
+- `app/src/main/kotlin/app/solina/passwordmanager/core/otp/OtpImport.kt`
+
+The current generator implements TOTP. The import parser explicitly ignores HOTP URIs, and no HOTP counter-based generator was found in the reviewed files. Documentation currently lists HOTP as a supported capability.
+
+Required remediation:
+- Either implement HOTP with counter persistence, atomic counter advancement and RFC 4226 tests, or mark HOTP as not yet supported in product documentation and UI.
+
 ## Not yet verified
 
 - No local Gradle build or test execution has been performed in this review.
