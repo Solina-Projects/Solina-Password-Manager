@@ -20,7 +20,7 @@ class WrongImportPasswordException : Exception()
 internal object ForeignCrypto {
     private const val MAX_PBKDF2_ITERATIONS = 1_000_000
     private const val MAX_SCRYPT_MEMORY_BYTES = 64L * 1024 * 1024
-    private const val MAX_ARGON2_MEMORY_MIB = 128
+    private const val MAX_ARGON2_MEMORY_MIB = 64
     fun hex(s: String): ByteArray {
         require(s.length % 2 == 0)
         return ByteArray(s.length / 2) { ((Character.digit(s[2 * it], 16) shl 4) or Character.digit(s[2 * it + 1], 16)).toByte() }
@@ -83,7 +83,7 @@ internal object ForeignCrypto {
 
     /** Argon2id مطابق Bitwarden: نمک = SHA-256 رشتهٔ نمک، حافظه به MiB. */
     fun bitwardenArgon2(password: CharArray, salt: String, iterations: Int, memoryMiB: Int, parallelism: Int): ByteArray {
-        if (iterations !in 1..6 || memoryMiB !in 1..MAX_ARGON2_MEMORY_MIB ||
+        if (iterations !in 1..4 || memoryMiB !in 1..MAX_ARGON2_MEMORY_MIB ||
             parallelism !in 1..4 || memoryMiB * 1024 < 8 * parallelism || salt.length !in 1..320
         ) throw ImportException("پارامترهای Argon2id فایل Bitwarden از محدودهٔ امن این دستگاه خارج است.")
         val pw = String(password).toByteArray(Charsets.UTF_8)
