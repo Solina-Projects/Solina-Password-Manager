@@ -14,8 +14,8 @@ Apply hard preflight limits before invoking any KDF:
 
 | KDF/input | Maximum |
 |---|---:|
-| Solina Argon2id (vault and backup) | 128 MiB, 6 iterations, 4 lanes |
-| Bitwarden Argon2id import | 128 MiB, 6 iterations, 4 lanes |
+| Solina Argon2id (vault and backup) | 64 MiB, 4 iterations, 4 lanes |
+| Bitwarden Argon2id import | 64 MiB, 4 iterations, 4 lanes |
 | Bitwarden PBKDF2-HMAC-SHA256 import | 1,000,000 iterations |
 | Aegis scrypt import | 64 MiB estimated memory, r ≤ 16, p ≤ 4, power-of-two N |
 | 2FAS PBKDF2 | Fixed at 10,000 iterations; shared PBKDF2 guard applies |
