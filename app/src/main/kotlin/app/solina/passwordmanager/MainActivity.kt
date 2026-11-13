@@ -412,7 +412,7 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
                 busy = false
                 if (ok) {
                     mustReset = false
-                    container.sync.pushHeader()
+                    if (!container.sync.pushHeader()) {\n                        joinMessage = container.sync.status.value.message\n                    }
                     // پس از بازیابی، میان‌بر اثر انگشت برای احتیاط غیرفعال می‌شود (از تنظیمات دوباره فعال می‌شود).
                     auth.disableBiometric()
                 } else {

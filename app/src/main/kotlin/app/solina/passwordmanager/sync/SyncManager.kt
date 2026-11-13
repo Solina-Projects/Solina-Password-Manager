@@ -153,9 +153,19 @@ class SyncManager(
     }
 
     /** پس از تغییر رمز اصلی، هدر جدید را در پوشه می‌نویسد تا دستگاه تازه با رمز جدید بتواند وصل شود. */
-    suspend fun pushHeader() {
-        val uri = treeUri() ?: return
-        runCatching { FolderRemote(context, uri).writeHeader(files.readHeader().encode()) }
+    suspend fun pushHeader(): Boolean {
+        val uri = treeUri() ?: return true
+        return try {
+            FolderRemote(context, uri).writeHeader(files.readHeader().encode())
+            _status.value = _status.value.copy(message = "هدر خزانه در پوشهٔ همگام‌سازی به‌روز شد.")
+            true
+        } catch (e: Exception) {
+            DiagLog.logError("SYNC", e, "pushHeader")
+            _status.value = _status.value.copy(
+                message = "رمز اصلی در این دستگاه تغییر کرد، اما به‌روزرسانی هدر پوشه ناموفق بود؛ دستگاه‌های دیگر را تا رفع خطا همگام نکنید.",
+            )
+            false
+        }
     }
 
     suspend fun syncNow(): StatusMessage {
