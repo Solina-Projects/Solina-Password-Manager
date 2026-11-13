@@ -773,9 +773,9 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                                         pw.fill('\u0000')
                                         dataBusy = false
                                     }
-                                } else {
-                                    pw.fill('\u0000')
                                 }
+                            } else {
+                                pw.fill('\u0000')
                             }
                         },
                         onPickImport = { dataMessage = null; launchImportFile() },
