@@ -88,6 +88,10 @@ class PrimitivesTest {
         assertThrows(IllegalArgumentException::class.java) { KdfParams(64 * 1024, 0, 4) }
         assertThrows(IllegalArgumentException::class.java) { KdfParams(64 * 1024, 3, 0) }
         assertThrows(IllegalArgumentException::class.java) { KdfParams(16, 3, 4) }
+        assertThrows(IllegalArgumentException::class.java) { KdfParams(129 * 1024, 3, 4) }
+        assertThrows(IllegalArgumentException::class.java) { KdfParams(64 * 1024, 7, 4) }
+        assertThrows(IllegalArgumentException::class.java) { KdfParams(64 * 1024, 3, 5) }
+        assertEquals(KdfParams(128 * 1024, 6, 4), KdfParams(128 * 1024, 6, 4))
     }
 
     // ───── BIP-39 ─────
