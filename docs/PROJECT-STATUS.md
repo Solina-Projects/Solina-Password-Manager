@@ -50,7 +50,9 @@ Last updated: 2026-11-13
 
 ## Repository governance observations
 
-\n\n- Branches API reports `main` and `preview/ui` as unprotected; repository rulesets endpoint returned an empty list.
+
+
+- Branches API reports `main` and `preview/ui` as unprotected; repository rulesets endpoint returned an empty list.
 - No published releases were found.
 - The connected GitHub integration could not read the detailed branch-protection endpoint (403), so exact protection settings remain unverified.
 - Gradle Wrapper files were not found in the preview branch; CI installs Gradle 8.10.2 directly.
@@ -62,7 +64,11 @@ Last updated: 2026-11-13
 ## Phase 7 — SAF permission persistence (in progress)
 
 - `SyncManager.persist()` now requires a durable Android read/write URI grant before saving the selected tree configuration. Existing persisted flags are reused; missing flags are acquired explicitly.
-- Configuration uses synchronous `commit()` and reports failure instead of silently applying a folder URI. Newly acquired flags are released if saving preferences fails.\n- Unit coverage for the pure missing-grant calculation and Android picker/provider validation are required before closing this phase.\n\n## Reporting rule
+- Configuration uses synchronous `commit()` and reports failure instead of silently applying a folder URI. Newly acquired flags are released if saving preferences fails.
+- `pushHeader()` returns an explicit result, logs failures and exposes a warning in sync status; the password-reset flow surfaces that warning.
+- Runs #43381861423 and #43381927572 failed because the helper declaration accidentally contained literal escaped newlines. Corrected; fresh CI validation is pending.
+
+## Reporting rule
 
 At the end of every phase, update this file and `docs/MASTER_PROMPT.md` with:
 1. What was implemented.
