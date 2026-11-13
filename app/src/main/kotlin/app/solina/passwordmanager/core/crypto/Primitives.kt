@@ -73,18 +73,35 @@ object Hkdf {
         var previous = ByteArray(0)
         var pos = 0
         var counter = 1
-        while (pos < length) {
-            previous = hmac(prk, previous + info + byteArrayOf(counter.toByte()))
-            val n = minOf(HASH_LEN, length - pos)
-            System.arraycopy(previous, 0, out, pos, n)
-            pos += n
-            counter++
+        try {
+            while (pos < length) {
+                val input = previous + info + byteArrayOf(counter.toByte())
+                val next = hmac(prk, input)
+                previous.wipe()
+                input.wipe()
+                previous = next
+                val n = minOf(HASH_LEN, length - pos)
+                System.arraycopy(previous, 0, out, pos, n)
+                pos += n
+                counter++
+            }
+            return out
+        } catch (e: Exception) {
+            out.wipe()
+            throw e
+        } finally {
+            previous.wipe()
         }
-        return out
     }
 
-    fun derive(ikm: ByteArray, salt: ByteArray?, info: ByteArray, length: Int = 32): ByteArray =
-        expand(extract(salt, ikm), info, length)
+    fun derive(ikm: ByteArray, salt: ByteArray?, info: ByteArray, length: Int = 32): ByteArray {
+        val prk = extract(salt, ikm)
+        return try {
+            expand(prk, info, length)
+        } finally {
+            prk.wipe()
+        }
+    }
 
     private fun hmac(key: ByteArray, data: ByteArray): ByteArray {
         val mac = Mac.getInstance("HmacSHA256")

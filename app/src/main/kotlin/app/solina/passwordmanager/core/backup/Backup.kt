@@ -65,6 +65,7 @@ object Backup {
 
     /** @throws BackupFormatException فایل بکاپ سولینا نیست یا ناقص است؛ @throws AuthenticationFailedException رمز اشتباه یا فایل دست‌کاری‌شده. */
     fun decode(bytes: ByteArray, password: CharArray): List<ItemPayload> {
+        if (BackupV2.isV2(bytes)) return BackupV2.decodeWithPassword(bytes, password)
         if (bytes.size < HEADER_SIZE + 28 || !bytes.copyOfRange(0, 4).contentEquals(MAGIC)) {
             throw BackupFormatException("این فایل یک بکاپ Solina نیست.")
         }
@@ -93,5 +94,13 @@ object Backup {
         } finally {
             plain.wipe()
         }
+    }
+
+    /** SLNB v2 only. Legacy v1 backups cannot be unlocked with a recovery phrase. */
+    fun decodeWithRecoveryPhrase(bytes: ByteArray, recoveryPhrase: String): List<ItemPayload> {
+        if (!BackupV2.isV2(bytes)) {
+            throw BackupFormatException("این نسخهٔ بکاپ با عبارت بازیابی قابل‌بازگشایی نیست؛ برای v1 از رمز بکاپ استفاده کنید.")
+        }
+        return BackupV2.decodeWithRecoveryPhrase(bytes, recoveryPhrase)
     }
 }

@@ -63,7 +63,7 @@ class BackupV2Test {
     @Test fun malformedHeadersAndKdfCapsAreRejected() {
         val file = BackupV2.encode(items, "password-for-backup".toCharArray(), phrase, 1L, fast)
         assertThrows(BackupFormatException::class.java) { BackupV2.decodeWithPassword(file.copyOf(20), "password-for-backup".toCharArray()) }
-        val hostile = file.copyOf().also { it[9] = 0x7f }
+        val hostile = file.copyOf().also { it[6] = 0x7f }
         assertThrows(BackupFormatException::class.java) {
             BackupV2.decodeWithPassword(hostile, "password-for-backup".toCharArray())
         }
