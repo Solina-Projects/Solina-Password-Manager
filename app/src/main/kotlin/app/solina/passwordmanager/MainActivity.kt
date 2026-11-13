@@ -60,8 +60,10 @@ import app.solina.passwordmanager.core.storage.SecurityAnalyzer
 import app.solina.passwordmanager.ui.components.SIcon
 import app.solina.passwordmanager.ui.screens.BiometricOfferScreen
 import app.solina.passwordmanager.core.backup.Backup
+import app.solina.passwordmanager.core.backup.BackupV2
 import app.solina.passwordmanager.core.backup.BackupFormatException
 import app.solina.passwordmanager.core.crypto.AuthenticationFailedException
+import app.solina.passwordmanager.core.crypto.InvalidRecoveryPhraseException
 import app.solina.passwordmanager.core.importer.ImportException
 import app.solina.passwordmanager.core.importer.Importers
 import app.solina.passwordmanager.ui.screens.DataScreen
@@ -580,9 +582,9 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
             handler = { resultCode, data ->
                 val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
                 if (uri != null) {
-                    val bytes = runCatching { readLimited(uri, 64 * 1024 * 1024) }.getOrNull()
+                    val bytes = runCatching { readLimited(uri, 65 * 1024 * 1024) }.getOrNull()
                     if (bytes == null) dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
-                    else { pendingRestore = bytes; dataMessage = null; dataStep = DataStep.RestorePassword }
+                    else { pendingRestore = bytes; dataMessage = null; dataStep = if (BackupV2.isV2(bytes)) DataStep.RestoreChoice else DataStep.RestorePassword }
                 }
             },
             onFail = { dataMessage = "انتخاب‌گر فایل در دسترس نیست." },
@@ -732,18 +734,18 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                         itemCount = items.size,
                         onBack = { if (dataStep == DataStep.Menu) dataStep = null else { dataStep = DataStep.Menu; pendingRestore = null; pendingImport = null }; dataMessage = null },
                         onStartExport = { dataMessage = null; dataStep = DataStep.ExportPassword },
-                        onSubmitExport = { pw ->
+                        onSubmitExport = { pw, recoveryPhrase ->
                             dataBusy = true
                             dataMessage = null
                             scope.launch {
                                 try {
                                     val payloads = items.map { it.payload }
-                                    val bytes = withContext(Dispatchers.Default) { Backup.encode(payloads, pw, System.currentTimeMillis()) }
+                                    val bytes = withContext(Dispatchers.Default) { BackupV2.encode(payloads, pw, recoveryPhrase, System.currentTimeMillis()) }
                                     pendingExport = bytes
                                     val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
                                     launchExportFile("solina-backup-$stamp.slnb")
                                 } catch (e: Exception) {
-                                    dataMessage = "ساخت بکاپ ناموفق بود."
+                                    dataMessage = if (e is InvalidRecoveryPhraseException) "عبارت بازیابی معتبر نیست؛ ۲۴ کلمه را بررسی کنید." else "ساخت بکاپ ناموفق بود."
                                     dataBusy = false
                                 } finally {
                                     pw.fill('\u0000')
@@ -751,6 +753,8 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             }
                         },
                         onPickRestore = { dataMessage = null; launchRestoreFile() },
+                        onChooseRestorePassword = { dataStep = DataStep.RestorePassword; dataMessage = null },
+                        onChooseRestorePhrase = { dataStep = DataStep.RestorePhrase; dataMessage = null },
                         onSubmitRestore = { pw ->
                             val bytes = pendingRestore
                             if (bytes != null) {
@@ -776,6 +780,30 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                                 }
                             } else {
                                 pw.fill('\u0000')
+                            }
+                        },
+                        onSubmitRestorePhrase = { phrase ->
+                            val bytes = pendingRestore
+                            if (bytes != null) {
+                                dataBusy = true
+                                dataMessage = null
+                                scope.launch {
+                                    try {
+                                        val payloads = withContext(Dispatchers.Default) { Backup.decodeWithRecoveryPhrase(bytes, phrase) }
+                                        val stats = repo.importItems(payloads)
+                                        pendingRestore = null
+                                        dataStep = DataStep.Menu
+                                        toast = "${stats.added.fa()} ورودی بازیابی شد" + if (stats.skipped > 0) " (${stats.skipped.fa()} تکراری)" else ""
+                                    } catch (e: AuthenticationFailedException) {
+                                        dataMessage = "عبارت بازیابی با این بکاپ مطابقت ندارد یا فایل دست‌کاری شده است."
+                                    } catch (e: BackupFormatException) {
+                                        dataMessage = e.message
+                                    } catch (e: Exception) {
+                                        dataMessage = "بازیابی با عبارت بازیابی ناموفق بود."
+                                    } finally {
+                                        dataBusy = false
+                                    }
+                                }
                             }
                         },
                         onPickImport = { dataMessage = null; launchImportFile() },
