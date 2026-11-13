@@ -23,9 +23,9 @@ data class KdfParams(val memoryKiB: Int, val iterations: Int, val parallelism: I
 
     companion object {
         const val MAX_PARALLELISM = 4
-        const val MAX_ITERATIONS = 6
-        /** سقف ۱۲۸ MiB؛ محدودیت منابع برای هدر خزانه و بکاپ غیرقابل‌اعتماد. */
-        const val MAX_MEMORY_KIB = 128 * 1024
+        const val MAX_ITERATIONS = 4
+        /** سقف ۶۴ MiB؛ محدودیت منابع برای هدر خزانه و بکاپ غیرقابل‌اعتماد. */
+        const val MAX_MEMORY_KIB = 64 * 1024
 
         /** پیش‌فرض پیشنهادی (طبق ARCHITECTURE.md). در M2 با اندازه‌گیری روی دستگاه نهایی می‌شود. */
         val DEFAULT = KdfParams(memoryKiB = 64 * 1024, iterations = 3, parallelism = 4)
