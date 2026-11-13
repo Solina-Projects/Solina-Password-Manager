@@ -44,11 +44,11 @@ All integers are unsigned big-endian. Parser rejects unknown versions, unexpecte
 - Recovery-wrapped BEK: exactly 60 bytes (GCM nonce 12 + ciphertext 32 + tag 16)
 - Payload: AES-GCM nonce 12 + ciphertext + tag 16
 
-The fixed preamble is 66 bytes. Each wrapped BEK is exactly 60 bytes. The password KDF parameters are validated before Argon2id runs. The payload has an explicit maximum size before allocation/parsing; the final limit must be chosen against realistic vault sizes and tested on supported Android devices before implementation.
+The fixed preamble is 50 bytes. Each wrapped BEK is exactly 60 bytes. The password KDF parameters are validated before Argon2id runs. The payload has an explicit maximum size before allocation/parsing; the final limit must be chosen against realistic vault sizes and tested on supported Android devices before implementation.
 
 ### Authentication and tamper binding
 
-- Password-wrap AAD = exact 66-byte preamble concatenated with the fixed ASCII slot label solina/slnb/v2/wrap/password.
+- Password-wrap AAD = exact 50-byte preamble concatenated with the fixed ASCII slot label solina/slnb/v2/wrap/password.
 - Recovery-wrap AAD = exact preamble concatenated with solina/slnb/v2/wrap/recovery.
 - Payload AAD = exact preamble concatenated with both wrapped-BEK records in their specified order.
 - Distinct slot labels prevent swapping a recovery wrapper into the password slot or vice versa. Payload AAD authenticates both wrappers and prevents removing/replacing one slot without detection.
