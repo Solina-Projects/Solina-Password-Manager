@@ -23,7 +23,7 @@
 | Autofill | Android Autofill با تأیید دامنه و اپ برای جلوگیری از فیشینگ، پیشنهاد ذخیرهٔ رمز جدید |
 | Authenticator | TOTP و HOTP، اسکن QR، ورود از Aegis و Google Authenticator |
 | امنیت | Argon2id، AES-256-GCM، Android Keystore، بیومتریک، قفل خودکار، محافظت از اسکرین‌شات و کلیپ‌بورد |
-| بکاپ | فایل رمزگذاری‌شده، عبارت بازیابی ۲۴ کلمه‌ای، بازیابی روی گوشی جدید بدون هیچ حساب خارجی |
+| بکاپ | فایل SLNB v1 رمزگذاری‌شده با رمز مستقل؛ بازیابی با عبارت ۲۴ کلمه‌ای هنوز پیاده‌سازی نشده است |
 | همگام‌سازی | اختیاری و رمزگذاری‌شده، با انتخاب محل ذخیره (Google Drive، WebDAV، پوشهٔ محلی) |
 | مرکز امنیت | تشخیص رمز ضعیف، تکراری و قدیمی، و بررسی اختیاری افشا با روش k-anonymity |
 
@@ -60,6 +60,6 @@
 
 ## English summary
 
-**Solina** is a planned open-source, native Android password manager with a built-in TOTP/HOTP authenticator, built on a zero-knowledge, client-side-encrypted design (Argon2id + AES-256-GCM, Android Keystore, 24-word recovery phrase). It works fully offline and without any account; Google/GitHub sign-in is optional and never replaces the master password. UI: Jetpack Compose + Material 3, Persian (RTL) and English.
+**Solina** is a planned open-source, native Android password manager with a built-in TOTP/HOTP authenticator, built on a zero-knowledge, client-side-encrypted design (Argon2id + AES-256-GCM, Android Keystore, and a 24-word vault recovery phrase). The current SLNB v1 backup file still requires its separate backup password; recovery-phrase-based backup restoration is not implemented yet. It works fully offline and without any account; Google/GitHub sign-in is optional and never replaces the master password. UI: Jetpack Compose + Material 3, Persian (RTL) and English.
 
 **Status:** pre-alpha, design phase. Do not store real secrets in any build yet. See `docs/` for architecture, design and roadmap.
