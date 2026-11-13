@@ -131,7 +131,10 @@ fun DataScreen(
                 if (mismatch) Text("دو رمز یکسان نیستند.", color = c.secondary, fontSize = 13.sp)
                 if (message != null) Text(message, color = c.secondary, fontSize = 14.sp)
                 BigButton(if (busy) "در حال رمزگذاری…" else "ساخت و ذخیرهٔ فایل", enabled = !busy && pw.length >= MIN_BACKUP_PASSWORD && pw == pw2) {
-                    onSubmitExport(pw.toCharArray())
+                    val secret = pw.toCharArray()
+                    pw = ""
+                    pw2 = ""
+                    onSubmitExport(secret)
                 }
             }
 
@@ -140,7 +143,11 @@ fun DataScreen(
                 Text("این فایل رمزشده است. رمزی را که هنگام خروجی گرفتن از آن برنامه انتخاب کرده بودید وارد کنید. رمز جایی ذخیره نمی‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Field("رمز فایل", pw, { pw = it }, hidden = true)
                 if (message != null) Text(message, color = c.secondary, fontSize = 14.sp, lineHeight = 24.sp)
-                BigButton(if (busy) "در حال بازگشایی…" else "وارد کردن", enabled = !busy && pw.isNotEmpty()) { onSubmitImport(pw.toCharArray()) }
+                BigButton(if (busy) "در حال بازگشایی…" else "وارد کردن", enabled = !busy && pw.isNotEmpty()) {
+                    val secret = pw.toCharArray()
+                    pw = ""
+                    onSubmitImport(secret)
+                }
             }
 
             DataStep.RestorePassword -> {
@@ -148,7 +155,11 @@ fun DataScreen(
                 Text("رمزی را که هنگام ساخت این بکاپ انتخاب کرده بودید وارد کنید.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Field("رمز بکاپ", pw, { pw = it }, hidden = true)
                 if (message != null) Text(message, color = c.secondary, fontSize = 14.sp, lineHeight = 24.sp)
-                BigButton(if (busy) "در حال بازگشایی…" else "بازیابی", enabled = !busy && pw.isNotEmpty()) { onSubmitRestore(pw.toCharArray()) }
+                BigButton(if (busy) "در حال بازگشایی…" else "بازیابی", enabled = !busy && pw.isNotEmpty()) {
+                    val secret = pw.toCharArray()
+                    pw = ""
+                    onSubmitRestore(secret)
+                }
             }
         }
         Spacer(Modifier.height(32.dp))
