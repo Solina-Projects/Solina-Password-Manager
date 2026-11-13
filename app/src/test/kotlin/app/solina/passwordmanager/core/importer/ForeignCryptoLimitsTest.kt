@@ -1,5 +1,6 @@
 package app.solina.passwordmanager.core.importer
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -27,10 +28,10 @@ class ForeignCryptoLimitsTest {
     @Test
     fun bitwardenArgon2RejectsExcessiveMemoryIterationsAndLanes() {
         assertThrows(ImportException::class.java) {
-            ForeignCrypto.bitwardenArgon2(password, "user@example.test", 3, 129, 4)
+            ForeignCrypto.bitwardenArgon2(password, "user@example.test", 3, 65, 4)
         }
         assertThrows(ImportException::class.java) {
-            ForeignCrypto.bitwardenArgon2(password, "user@example.test", 7, 64, 4)
+            ForeignCrypto.bitwardenArgon2(password, "user@example.test", 5, 64, 4)
         }
         assertThrows(ImportException::class.java) {
             ForeignCrypto.bitwardenArgon2(password, "user@example.test", 3, 64, 5)
@@ -53,7 +54,7 @@ class ForeignCryptoLimitsTest {
     @Test
     fun normalAegisScryptParametersRemainSupported() {
         val derived = ForeignCrypto.scrypt(password, salt, 1 shl 12, 8, 1)
-        assert(derived.size == 32)
+        assertEquals(32, derived.size)
         derived.fill(0)
     }
 }
