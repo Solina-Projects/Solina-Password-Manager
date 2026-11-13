@@ -35,11 +35,11 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      # مطمئن می‌شویم نسخهٔ release (با R8 و حذف منابع) هم ساخته می‌شود و قوانین shrink چیزی را نمی‌شکند.
+      # Verify the unsigned release variant (R8 and resource shrinking) also builds.
       - name: Build release (unsigned, R8 minified)
         run: gradle :app:assembleRelease --stacktrace
 
-      # هر خطای lint بیلد را می‌شکند.
+      # Any lint error fails the build.
       - name: Android lint
         run: gradle :app:lintDebug --stacktrace
 
@@ -105,4 +105,25 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: gradle :app:connectedDebugAndroidTest --stacktrace
+          script: |
+            adb logcat -c
+            set +e
+            gradle :app:connectedDebugAndroidTest --stacktrace
+            test_status=$?
+            mkdir -p app/build/room-instrumentation-diagnostics
+            adb logcat -d -v threadtime > app/build/room-instrumentation-diagnostics/logcat.txt 2>&1 || true
+            adb shell dumpsys meminfo > app/build/room-instrumentation-diagnostics/meminfo.txt 2>&1 || true
+            adb shell dumpsys activity processes > app/build/room-instrumentation-diagnostics/processes.txt 2>&1 || true
+            exit "$test_status"
+
+      - name: Upload Room instrumentation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: room-instrumentation-diagnostics
+          path: |
+            app/build/room-instrumentation-diagnostics/
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+          retention-days: 14
