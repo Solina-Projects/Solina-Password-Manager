@@ -785,6 +785,8 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                                 dataBusy = true
                                 dataMessage = null
                                 scope.launch { try { runImport(bytes, pw) } finally { dataBusy = false } }
+                            } else {
+                                pw.fill('\u0000')
                             }
                         },
                     )
