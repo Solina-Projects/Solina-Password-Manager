@@ -275,7 +275,7 @@ object Importers {
             0 -> ForeignCrypto.pbkdf2Sha256(password, salt.toByteArray(Charsets.UTF_8), iterations)
             1 -> {
                 val mem = o.optInt("kdfMemory", 64); val par = o.optInt("kdfParallelism", 4)
-                if (iterations !in 1..6 || mem !in 1..128 || par !in 1..4) throw ImportException("پارامتر KDF فایل نامعتبر است.")
+                if (iterations !in 1..4 || mem !in 1..64 || par !in 1..4) throw ImportException("پارامتر KDF فایل نامعتبر است.")
                 ForeignCrypto.bitwardenArgon2(password, salt, iterations, mem, par)
             }
             else -> throw ImportException("نوع KDF این فایل Bitwarden پشتیبانی نمی‌شود.")
