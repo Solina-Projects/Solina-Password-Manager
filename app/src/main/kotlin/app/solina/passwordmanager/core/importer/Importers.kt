@@ -270,12 +270,12 @@ object Importers {
         }
         if (password == null) throw ImportPasswordRequired("Bitwarden")
         val salt = o.getString("salt")
-        val iterations = o.optInt("kdfIterations", 600_000).also { if (it !in 1..10_000_000) throw ImportException("پارامتر KDF فایل نامعتبر است.") }
+        val iterations = o.optInt("kdfIterations", 600_000).also { if (it !in 1..1_000_000) throw ImportException("پارامتر KDF فایل نامعتبر است.") }
         val master = when (o.optInt("kdfType", 0)) {
             0 -> ForeignCrypto.pbkdf2Sha256(password, salt.toByteArray(Charsets.UTF_8), iterations)
             1 -> {
                 val mem = o.optInt("kdfMemory", 64); val par = o.optInt("kdfParallelism", 4)
-                if (iterations !in 1..64 || mem !in 1..1024 || par !in 1..16) throw ImportException("پارامتر KDF فایل نامعتبر است.")
+                if (iterations !in 1..6 || mem !in 1..128 || par !in 1..4) throw ImportException("پارامتر KDF فایل نامعتبر است.")
                 ForeignCrypto.bitwardenArgon2(password, salt, iterations, mem, par)
             }
             else -> throw ImportException("نوع KDF این فایل Bitwarden پشتیبانی نمی‌شود.")
@@ -336,7 +336,7 @@ object Importers {
             if (sl.optInt("type") != 1) continue
             val n = sl.getInt("n"); val r = sl.getInt("r"); val p = sl.getInt("p")
             // سقف پارامترها برای جلوگیری از فایل مخرب که حافظهٔ زیادی بخواهد
-            if (n !in 2..(1 shl 20) || n and (n - 1) != 0 || r !in 1..32 || p !in 1..16 || 128L * n * r > 512L * 1024 * 1024) throw ImportException("پارامترهای scrypt فایل نامعتبر است.")
+            if (n !in 2..(1 shl 18) || n and (n - 1) != 0 || r !in 1..16 || p !in 1..4 || 128L * n * r * p > 64L * 1024 * 1024) throw ImportException("پارامترهای scrypt فایل نامعتبر است.")
             val kp = sl.getJSONObject("key_params")
             val wrapper = ForeignCrypto.scrypt(password, ForeignCrypto.hex(sl.getString("salt")), n, r, p)
             try {
