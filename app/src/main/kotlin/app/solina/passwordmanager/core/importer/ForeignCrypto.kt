@@ -18,6 +18,9 @@ class WrongImportPasswordException : Exception()
 
 /** ابزارهای رمزگشایی بکاپ برنامه‌های دیگر. فقط برای خواندن؛ چیزی با این قالب‌ها نوشته نمی‌شود. */
 internal object ForeignCrypto {
+    private const val MAX_PBKDF2_ITERATIONS = 1_000_000
+    private const val MAX_SCRYPT_MEMORY_BYTES = 64L * 1024 * 1024
+    private const val MAX_ARGON2_MEMORY_MIB = 128
     fun hex(s: String): ByteArray {
         require(s.length % 2 == 0)
         return ByteArray(s.length / 2) { ((Character.digit(s[2 * it], 16) shl 4) or Character.digit(s[2 * it + 1], 16)).toByte() }
@@ -26,11 +29,17 @@ internal object ForeignCrypto {
     fun b64(s: String): ByteArray = java.util.Base64.getDecoder().decode(s.trim())
 
     fun scrypt(password: CharArray, salt: ByteArray, n: Int, r: Int, p: Int): ByteArray {
+        if (n < 2 || n and (n - 1) != 0 || r !in 1..16 || p !in 1..4 ||
+            128L * n * r * p > MAX_SCRYPT_MEMORY_BYTES || salt.size !in 8..64
+        ) throw ImportException("پارامترهای scrypt فایل از محدودهٔ امن این دستگاه خارج است.")
         val pw = String(password).toByteArray(Charsets.UTF_8)
         return try { SCrypt.generate(pw, salt, n, r, p, 32) } finally { pw.fill(0) }
     }
 
     fun pbkdf2Sha256(password: CharArray, salt: ByteArray, iterations: Int, keyBytes: Int = 32): ByteArray {
+        if (iterations !in 1..MAX_PBKDF2_ITERATIONS || salt.size !in 1..1024 || keyBytes !in 16..64) {
+            throw ImportException("پارامترهای PBKDF2 فایل از محدودهٔ امن این دستگاه خارج است.")
+        }
         val spec = PBEKeySpec(password, salt, iterations, keyBytes * 8)
         return try { SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded } finally { spec.clearPassword() }
     }
@@ -74,6 +83,9 @@ internal object ForeignCrypto {
 
     /** Argon2id مطابق Bitwarden: نمک = SHA-256 رشتهٔ نمک، حافظه به MiB. */
     fun bitwardenArgon2(password: CharArray, salt: String, iterations: Int, memoryMiB: Int, parallelism: Int): ByteArray {
+        if (iterations !in 1..6 || memoryMiB !in 1..MAX_ARGON2_MEMORY_MIB ||
+            parallelism !in 1..4 || memoryMiB * 1024 < 8 * parallelism || salt.length !in 1..320
+        ) throw ImportException("پارامترهای Argon2id فایل Bitwarden از محدودهٔ امن این دستگاه خارج است.")
         val pw = String(password).toByteArray(Charsets.UTF_8)
         try {
             val saltHash = MessageDigest.getInstance("SHA-256").digest(salt.toByteArray(Charsets.UTF_8))
