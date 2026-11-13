@@ -20,7 +20,7 @@ Last updated: 2026-11-13
 | M3 — Vault | Room encrypted rows, repository, history, Login/Card/Note model, search/UI | Prototype implemented; not approved | Transactional batch import/restore, migration/schema export, data-model scope alignment, UI/integration tests |
 | M4 — Autofill | AutofillService, parser/logic, authentication activity and tests | Prototype implemented; not approved | Full domain/app-signature review, phishing/origin-confusion tests and physical-device/browser matrix |
 | M5 — Authenticator | TOTP, QR scan and import foundations | Prototype implemented; not approved | Verify HOTP scope, RFC vectors, import edge cases and secret lifecycle |
-| M6 — Backup/import | SLNB v1/v2 codec and UI; batch import uses one Room transaction; BIP-39/v1/v2 regression tests and rollback contract test | CI run #43370732657 passed; partially implemented; not approved | Parser fuzz/size-bound tests, real Room instrumentation rollback test, new-device workflow and physical-device tests |
+| M6 — Backup/import | SLNB v1/v2 codec and UI; batch import uses one Room transaction; BIP-39/v1/v2 regression tests and rollback contract test | Partially implemented; not approved | Run new Room instrumentation rollback test; parser fuzz/size-bound tests, new-device workflow and physical-device tests |
 | M7 — Hardening/beta | Some hardening tests, diagnostics and pre-alpha warnings | Not complete | MASVS mapping, accessibility, fuzzing, dependency scan, SBOM, independent security assessment and remediation |
 | M8 — Sync | SAF folder-based encrypted record sync, HMAC-authenticated records and conflict handling; staged write/verify/rename and retry repair for partial immutable files | Hardening implementation added; phase 6 CI passed; not approved | Verify provider rename behavior on physical devices, cross-device concurrent writers, metadata/replay/rollback review and provider matrix |
 | Agent Gateway — future | No implementation found in reviewed tree | Not started | Define capabilities, caller authentication, approvals, revocation, audit and prompt-injection threat model |
@@ -29,7 +29,6 @@ Last updated: 2026-11-13
 ## Current blockers (ordered)
 
 1. P1: Complete SLNB v2 verification: parser fuzz/size limits, Room transaction instrumentation, new-device and physical-device tests; SLNB v1 remains password-only.
-3. P1: Verify the new all-or-nothing batch persistence contract against the real Room database and failure injection.
 4. P1: Verify staged SAF sync writes on actual providers and test cross-device concurrent writers; provider rename guarantees vary.
 5. P1: Verify truthful failure feedback for all remaining storage and file operations.
 6. P1: Enforce PSL/eTLD+1 and package-signature checks in Autofill; remove unknown-app all-credential fallback.
@@ -80,8 +79,17 @@ At the end of every phase, update this file and `docs/MASTER_PROMPT.md` with:
 A phase is not complete because code exists. It is complete only after its acceptance criteria pass and the evidence is recorded.
 
 
-## Phase 8 — truthful vault-operation feedback (in progress)
+## Phase 8 — truthful vault-operation feedback (CI passed; device verification pending)
 
 - Delete and history-restore callbacks now show success only after the repository operation returns successfully.
 - Exceptions are logged and surfaced as explicit failure messages; failed deletion keeps the detail screen open.
-- Automated CI validation is pending. UI behavior still needs manual verification on an Android device.
+- CI run #43430512515 for `fe03173fd27ebb3236215827c32b818ba676a993`: **success** — unit tests, debug APK, unsigned/minified release build, Android Lint and artifact uploads passed.
+- Remaining: manually verify successful and failing delete/restore flows on an Android device.
+
+
+## Phase 9 — real Room transaction instrumentation (in progress)
+
+- Added Android instrumentation dependencies and an API 35 emulator job to CI.
+- Added a real in-memory Room database test that injects a SQLite trigger failure during the second row of `saveAll` and asserts that the first row is rolled back as well.
+- Added a successful batch persistence test.
+- CI validation is pending; this does not yet close M6. Parser fuzzing, new-device restore and physical-device checks remain open.

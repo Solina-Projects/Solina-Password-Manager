@@ -11,6 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "app.solina.passwordmanager"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -83,4 +84,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
+
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }
