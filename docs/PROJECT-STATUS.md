@@ -20,9 +20,9 @@ Last updated: 2026-11-13
 | M3 — Vault | Room encrypted rows, repository, history, Login/Card/Note model, search/UI | Prototype implemented; not approved | Transactional batch import/restore, migration/schema export, data-model scope alignment, UI/integration tests |
 | M4 — Autofill | AutofillService, parser/logic, authentication activity and tests | Prototype implemented; not approved | Full domain/app-signature review, phishing/origin-confusion tests and physical-device/browser matrix |
 | M5 — Authenticator | TOTP, QR scan and import foundations | Prototype implemented; not approved | Verify HOTP scope, RFC vectors, import edge cases and secret lifecycle |
-| M6 — Backup/import | SLNB v1 plus SLNB v2 dual unlock codec and Android UI; batch import now stages all encrypted rows and persists them through one Room transaction | Partially implemented; unit/CI evidence pending for this phase; not approved | Add parser fuzzing and explicit size-bound tests, Room transaction instrumentation test, new-device workflow and physical-device tests |
+| M6 — Backup/import | SLNB v1/v2 codec and UI; batch import uses one Room transaction; BIP-39/v1/v2 regression tests and rollback contract test | CI run #43370732657 passed; partially implemented; not approved | Parser fuzz/size-bound tests, real Room instrumentation rollback test, new-device workflow and physical-device tests |
 | M7 — Hardening/beta | Some hardening tests, diagnostics and pre-alpha warnings | Not complete | MASVS mapping, accessibility, fuzzing, dependency scan, SBOM, independent security assessment and remediation |
-| M8 — Sync | SAF folder-based encrypted record sync, HMAC-authenticated records and conflict handling | Prototype implemented; not approved | Crash-safe writes, concurrent-writer tests, metadata/replay/rollback review, two-device and provider matrix |
+| M8 — Sync | SAF folder-based encrypted record sync, HMAC-authenticated records and conflict handling; staged write/verify/rename and retry repair for partial immutable files | Hardening implementation added; CI pending; not approved | Verify provider rename behavior on physical devices, cross-device concurrent writers, metadata/replay/rollback review and provider matrix |
 | Agent Gateway — future | No implementation found in reviewed tree | Not started | Define capabilities, caller authentication, approvals, revocation, audit and prompt-injection threat model |
 | Release | Preview build workflow and unsigned release build | Not approved | All phase gates, stable protected signing, provenance, privacy/recovery docs and independent review |
 
@@ -30,7 +30,7 @@ Last updated: 2026-11-13
 
 1. P1: Complete SLNB v2 verification: parser fuzz/size limits, Room transaction instrumentation, new-device and physical-device tests; SLNB v1 remains password-only.
 2. P1: Verify the new all-or-nothing batch persistence contract against the real Room database and failure injection.
-3. P1: Make SAF sync writes resilient to interruption and concurrent writers.
+3. P1: Verify staged SAF sync writes on actual providers and test cross-device concurrent writers; provider rename guarantees vary.
 4. P1: Correct UI success messages after failed storage operations.
 5. P1: Enforce PSL/eTLD+1 and package-signature checks in Autofill; remove unknown-app all-credential fallback.
 6. P2: Do not report Autofill save success while save is unsupported.
@@ -44,7 +44,7 @@ Last updated: 2026-11-13
 - Backup/password-cleanup fix run #66: **success** — unit tests, debug APK, unsigned/minified release build, Android Lint and artifact uploads all passed.
 - [Run #55](https://github.com/Solina-Projects/Solina-Password-Manager/actions/runs/43340163866) · [Run #66](https://github.com/Solina-Projects/Solina-Password-Manager/actions/runs/43346057262).
 - This validates the current branch build and automated checks; it is not a physical-device security assessment.
-- Phase 2 is closed. SLNB v2 codec and Android UI integration are implemented on `preview/rebuild-phase-01`; CI run #43367372453 passed for codec and run #43369298095 passed for UI integration. Phase 5 adds BIP-39/v1/v2 regression tests and transactional batch-import code; its CI result must be recorded separately. M6 and release remain unapproved.
+- Phase 2 is closed. SLNB v2 codec and Android UI integration are implemented on `preview/rebuild-phase-01`; CI run #43367372453 passed for codec and run #43369298095 passed for UI integration. Phase 5 backup/restore regression tests and transactional batch-import changes passed CI run #43370732657. Phase 6 adds staged SAF writes and retry repair; its CI result is pending. M6/M8 and release remain unapproved.
 - CI currently installs Gradle 8.10.2 directly; no Gradle Wrapper files were found.
 
 ## Repository governance observations

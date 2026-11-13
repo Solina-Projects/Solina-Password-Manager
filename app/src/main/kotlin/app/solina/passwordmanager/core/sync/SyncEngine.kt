@@ -78,7 +78,23 @@ class SyncEngine(
             for (item in local) {
                 val bytes = SyncRecord.encode(item, macKey)
                 val name = SyncRecord.fileName(item.id, item.rev, bytes)
-                if (name !in present && "$name.bin" !in present) { remote.write(name, bytes); pushed++ }
+                val existingNames = listOf(name, "$name.bin").filter { it in present }
+                var alreadyVerified = false
+                for (existingName in existingNames) {
+                    val existingBytes = remote.read(existingName)
+                        ?: throw java.io.IOException("فایل دوردست قابل خواندن/اعتبارسنجی نیست: $existingName")
+                    if (existingBytes.contentEquals(bytes)) {
+                        alreadyVerified = true
+                        break
+                    }
+                }
+                if (alreadyVerified) continue
+
+                // Recover from legacy direct-write crashes: a partial immutable filename must
+                // not block a retry forever. Delete only after a successful read proved mismatch.
+                existingNames.forEach { remote.delete(it) }
+                remote.write(name, bytes)
+                pushed++
             }
 
             // ───── ۳) پاک‌سازی نسخه‌های قدیمی‌تر از برندهٔ محلی ─────

@@ -3,20 +3,23 @@ package app.solina.passwordmanager.sync
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import app.solina.passwordmanager.core.sync.StagedFileIo
+import app.solina.passwordmanager.core.sync.StagedFileWriter
 import app.solina.passwordmanager.core.sync.SyncRemote
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * پوشهٔ همگام‌سازی روی هر ارائه‌دهندهٔ فایل اندروید (حافظهٔ داخلی، Syncthing، برنامهٔ Drive، Nextcloud ...)
- * از طریق Storage Access Framework؛ بدون مجوز اضافه و بدون شبکه در خود Solina.
- * همه‌چیز داخل زیرپوشهٔ `Solina-Sync` نوشته می‌شود. فقط بایت‌های رمزشده/احراز‌شده روی پوشه می‌روند.
+ * پوشهٔ همگام‌سازی روی ارائه‌دهندگان فایل اندروید از طریق SAF.
+ * فقط بایت‌های رمزشده/احراز‌شده نوشته می‌شوند؛ فایل ابتدا با نام موقت نوشته و راستی‌آزمایی
+ * می‌شود و سپس به نام نهایی تغییر نام می‌دهد تا فایل نیمه‌نوشته به‌عنوان رکورد معتبر دیده نشود.
  */
 class FolderRemote(private val context: Context, private val tree: Uri) : SyncRemote {
     companion object {
         const val DIR = "Solina-Sync"
         const val HEADER = "vault.hdr"
         private const val MAX_READ = 8 * 1024 * 1024
+        private const val MAX_WRITE = 8 * 1024 * 1024
         private const val MIME = "application/octet-stream"
     }
 
@@ -34,31 +37,59 @@ class FolderRemote(private val context: Context, private val tree: Uri) : SyncRe
         dir(false)?.listFiles()?.mapNotNull { it.name }.orEmpty()
     }
 
-    override suspend fun read(name: String): ByteArray? = withContext(Dispatchers.IO) {
-        val f = dir(false)?.findFile(name) ?: return@withContext null
-        context.contentResolver.openInputStream(f.uri)?.use { input ->
+    private fun readFrom(d: DocumentFile, name: String): ByteArray? {
+        val f = d.findFile(name) ?: return null
+        val input = context.contentResolver.openInputStream(f.uri)
+            ?: throw java.io.IOException("خواندن فایل ممکن نشد")
+        input.use {
             val out = java.io.ByteArrayOutputStream()
             val buf = ByteArray(16 * 1024)
             while (true) {
-                val n = input.read(buf)
+                val n = it.read(buf)
                 if (n < 0) break
+                if (out.size().toLong() + n > MAX_READ) throw java.io.IOException("فایل از حد مجاز بزرگ‌تر است")
                 out.write(buf, 0, n)
-                if (out.size() > MAX_READ) return@withContext null
             }
-            out.toByteArray()
+            return out.toByteArray()
         }
+    }
+
+    override suspend fun read(name: String): ByteArray? = withContext(Dispatchers.IO) {
+        dir(false)?.let { readFrom(it, name) }
     }
 
     override suspend fun write(name: String, bytes: ByteArray) = withContext(Dispatchers.IO) {
         val d = dir(true) ?: throw java.io.IOException("پوشه در دسترس نیست")
-        val existing = d.findFile(name)
-        val target = existing ?: d.createFile(MIME, name) ?: throw java.io.IOException("ساخت فایل ممکن نشد")
-        context.contentResolver.openOutputStream(target.uri, "wt")?.use { it.write(bytes) }
-            ?: throw java.io.IOException("نوشتن فایل ممکن نشد")
+        val io = object : StagedFileIo {
+            override fun read(fileName: String): ByteArray? = readFrom(d, fileName)
+
+            override fun create(fileName: String): Boolean =
+                d.createFile(MIME, fileName) != null
+
+            override fun write(fileName: String, data: ByteArray) {
+                val f = d.findFile(fileName) ?: throw java.io.IOException("فایل موقت پیدا نشد")
+                context.contentResolver.openOutputStream(f.uri, "wt")?.use { output ->
+                    output.write(data)
+                    output.flush()
+                } ?: throw java.io.IOException("نوشتن فایل ممکن نشد")
+            }
+
+            override fun rename(from: String, to: String): Boolean =
+                d.findFile(from)?.renameTo(to) == true
+
+            override fun delete(fileName: String): Boolean {
+                val f = d.findFile(fileName) ?: return true
+                return f.delete()
+            }
+        }
+        StagedFileWriter(io, MAX_WRITE).write(name, bytes)
     }
 
     override suspend fun delete(name: String) {
-        withContext(Dispatchers.IO) { dir(false)?.findFile(name)?.delete() }
+        withContext(Dispatchers.IO) {
+            val f = dir(false)?.findFile(name) ?: return@withContext
+            if (!f.delete()) throw java.io.IOException("حذف فایل همگام‌سازی ممکن نشد")
+        }
     }
 
     suspend fun readHeader(): ByteArray? = read(HEADER)

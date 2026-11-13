@@ -46,6 +46,30 @@ class SyncTest {
         assertEquals(0, a.sync().pulled)
     }
 
+    @Test fun interruptedPartialRemoteFileIsRepairedOnNextSync() = runBlocking {
+        val a = Device("a")
+        a.repo.add(p("recover-me"))
+        a.sync()
+        val name = remote.files.keys.single()
+        remote.files[name] = byteArrayOf(1, 2, 3) // simulate an earlier crash during direct write
+
+        val report = a.sync()
+        assertEquals(1, report.pushed)
+        val stored = remote.files[name]!!
+        assertTrue(SyncRecord.decode(stored, SyncRecord.macKey(vk)) != null)
+    }
+
+    @Test fun existingMatchingRemoteRecordIsNotRewritten() = runBlocking {
+        val a = Device("a")
+        a.repo.add(p("same-record"))
+        a.sync()
+        val name = remote.files.keys.single()
+        val before = remote.files[name]!!.copyOf()
+        val report = a.sync()
+        assertEquals(0, report.pushed)
+        assertTrue(before.contentEquals(remote.files[name]))
+    }
+
     @Test fun editPropagatesAndOldFileIsCleaned() = runBlocking {
         val a = Device("a"); val b = Device("b")
         val item = a.repo.add(p("v1")); a.sync(); b.sync()
