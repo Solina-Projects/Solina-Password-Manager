@@ -95,6 +95,16 @@ class RoomItemStore(private val db: SolinaDatabase) : ItemStore {
         }
     }
 
+    /** Batch persistence is one Room transaction: a failure rolls back every inserted row. */
+    override suspend fun saveAll(items: List<StoredItem>) {
+        if (items.isEmpty()) return
+        db.withTransaction {
+            items.forEach { item ->
+                dao.upsert(ItemRow(item.id, item.rev, item.updatedAt, item.deletedAt, item.wrappedItemKey, item.blob))
+            }
+        }
+    }
+
     override suspend fun delete(id: String, deletedAt: Long, newRev: Long) {
         db.withTransaction {
             dao.clearHistory(id)

@@ -15,6 +15,7 @@ import org.junit.Test
 class FakeStore : ItemStore {
     val items = LinkedHashMap<String, StoredItem>()
     val hist = ArrayList<StoredHistory>()
+    var failSaveAllAfter: Int? = null
     override suspend fun all() = items.values.toList()
     override suspend fun get(id: String) = items[id]
     override suspend fun save(item: StoredItem, archivedPrevious: StoredHistory?, keepHistory: Int) {
@@ -24,6 +25,19 @@ class FakeStore : ItemStore {
             hist.removeAll(mine.drop(keepHistory).toSet())
         }
         items[item.id] = item
+    }
+    override suspend fun saveAll(rows: List<StoredItem>) {
+        val before = LinkedHashMap(items)
+        try {
+            rows.forEachIndexed { index, row ->
+                if (failSaveAllAfter == index) throw IllegalStateException("injected batch failure")
+                items[row.id] = row
+            }
+        } catch (t: Throwable) {
+            items.clear()
+            items.putAll(before)
+            throw t
+        }
     }
     override suspend fun delete(id: String, deletedAt: Long, newRev: Long) {
         hist.removeAll { it.itemId == id }
@@ -154,6 +168,29 @@ class RepositoryTest {
         assertEquals(111L, r.items.value.first { it.payload.title == "B" }.payload.createdAt)
         val r2 = repo(store, session); r2.load()
         assertEquals(2, r2.items.value.size)
+    }
+
+    @Test fun batchImportRollsBackCompletelyWhenStoreFails() = runBlocking {
+        val store = FakeStore()
+        val session = unlockedSession()
+        val r = repo(store, session)
+        r.add(login("Existing"))
+        val itemsBefore = r.items.value
+        val idsBefore = store.items.keys.toSet()
+        val changesBefore = r.localChanges.value
+
+        // Fail after the first new row has been staged by the fake transactional store.
+        store.failSaveAllAfter = 1
+        try {
+            r.importItems(listOf(login("New A"), login("New B")))
+            fail("expected injected batch failure")
+        } catch (e: IllegalStateException) {
+            assertEquals("injected batch failure", e.message)
+        }
+
+        assertEquals(idsBefore, store.items.keys.toSet())
+        assertEquals(itemsBefore, r.items.value)
+        assertEquals(changesBefore, r.localChanges.value)
     }
 
     @Test fun clearEmptiesMemory() = runBlocking {

@@ -20,7 +20,7 @@ Last updated: 2026-11-13
 | M3 — Vault | Room encrypted rows, repository, history, Login/Card/Note model, search/UI | Prototype implemented; not approved | Transactional batch import/restore, migration/schema export, data-model scope alignment, UI/integration tests |
 | M4 — Autofill | AutofillService, parser/logic, authentication activity and tests | Prototype implemented; not approved | Full domain/app-signature review, phishing/origin-confusion tests and physical-device/browser matrix |
 | M5 — Authenticator | TOTP, QR scan and import foundations | Prototype implemented; not approved | Verify HOTP scope, RFC vectors, import edge cases and secret lifecycle |
-| M6 — Backup/import | SLNB v1 plus SLNB v2 dual unlock codec; UI export requests password and 24-word phrase; v2 restore offers password or recovery phrase; v1 restore remains password-only | Partially implemented; CI pending; not approved | Validate phrase vectors, v1 compatibility, parser/fuzz/size limits, transactional restore and new-device flow; run device tests |
+| M6 — Backup/import | SLNB v1 plus SLNB v2 dual unlock codec and Android UI; batch import now stages all encrypted rows and persists them through one Room transaction | Partially implemented; unit/CI evidence pending for this phase; not approved | Add parser fuzzing and explicit size-bound tests, Room transaction instrumentation test, new-device workflow and physical-device tests |
 | M7 — Hardening/beta | Some hardening tests, diagnostics and pre-alpha warnings | Not complete | MASVS mapping, accessibility, fuzzing, dependency scan, SBOM, independent security assessment and remediation |
 | M8 — Sync | SAF folder-based encrypted record sync, HMAC-authenticated records and conflict handling | Prototype implemented; not approved | Crash-safe writes, concurrent-writer tests, metadata/replay/rollback review, two-device and provider matrix |
 | Agent Gateway — future | No implementation found in reviewed tree | Not started | Define capabilities, caller authentication, approvals, revocation, audit and prompt-injection threat model |
@@ -28,8 +28,8 @@ Last updated: 2026-11-13
 
 ## Current blockers (ordered)
 
-1. P1: Complete SLNB v2 verification: official BIP-39 vectors, parser fuzz/size limits, atomic restore and new-device tests; SLNB v1 remains password-only.
-2. P1: Make batch import/restore all-or-nothing.
+1. P1: Complete SLNB v2 verification: parser fuzz/size limits, Room transaction instrumentation, new-device and physical-device tests; SLNB v1 remains password-only.
+2. P1: Verify the new all-or-nothing batch persistence contract against the real Room database and failure injection.
 3. P1: Make SAF sync writes resilient to interruption and concurrent writers.
 4. P1: Correct UI success messages after failed storage operations.
 5. P1: Enforce PSL/eTLD+1 and package-signature checks in Autofill; remove unknown-app all-credential fallback.
@@ -44,7 +44,7 @@ Last updated: 2026-11-13
 - Backup/password-cleanup fix run #66: **success** — unit tests, debug APK, unsigned/minified release build, Android Lint and artifact uploads all passed.
 - [Run #55](https://github.com/Solina-Projects/Solina-Password-Manager/actions/runs/43340163866) · [Run #66](https://github.com/Solina-Projects/Solina-Password-Manager/actions/runs/43346057262).
 - This validates the current branch build and automated checks; it is not a physical-device security assessment.
-- Phase 2 is closed. SLNB v2 codec and first UI integration are implemented on `preview/rebuild-phase-01`; CI run #43367372453 passed for codec-only commit. UI integration CI is pending; do not treat M6 or release as approved.
+- Phase 2 is closed. SLNB v2 codec and Android UI integration are implemented on `preview/rebuild-phase-01`; CI run #43367372453 passed for codec and run #43369298095 passed for UI integration. Phase 5 adds BIP-39/v1/v2 regression tests and transactional batch-import code; its CI result must be recorded separately. M6 and release remain unapproved.
 - CI currently installs Gradle 8.10.2 directly; no Gradle Wrapper files were found.
 
 ## Repository governance observations

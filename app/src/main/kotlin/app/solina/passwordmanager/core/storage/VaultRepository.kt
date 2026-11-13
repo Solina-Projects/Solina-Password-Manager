@@ -108,6 +108,7 @@ class VaultRepository(
         val known = _items.value.map { fingerprint(it.payload) }.toHashSet()
         val now = clock()
         val created = ArrayList<VaultItem>()
+        val persisted = ArrayList<StoredItem>()
         var skipped = 0
         withKey { key ->
             for (p in list) {
@@ -115,10 +116,13 @@ class VaultRepository(
                 val c = if (p.createdAt > 0) p.createdAt else now
                 val e = if (p.editedAt > 0) p.editedAt else c
                 val item = VaultItem(newId(), 1, p.copy(createdAt = c, editedAt = e))
-                store.save(seal(key, item, now), null, MAX_HISTORY)
+                // Seal the full batch before persistence. The store then commits it in one transaction.
+                persisted += seal(key, item, now)
                 created += item
             }
+            store.saveAll(persisted)
         }
+        // Publish only after the transactional store operation has succeeded.
         _items.value = (_items.value + created).sortedBy { it.payload.title.lowercase() }
         if (created.isNotEmpty()) _localChanges.value++
         ImportStats(created.size, skipped)

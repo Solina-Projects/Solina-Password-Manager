@@ -28,6 +28,9 @@ interface ItemStore {
     /** ذخیرهٔ اتمیک ورودی جدید و (اختیاری) نسخهٔ قبلی در تاریخچه؛ تاریخچه به [keepHistory] نسخه محدود می‌شود. */
     suspend fun save(item: StoredItem, archivedPrevious: StoredHistory?, keepHistory: Int)
 
+    /** Persist the complete batch or none of it; implementations must provide a real transaction. */
+    suspend fun saveAll(items: List<StoredItem>)
+
     /** حذف نرم: blob خالی، تاریخچه پاک می‌شود. */
     suspend fun delete(id: String, deletedAt: Long, newRev: Long)
 

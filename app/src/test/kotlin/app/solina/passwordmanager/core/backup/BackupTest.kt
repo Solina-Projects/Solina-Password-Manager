@@ -49,6 +49,14 @@ class BackupTest {
         assertThrows(BackupFormatException::class.java) { Backup.decode(huge, "right-password".toCharArray()) }
     }
 
+    @Test fun v1RemainsPasswordOnlyAndBackwardCompatible() {
+        val backup = Backup.encode(items, "legacy-password".toCharArray(), 1L, fast)
+        assertEquals(items, Backup.decode(backup, "legacy-password".toCharArray()))
+        assertThrows(BackupFormatException::class.java) {
+            Backup.decodeWithRecoveryPhrase(backup, "abandon ".repeat(23) + "art")
+        }
+    }
+
     @Test fun twoBackupsDiffer() {
         val a = Backup.encode(items, "pw-pw-pw-pw-1".toCharArray(), 1L, fast)
         val b = Backup.encode(items, "pw-pw-pw-pw-1".toCharArray(), 1L, fast)
