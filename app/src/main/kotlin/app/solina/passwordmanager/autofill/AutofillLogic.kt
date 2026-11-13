@@ -74,7 +74,7 @@ object DomainMatcher {
      */
     private val KNOWN_MULTI_LABEL_PUBLIC_SUFFIXES = setOf(
         "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "net.uk",
-        "co.ir", "ac.ir", "org.ir", "gov.ir", "net.ir", "sch.ir", "id.ir",
+        "co.ir", "com.ir", "ac.ir", "org.ir", "gov.ir", "net.ir", "sch.ir", "id.ir",
         "com.au", "net.au", "org.au", "edu.au", "gov.au",
         "co.jp", "ne.jp", "or.jp", "ac.jp", "go.jp",
         "co.in", "net.in", "org.in", "gov.in",
