@@ -28,11 +28,10 @@ Last updated: 2026-11-13
 
 ## Current blockers (ordered)
 
-1. P1: Verify persisted SAF read/write permission handling and header-update failure reporting; Android URI grants and local configuration must not silently diverge.
-2. P1: Complete SLNB v2 verification: parser fuzz/size limits, Room transaction instrumentation, new-device and physical-device tests; SLNB v1 remains password-only.
+1. P1: Complete SLNB v2 verification: parser fuzz/size limits, Room transaction instrumentation, new-device and physical-device tests; SLNB v1 remains password-only.
 3. P1: Verify the new all-or-nothing batch persistence contract against the real Room database and failure injection.
 4. P1: Verify staged SAF sync writes on actual providers and test cross-device concurrent writers; provider rename guarantees vary.
-5. P1: Correct UI success messages after failed storage operations.
+5. P1: Verify truthful failure feedback for all remaining storage and file operations.
 6. P1: Enforce PSL/eTLD+1 and package-signature checks in Autofill; remove unknown-app all-credential fallback.
 7. P2: Do not report Autofill save success while save is unsupported.
 8. P2: Align HOTP claims with actual TOTP-only implementation.
@@ -61,12 +60,13 @@ Last updated: 2026-11-13
 - The version catalog includes AndroidX, Compose, Room, Bouncy Castle, ZXing and CameraX; a machine-readable dependency vulnerability/SBOM report has not yet been generated.
 - The checked-in `LICENSE` is GPL-3.0 text; confirm the intended copyright holder and align README notices that claim GPL-3.0-or-later before release.
 
-## Phase 7 — SAF permission persistence (in progress)
+## Phase 7 — SAF permission persistence and header error reporting
 
-- `SyncManager.persist()` now requires a durable Android read/write URI grant before saving the selected tree configuration. Existing persisted flags are reused; missing flags are acquired explicitly.
+- `SyncManager.persist()` requires a durable Android read/write URI grant before saving the selected tree configuration. Existing persisted flags are reused; missing flags are acquired explicitly.
 - Configuration uses synchronous `commit()` and reports failure instead of silently applying a folder URI. Newly acquired flags are released if saving preferences fails.
 - `pushHeader()` returns an explicit result, logs failures and exposes a warning in sync status; the password-reset flow surfaces that warning.
-- Runs #43381861423 and #43381927572 failed because the helper declaration accidentally contained literal escaped newlines. Corrected; fresh CI validation is pending.
+- Final CI run #43429214991 for `0eb1c32981e9ce02cdfe6a43cd12f3eb56fa4ba0`: **success** — unit tests, debug APK, unsigned/minified release build, Android Lint and artifact uploads passed.
+- Remaining: verify URI grants and provider behavior with real Android SAF providers/devices; this phase is code/CI-validated, not device-validated.
 
 ## Reporting rule
 
@@ -78,3 +78,10 @@ At the end of every phase, update this file and `docs/MASTER_PROMPT.md` with:
 5. The next phase recommendation.
 
 A phase is not complete because code exists. It is complete only after its acceptance criteria pass and the evidence is recorded.
+
+
+## Phase 8 — truthful vault-operation feedback (in progress)
+
+- Delete and history-restore callbacks now show success only after the repository operation returns successfully.
+- Exceptions are logged and surfaced as explicit failure messages; failed deletion keeps the detail screen open.
+- Automated CI validation is pending. UI behavior still needs manual verification on an Android device.

@@ -858,15 +858,26 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                         onDelete = {
                             val id = detailId!!
                             scope.launch {
-                                runCatching { repo.delete(id) }
-                                detailId = null
-                                toast = "ورودی حذف شد"
+                                try {
+                                    repo.delete(id)
+                                    detailId = null
+                                    toast = "ورودی حذف شد"
+                                } catch (e: Exception) {
+                                    DiagLog.logError("VAULT", e, "delete")
+                                    toast = "حذف ورودی انجام نشد؛ دوباره تلاش کنید."
+                                }
                             }
                         },
                         onRestore = { entry ->
-                            scope.launch {
-                                runCatching { repo.restore(detailId!!, entry) }
-                                toast = "نسخهٔ قدیمی بازگردانده شد"
+                            val id = detailId
+                            if (id != null) scope.launch {
+                                try {
+                                    repo.restore(id, entry)
+                                    toast = "نسخهٔ قدیمی بازگردانده شد"
+                                } catch (e: Exception) {
+                                    DiagLog.logError("VAULT", e, "restore")
+                                    toast = "بازگردانی نسخه انجام نشد؛ دوباره تلاش کنید."
+                                }
                             }
                         },
                         onToast = { toast = it },
