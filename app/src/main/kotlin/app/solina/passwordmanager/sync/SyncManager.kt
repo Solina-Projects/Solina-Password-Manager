@@ -21,7 +21,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-internal fun missingUriPermissionFlags(requiredFlags: Int, persistedFlags: Int): Int =\n    requiredFlags and persistedFlags.inv()\n\ndata class SyncStatus(
+internal fun missingUriPermissionFlags(requiredFlags: Int, persistedFlags: Int): Int =
+    requiredFlags and persistedFlags.inv()
+
+data class SyncStatus(
     val configured: Boolean = false,
     val folderName: String = "",
     val syncing: Boolean = false,

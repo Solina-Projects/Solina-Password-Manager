@@ -28,7 +28,8 @@ Last updated: 2026-11-13
 
 ## Current blockers (ordered)
 
-1. P1: Verify persisted SAF read/write permission handling and header-update failure reporting; Android URI grants and local configuration must not silently diverge.\n2. P1: Complete SLNB v2 verification: parser fuzz/size limits, Room transaction instrumentation, new-device and physical-device tests; SLNB v1 remains password-only.
+1. P1: Verify persisted SAF read/write permission handling and header-update failure reporting; Android URI grants and local configuration must not silently diverge.
+2. P1: Complete SLNB v2 verification: parser fuzz/size limits, Room transaction instrumentation, new-device and physical-device tests; SLNB v1 remains password-only.
 3. P1: Verify the new all-or-nothing batch persistence contract against the real Room database and failure injection.
 4. P1: Verify staged SAF sync writes on actual providers and test cross-device concurrent writers; provider rename guarantees vary.
 5. P1: Correct UI success messages after failed storage operations.
@@ -58,7 +59,10 @@ Last updated: 2026-11-13
 - The version catalog includes AndroidX, Compose, Room, Bouncy Castle, ZXing and CameraX; a machine-readable dependency vulnerability/SBOM report has not yet been generated.
 - The checked-in `LICENSE` is GPL-3.0 text; confirm the intended copyright holder and align README notices that claim GPL-3.0-or-later before release.
 
-## Phase 7 — SAF permission persistence (in progress)\n\n- `SyncManager.persist()` now requires a durable Android read/write URI grant before saving the selected tree configuration. Existing persisted flags are reused; missing flags are acquired explicitly.\n- Configuration uses synchronous `commit()` and reports failure instead of silently applying a folder URI. Newly acquired flags are released if saving preferences fails.\n- Unit coverage for the pure missing-grant calculation and Android picker/provider validation are required before closing this phase.\n\n## Reporting rule
+## Phase 7 — SAF permission persistence (in progress)
+
+- `SyncManager.persist()` now requires a durable Android read/write URI grant before saving the selected tree configuration. Existing persisted flags are reused; missing flags are acquired explicitly.
+- Configuration uses synchronous `commit()` and reports failure instead of silently applying a folder URI. Newly acquired flags are released if saving preferences fails.\n- Unit coverage for the pure missing-grant calculation and Android picker/provider validation are required before closing this phase.\n\n## Reporting rule
 
 At the end of every phase, update this file and `docs/MASTER_PROMPT.md` with:
 1. What was implemented.
