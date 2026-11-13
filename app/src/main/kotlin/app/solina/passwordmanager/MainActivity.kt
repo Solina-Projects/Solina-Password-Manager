@@ -739,13 +739,14 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                                 try {
                                     val payloads = items.map { it.payload }
                                     val bytes = withContext(Dispatchers.Default) { Backup.encode(payloads, pw, System.currentTimeMillis()) }
-                                    pw.fill('\u0000')
                                     pendingExport = bytes
                                     val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
                                     launchExportFile("solina-backup-$stamp.slnb")
                                 } catch (e: Exception) {
                                     dataMessage = "ساخت بکاپ ناموفق بود."
                                     dataBusy = false
+                                } finally {
+                                    pw.fill('\u0000')
                                 }
                             }
                         },
@@ -772,6 +773,8 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                                         pw.fill('\u0000')
                                         dataBusy = false
                                     }
+                                } else {
+                                    pw.fill('\u0000')
                                 }
                             }
                         },
