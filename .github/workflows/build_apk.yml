@@ -109,15 +109,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
-            adb logcat -c
-            set +e
-            gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.solina.passwordmanager.core.storage.RoomItemStoreTransactionTest --stacktrace
-            test_status=$?
-            mkdir -p app/build/room-instrumentation-diagnostics
-            adb logcat -d -v threadtime > app/build/room-instrumentation-diagnostics/logcat.txt 2>&1 || true
-            adb shell dumpsys meminfo > app/build/room-instrumentation-diagnostics/meminfo.txt 2>&1 || true
-            adb shell dumpsys activity processes > app/build/room-instrumentation-diagnostics/processes.txt 2>&1 || true
-            exit "$test_status"
+            bash -c 'ls -l /dev/kvm || true; adb logcat -c; gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.solina.passwordmanager.core.storage.RoomItemStoreTransactionTest --stacktrace; test_status=$?; mkdir -p app/build/room-instrumentation-diagnostics; adb logcat -d -v threadtime > app/build/room-instrumentation-diagnostics/logcat.txt 2>&1 || true; adb shell dumpsys meminfo > app/build/room-instrumentation-diagnostics/meminfo.txt 2>&1 || true; adb shell dumpsys activity processes > app/build/room-instrumentation-diagnostics/processes.txt 2>&1 || true; grep -E "FATAL EXCEPTION|AndroidRuntime|SIGSEGV|SIGILL|SIGABRT|solina|Process crashed" app/build/room-instrumentation-diagnostics/logcat.txt | tail -n 80 || true; exit "$test_status"'
 
       - name: Upload Room instrumentation diagnostics
         if: always()
