@@ -51,6 +51,9 @@ class AutofillLogicTest {
         assertFalse(DomainMatcher.hostMatches("github.com", "github.com.evil.io"))
         assertFalse(DomainMatcher.hostMatches("", "github.com"))
         assertFalse(DomainMatcher.hostMatches("com", "github.com"))
+        assertFalse(DomainMatcher.hostMatches("co.uk", "evil.co.uk"))
+        assertFalse(DomainMatcher.hostMatches("com.ir", "bank.com.ir"))
+        assertFalse(DomainMatcher.hostMatches("github.io", "phish.github.io"))
     }
 
     @Test fun webMatchIsStrict() {
@@ -59,9 +62,15 @@ class AutofillLogicTest {
         assertTrue(AutofillMatcher.match(items, "unknown.net", "com.github.android").isEmpty())
     }
 
-    @Test fun nativeAppMatchesByPackageThenFallsBackToAll() {
-        val items = listOf(item("1", "Snapp", "snapp.ir"), item("2", "Digikala", "digikala.com"))
+    @Test fun nativeAppMatchesExplicitBindingAndNeverLeaksAllLogins() {
+        val items = listOf(
+            item("1", "Snapp", "snapp.ir"),
+            item("2", "Digikala", "digikala.com"),
+            item("3", "Bank", "androidapp://ir.bank.app@abcd1234"),
+        )
         assertEquals(listOf("1"), AutofillMatcher.match(items, null, "cab.snapp.passenger").map { it.id })
-        assertEquals(2, AutofillMatcher.match(items, null, "com.unknown.thing").size)
+        assertEquals(listOf("3"), AutofillMatcher.match(items, null, "ir.bank.app", "abcd1234").map { it.id })
+        assertTrue(AutofillMatcher.match(items, null, "ir.bank.app", "wrongcert").isEmpty())
+        assertTrue(AutofillMatcher.match(items, null, "com.unknown.thing").isEmpty())
     }
 }

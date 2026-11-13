@@ -66,7 +66,7 @@ interface ItemDao {
     suspend fun wipeHistory()
 }
 
-@Database(entities = [ItemRow::class, HistoryRow::class], version = 1, exportSchema = false)
+@Database(entities = [ItemRow::class, HistoryRow::class], version = 1, exportSchema = true)
 abstract class SolinaDatabase : RoomDatabase() {
     abstract fun dao(): ItemDao
 

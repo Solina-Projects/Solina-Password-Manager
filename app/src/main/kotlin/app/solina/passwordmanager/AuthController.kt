@@ -85,7 +85,8 @@ class AuthController(private val container: AppContainer) {
             return@withContext UnlockResult.Corrupt
         }
         try {
-            session.unlock(VaultCrypto.unlockWithRecovery(header, phrase))
+            session.unlock(VaultCrypto.unlockWithRecovery(header, phrase), requireReset = true)
+            disableBiometric()
             recordSuccess()
             UnlockResult.Success
         } catch (e: InvalidRecoveryPhraseException) {

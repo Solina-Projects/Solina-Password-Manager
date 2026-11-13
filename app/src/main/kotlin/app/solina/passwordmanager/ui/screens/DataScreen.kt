@@ -141,7 +141,7 @@ fun DataScreen(
                 if (recoveryPhrase.isNotBlank() && phraseWords.size != 24) Text("عبارت باید دقیقاً ۲۴ کلمه داشته باشد.", color = c.secondary, fontSize = 13.sp)
                 if (phraseMismatch) Text("دو عبارت بازیابی یکسان نیستند.", color = c.secondary, fontSize = 13.sp)
                 if (message != null) Text(message, color = c.secondary, fontSize = 14.sp)
-                BigButton(if (busy) "در حال رمزگذاری…" else "ساخت و ذخیرهٔ فایل", enabled = !busy && pw.length >= MIN_BACKUP_PASSWORD && pw == pw2 && phraseWords.size == 24 && !phraseMismatch && recoveryPhrase == recoveryPhraseConfirm) {
+                BigButton(if (busy) "در حال رمزگذاری…" else "ساخت و ذخیرهٔ فایل", enabled = !busy && pw.length >= MIN_BACKUP_PASSWORD && pw == pw2 && phraseWords.size == 24 && !phraseMismatch) {
                     val secret = pw.toCharArray()
                     val phrase = phraseWords.joinToString(" ")
                     pw = ""

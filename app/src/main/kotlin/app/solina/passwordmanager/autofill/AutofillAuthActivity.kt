@@ -17,8 +17,13 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
+import android.content.pm.PackageManager
+import android.os.Build
 import app.solina.passwordmanager.AuthController
+import app.solina.passwordmanager.DiagLog
 import app.solina.passwordmanager.SolinaApplication
+import app.solina.passwordmanager.core.crypto.toHex
+import java.security.MessageDigest
 import app.solina.passwordmanager.UnlockResult
 import app.solina.passwordmanager.messageFor
 import app.solina.passwordmanager.ui.screens.VaultUnlockScreen
@@ -80,8 +85,18 @@ class AutofillAuthActivity : FragmentActivity() {
 
     private fun finishWithResult(req: ParsedRequest) {
         lifecycleScope.launch {
-            runCatching { container.repository.load() }
-            val response = AutofillResponses.datasets(this@AutofillAuthActivity, container.repository.items.value, req)
+            try {
+                container.repository.load()
+            } catch (e: Exception) {
+                DiagLog.logError("AUTOFILL", e, "finishWithResult.load")
+                Toast.makeText(this@AutofillAuthActivity, "خطا در بارگذاری خزانه برای Autofill", Toast.LENGTH_LONG).show()
+                setResult(Activity.RESULT_CANCELED)
+                container.scheduleAutoLock()
+                finish()
+                return@launch
+            }
+            val certSha256 = req.packageName?.let(::signingCertSha256)
+            val response = AutofillResponses.datasets(this@AutofillAuthActivity, container.repository.items.value, req, certSha256)
             if (response == null) {
                 Toast.makeText(this@AutofillAuthActivity, "ورودی مطابقی برای این صفحه پیدا نشد", Toast.LENGTH_LONG).show()
                 setResult(Activity.RESULT_CANCELED)
@@ -93,4 +108,19 @@ class AutofillAuthActivity : FragmentActivity() {
             finish()
         }
     }
+
+    @Suppress("DEPRECATION")
+    private fun signingCertSha256(pkg: String): String? = runCatching {
+        val md = MessageDigest.getInstance("SHA-256")
+        val bytes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val info = packageManager.getPackageInfo(pkg, PackageManager.GET_SIGNING_CERTIFICATES)
+            val signingInfo = info.signingInfo ?: return null
+            val sigs = if (signingInfo.hasMultipleSigners()) signingInfo.apkContentsSigners else signingInfo.signingCertificateHistory
+            sigs?.firstOrNull()?.toByteArray() ?: return null
+        } else {
+            val info = packageManager.getPackageInfo(pkg, PackageManager.GET_SIGNATURES)
+            info.signatures?.firstOrNull()?.toByteArray() ?: return null
+        }
+        md.digest(bytes).toHex()
+    }.getOrNull()
 }

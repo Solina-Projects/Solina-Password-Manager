@@ -25,7 +25,7 @@ class AppContainer(context: Context) {
     val sync = app.solina.passwordmanager.sync.SyncManager(context.applicationContext, files, session, { itemStore }, { repository })
 
     private val handler = Handler(Looper.getMainLooper())
-    private val lockCheck = Runnable { session.enforceTimeout() }
+    private val lockCheck = Runnable { session.enforceTimeout(backgroundGraceMillis) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     init {
@@ -33,14 +33,22 @@ class AppContainer(context: Context) {
         scope.launch { session.unlocked.collect { if (!it) repository.clear() } }
     }
 
+    private var backgroundGraceMillis = VaultSession.DEFAULT_TIMEOUT_MILLIS
+
     /** شروع مهلت قفل خودکار؛ در پس‌زمینه هم (بدون نیاز به بازگشت به اپ) قفل انجام می‌شود. */
-    fun scheduleAutoLock() {
+    fun scheduleAutoLock(timeoutMillis: Long = VaultSession.DEFAULT_TIMEOUT_MILLIS) {
+        backgroundGraceMillis = timeoutMillis
         session.onBackgrounded()
         handler.removeCallbacks(lockCheck)
-        handler.postDelayed(lockCheck, VaultSession.DEFAULT_TIMEOUT_MILLIS + 500)
+        handler.postDelayed(lockCheck, timeoutMillis + 500)
     }
 
-    fun cancelAutoLock() = handler.removeCallbacks(lockCheck)
+    fun currentAutoLockTimeout(): Long = backgroundGraceMillis
+
+    fun cancelAutoLock() {
+        handler.removeCallbacks(lockCheck)
+        backgroundGraceMillis = VaultSession.DEFAULT_TIMEOUT_MILLIS
+    }
 }
 
 class SolinaApplication : Application() {

@@ -61,25 +61,57 @@ class FolderRemote(private val context: Context, private val tree: Uri) : SyncRe
     override suspend fun write(name: String, bytes: ByteArray) = withContext(Dispatchers.IO) {
         val d = dir(true) ?: throw java.io.IOException("پوشه در دسترس نیست")
         val io = object : StagedFileIo {
-            override fun read(fileName: String): ByteArray? = readFrom(d, fileName)
+            private val cached = HashMap<String, DocumentFile>()
 
-            override fun create(fileName: String): Boolean =
-                d.createFile(MIME, fileName) != null
+            private fun resolve(fileName: String): DocumentFile? =
+                cached[fileName] ?: d.findFile(fileName) ?: d.findFile("$fileName.bin")
+
+            override fun read(fileName: String): ByteArray? {
+                val f = resolve(fileName) ?: return null
+                val input = context.contentResolver.openInputStream(f.uri)
+                    ?: throw java.io.IOException("خواندن فایل ممکن نشد")
+                input.use {
+                    val out = java.io.ByteArrayOutputStream()
+                    val buf = ByteArray(16 * 1024)
+                    while (true) {
+                        val n = it.read(buf)
+                        if (n < 0) break
+                        if (out.size().toLong() + n > MAX_READ) throw java.io.IOException("فایل از حد مجاز بزرگ‌تر است")
+                        out.write(buf, 0, n)
+                    }
+                    return out.toByteArray()
+                }
+            }
+
+            override fun create(fileName: String): Boolean {
+                val created = d.createFile(MIME, fileName) ?: return false
+                cached[fileName] = created
+                return true
+            }
 
             override fun write(fileName: String, data: ByteArray) {
-                val f = d.findFile(fileName) ?: throw java.io.IOException("فایل موقت پیدا نشد")
+                val f = resolve(fileName) ?: throw java.io.IOException("فایل موقت پیدا نشد")
                 context.contentResolver.openOutputStream(f.uri, "wt")?.use { output ->
                     output.write(data)
                     output.flush()
                 } ?: throw java.io.IOException("نوشتن فایل ممکن نشد")
             }
 
-            override fun rename(from: String, to: String): Boolean =
-                d.findFile(from)?.renameTo(to) == true
+            override fun rename(from: String, to: String): Boolean {
+                val f = resolve(from) ?: return false
+                val ok = runCatching { f.renameTo(to) }.getOrDefault(false)
+                if (ok) {
+                    cached.remove(from)
+                    cached[to] = f
+                }
+                return ok
+            }
 
             override fun delete(fileName: String): Boolean {
-                val f = d.findFile(fileName) ?: return true
-                return f.delete()
+                val f = resolve(fileName) ?: return true
+                val ok = f.delete()
+                if (ok) cached.remove(fileName)
+                return ok
             }
         }
         StagedFileWriter(io, MAX_WRITE).write(name, bytes)

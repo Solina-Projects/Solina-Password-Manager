@@ -26,8 +26,8 @@ object AutofillResponses {
         }
 
     /** null اگر ورودی مطابقی نیست. */
-    fun datasets(ctx: Context, items: List<VaultItem>, p: ParsedRequest): FillResponse? {
-        val matches = AutofillMatcher.match(items, p.webHost, p.packageName)
+    fun datasets(ctx: Context, items: List<VaultItem>, p: ParsedRequest, packageCertSha256: String? = null): FillResponse? {
+        val matches = AutofillMatcher.match(items, p.webHost, p.packageName, packageCertSha256)
         if (matches.isEmpty()) return null
         val b = FillResponse.Builder()
         for (m in matches) {

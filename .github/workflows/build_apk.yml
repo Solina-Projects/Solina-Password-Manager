@@ -101,14 +101,17 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          target: google_apis
+          target: aosp_atd
           arch: x86_64
-          profile: pixel_2
+          profile: pixel_6
+          ram-size: 3072M
+          heap-size: 512M
           disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
             adb logcat -c
             set +e
-            gradle :app:connectedDebugAndroidTest --stacktrace
+            gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.solina.passwordmanager.core.storage.RoomItemStoreTransactionTest --stacktrace
             test_status=$?
             mkdir -p app/build/room-instrumentation-diagnostics
             adb logcat -d -v threadtime > app/build/room-instrumentation-diagnostics/logcat.txt 2>&1 || true

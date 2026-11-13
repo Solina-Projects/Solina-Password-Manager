@@ -64,6 +64,8 @@ import app.solina.passwordmanager.core.backup.BackupV2
 import app.solina.passwordmanager.core.backup.BackupFormatException
 import app.solina.passwordmanager.core.crypto.AuthenticationFailedException
 import app.solina.passwordmanager.core.crypto.InvalidRecoveryPhraseException
+import app.solina.passwordmanager.core.crypto.VaultCrypto
+import app.solina.passwordmanager.core.crypto.wipe
 import app.solina.passwordmanager.core.importer.ImportException
 import app.solina.passwordmanager.core.importer.Importers
 import app.solina.passwordmanager.ui.screens.DataScreen
@@ -126,6 +128,7 @@ class MainActivity : FragmentActivity() {
     /** نتیجهٔ startActivityForResult را به تابعی که هنگام شروع ثبت شد می‌رساند. */
     private val activityResultHandlers = mutableMapOf<Int, (resultCode: Int, data: Intent?) -> Unit>()
     private val permissionHandlers = mutableMapOf<Int, (granted: Boolean) -> Unit>()
+    private var awaitingExternalPicker = false
 
     /**
      * جایگزین ActivityResultLauncher: اکتیویتی را با کد کوچک و ثابت شروع می‌کند و
@@ -137,9 +140,11 @@ class MainActivity : FragmentActivity() {
     fun launchForResult(intent: Intent, requestCode: Int, handler: (resultCode: Int, data: Intent?) -> Unit, onFail: () -> Unit) {
         try {
             DiagLog.log("PICKER", "launching picker")
+            awaitingExternalPicker = true
             activityResultHandlers[requestCode] = handler
             startActivityForResult(intent, requestCode)
         } catch (e: Exception) {
+            awaitingExternalPicker = false
             activityResultHandlers.remove(requestCode)
             DiagLog.logError("PICKER", e, "launchForResult")
             onFail()
@@ -170,6 +175,7 @@ class MainActivity : FragmentActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         // اول super: FragmentActivity نتیجه را به فرگمنت‌ها و رجیستری می‌رساند.
         super.onActivityResult(requestCode, resultCode, data)
+        awaitingExternalPicker = false
         activityResultHandlers.remove(requestCode)?.invoke(resultCode, data)
     }
 
@@ -208,14 +214,17 @@ class MainActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         DiagLog.log("ACT", "onStop")
-        container.scheduleAutoLock()
+        val grace = if (awaitingExternalPicker) 5 * 60_000L else app.solina.passwordmanager.core.security.VaultSession.DEFAULT_TIMEOUT_MILLIS
+        container.scheduleAutoLock(grace)
     }
 
     override fun onStart() {
         super.onStart()
         DiagLog.log("ACT", "onStart")
+        awaitingExternalPicker = false
+        val grace = container.currentAutoLockTimeout()
         container.cancelAutoLock()
-        container.session.onForegrounded()
+        container.session.onForegrounded(grace)
     }
 }
 
@@ -315,6 +324,7 @@ internal fun messageFor(result: UnlockResult): String? = when (result) {
 private fun Root(activity: MainActivity, container: AppContainer, auth: AuthController, onDiagnostics: () -> Unit) {
     val scope = rememberCoroutineScope()
     val unlocked by container.session.unlocked.collectAsState()
+    val mustReset by container.session.requirePasswordReset.collectAsState()
 
     LaunchedEffect(unlocked) {
         if (unlocked) runCatching { container.repository.load() } else container.repository.clear()
@@ -328,7 +338,7 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
 
     var mode by remember { mutableStateOf(UnlockMode.Password) }
     var message by remember { mutableStateOf<String?>(null) }
-    var mustReset by remember { mutableStateOf(false) }
+    var syncHeaderWarning by remember { mutableStateOf<String?>(null) }
     var joinMessage by remember { mutableStateOf<String?>(null) }
     var showJoinCloud by remember { mutableStateOf(false) }
     fun launchJoinFolder(kind: String) {
@@ -411,26 +421,26 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
                 password.fill('\u0000')
                 busy = false
                 if (ok) {
-                    mustReset = false
+                    container.session.clearPasswordResetRequirement()
                     if (!container.sync.pushHeader()) {
-                        joinMessage = container.sync.status.value.message
+                        syncHeaderWarning = container.sync.status.value.message
                     }
-                    // پس از بازیابی، میان‌بر اثر انگشت برای احتیاط غیرفعال می‌شود (از تنظیمات دوباره فعال می‌شود).
                     auth.disableBiometric()
                 } else {
                     container.session.lock()
-                    mustReset = false
                 }
             }
         }
 
         !unlocked -> when (mode) {
             UnlockMode.Password -> {
-                val biometricReady = auth.hasBiometric()
+                var biometricReady by remember { mutableStateOf(auth.hasBiometric()) }
                 LaunchedEffect(Unit) {
-                    if (auth.hasBiometric()) {
+                    if (biometricReady) {
                         delay(300)
-                        auth.unlockWithBiometric(activity) { }
+                        auth.unlockWithBiometric(activity) { ok ->
+                            if (!ok) biometricReady = auth.hasBiometric()
+                        }
                     }
                 }
                 VaultUnlockScreen(
@@ -447,7 +457,12 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
                             message = messageFor(result)
                         }
                     },
-                    onBiometric = { auth.unlockWithBiometric(activity) { ok -> if (!ok) message = "با اثر انگشت باز نشد. از رمز اصلی استفاده کنید." } },
+                    onBiometric = {
+                        auth.unlockWithBiometric(activity) { ok ->
+                            biometricReady = auth.hasBiometric()
+                            if (!ok) message = "با اثر انگشت باز نشد. از رمز اصلی استفاده کنید."
+                        }
+                    },
                     onForgot = { message = null; mode = UnlockMode.Recovery },
                 )
             }
@@ -458,19 +473,18 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
                 onSubmit = { phrase ->
                     busy = true
                     message = null
-                    mustReset = true
                     scope.launch {
                         val result = auth.unlockWithRecovery(phrase)
                         busy = false
                         message = messageFor(result)
-                        if (result != UnlockResult.Success) mustReset = false else mode = UnlockMode.Password
+                        if (result == UnlockResult.Success) mode = UnlockMode.Password
                     }
                 },
                 onBack = { message = null; mode = UnlockMode.Password },
             )
         }
 
-        else -> MainApp(activity, container, auth, onDiagnostics)
+        else -> MainApp(activity, container, auth, syncHeaderWarning, onDismissSyncWarning = { syncHeaderWarning = null }, onDiagnostics = onDiagnostics)
     }
 }
 
@@ -482,7 +496,14 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthController, onDiagnostics: () -> Unit) {
+private fun MainApp(
+    activity: MainActivity,
+    container: AppContainer,
+    auth: AuthController,
+    syncWarning: String?,
+    onDismissSyncWarning: () -> Unit,
+    onDiagnostics: () -> Unit,
+) {
     val c = Solina.colors
     val scope = rememberCoroutineScope()
     val repo = container.repository
@@ -584,9 +605,15 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
             handler = { resultCode, data ->
                 val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
                 if (uri != null) {
-                    val bytes = runCatching { readLimited(uri, 65 * 1024 * 1024) }.getOrNull()
-                    if (bytes == null) dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
-                    else { pendingRestore = bytes; dataMessage = null; dataStep = if (BackupV2.isV2(bytes)) DataStep.RestoreChoice else DataStep.RestorePassword }
+                    dataBusy = true
+                    scope.launch {
+                        val bytes = withContext(Dispatchers.IO) {
+                            runCatching { readLimited(uri, 65 * 1024 * 1024) }.getOrNull()
+                        }
+                        dataBusy = false
+                        if (bytes == null) dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
+                        else { pendingRestore = bytes; dataMessage = null; dataStep = if (BackupV2.isV2(bytes)) DataStep.RestoreChoice else DataStep.RestorePassword }
+                    }
                 }
             },
             onFail = { dataMessage = "انتخاب‌گر فایل در دسترس نیست." },
@@ -727,6 +754,26 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         Column(Modifier.fillMaxSize()) {
+            if (syncWarning != null) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(c.secondaryContainer)
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(syncWarning, color = c.onSecondaryContainer, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text(
+                        "بستن",
+                        color = c.primary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable { onDismissSyncWarning() }.padding(4.dp),
+                    )
+                }
+            }
             Box(Modifier.weight(1f)) {
                 when {
                     dataStep != null -> DataScreen(
@@ -742,12 +789,21 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             scope.launch {
                                 try {
                                     val payloads = items.map { it.payload }
-                                    val bytes = withContext(Dispatchers.Default) { BackupV2.encode(payloads, pw, recoveryPhrase, System.currentTimeMillis()) }
+                                    val bytes = withContext(Dispatchers.Default) {
+                                        val header = container.files.readHeader()
+                                        val vkCheck = VaultCrypto.unlockWithRecovery(header, recoveryPhrase)
+                                        vkCheck.wipe()
+                                        BackupV2.encode(payloads, pw, recoveryPhrase, System.currentTimeMillis())
+                                    }
                                     pendingExport = bytes
                                     val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
                                     launchExportFile("solina-backup-$stamp.slnb")
                                 } catch (e: Exception) {
-                                    dataMessage = if (e is InvalidRecoveryPhraseException) "عبارت بازیابی معتبر نیست؛ ۲۴ کلمه را بررسی کنید." else "ساخت بکاپ ناموفق بود."
+                                    dataMessage = when (e) {
+                                        is InvalidRecoveryPhraseException -> "عبارت بازیابی معتبر نیست؛ ۲۴ کلمه را بررسی کنید."
+                                        is AuthenticationFailedException -> "عبارت بازیابی واردشده با عبارت این خزانه مطابقت ندارد."
+                                        else -> "ساخت بکاپ ناموفق بود."
+                                    }
                                     dataBusy = false
                                 } finally {
                                     pw.fill('\u0000')

@@ -214,7 +214,12 @@ fun CreatePasswordScreen(busy: Boolean, onSubmit: (CharArray) -> Unit) {
         if (mismatch) Notice("دو رمز یکسان نیستند.", error = true)
         Notice("اگر این رمز را فراموش کنید، فقط عبارت بازیابی ۲۴ کلمه‌ای شما را نجات می‌دهد. هیچ‌کس، حتی ما، نمی‌تواند آن را بازیابی کند.")
         if (busy) Notice("در حال ساخت کلیدها… ممکن است چند ثانیه طول بکشد.")
-        PrimaryButton(if (busy) "لطفاً صبر کنید…" else "ادامه", enabled = ok && !busy) { onSubmit(pass.toCharArray()) }
+        PrimaryButton(if (busy) "لطفاً صبر کنید…" else "ادامه", enabled = ok && !busy) {
+            val secret = pass.toCharArray()
+            pass = ""
+            confirm = ""
+            onSubmit(secret)
+        }
     }
 }
 
@@ -372,7 +377,11 @@ fun RecoveryEntryScreen(message: String?, busy: Boolean, onSubmit: (String) -> U
             )
         }
         if (message != null) Notice(message, error = true)
-        PrimaryButton(if (busy) "در حال بررسی…" else "بازیابی", enabled = phrase.isNotBlank() && !busy) { onSubmit(phrase) }
+        PrimaryButton(if (busy) "در حال بررسی…" else "بازیابی", enabled = phrase.isNotBlank() && !busy) {
+            val submitted = phrase
+            phrase = ""
+            onSubmit(submitted)
+        }
         TextLink("بازگشت", onBack)
     }
 }
@@ -391,6 +400,11 @@ fun ResetPasswordScreen(busy: Boolean, onSubmit: (CharArray) -> Unit) {
             if (pass.length < MIN_MASTER_LENGTH) "حداقل ${MIN_MASTER_LENGTH.fa()} نویسه." else if (pass != confirm && confirm.isNotEmpty()) "دو رمز یکسان نیستند." else "",
             color = c.muted, fontSize = 13.sp,
         )
-        PrimaryButton(if (busy) "لطفاً صبر کنید…" else "ذخیره", enabled = ok && !busy) { onSubmit(pass.toCharArray()) }
+        PrimaryButton(if (busy) "لطفاً صبر کنید…" else "ذخیره", enabled = ok && !busy) {
+            val secret = pass.toCharArray()
+            pass = ""
+            confirm = ""
+            onSubmit(secret)
+        }
     }
 }

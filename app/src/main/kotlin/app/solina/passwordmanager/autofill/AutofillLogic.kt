@@ -68,9 +68,35 @@ object FieldClassifier {
 }
 
 object DomainMatcher {
+    /**
+     * پسوندهای عمومی/میزبانی مشترک رایج تا هنگام نبود PSL کامل، ثبت دامنه‌های چندلایه عمومی
+     * (مثل co.uk، com.ir یا github.io) باعث تطبیق سایر دامنه‌ها نشود.
+     */
+    private val KNOWN_MULTI_LABEL_PUBLIC_SUFFIXES = setOf(
+        "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "net.uk",
+        "co.ir", "ac.ir", "org.ir", "gov.ir", "net.ir", "sch.ir", "id.ir",
+        "com.au", "net.au", "org.au", "edu.au", "gov.au",
+        "co.jp", "ne.jp", "or.jp", "ac.jp", "go.jp",
+        "co.in", "net.in", "org.in", "gov.in",
+        "com.br", "org.br", "com.tr", "com.cn", "com.mx", "co.kr", "co.za", "co.nz",
+        "github.io", "gitlab.io", "pages.dev", "vercel.app", "netlify.app",
+        "herokuapp.com", "blogspot.com", "wordpress.com", "appspot.com",
+        "firebaseapp.com", "web.app", "cloudfront.net", "amazonaws.com", "azurewebsites.net",
+    )
+
+    private val IPV4_REGEX = Regex("""^\d{1,3}(\.\d{1,3}){3}$""")
+
+    fun isPublicSuffix(host: String): Boolean {
+        val h = host.trim().lowercase().trimEnd('.')
+        if (h.isEmpty() || h == "localhost") return false
+        if (IPV4_REGEX.matches(h) || ':' in h) return false
+        return '.' !in h || h in KNOWN_MULTI_LABEL_PUBLIC_SUFFIXES
+    }
+
     /** "https://www.GitHub.com:443/login" ← "github.com". */
     fun normalizeHost(input: String): String {
         var s = input.trim().lowercase()
+        if (s.startsWith("androidapp://")) return ""
         s = s.substringAfter("://", s)
         s = s.substringBefore('/').substringBefore('?').substringBefore('#')
         s = s.substringAfterLast('@')
@@ -79,11 +105,13 @@ object DomainMatcher {
         return s.removePrefix("www.")
     }
 
-    /** برابر یا زیردامنه؛ «evil-github.com» و «github.com.evil.com» با «github.com» مطابق نیستند. */
+    /** برابر یا زیردامنه؛ «evil-github.com»، «github.com.evil.com» و پسوندهای عمومی مطابق نیستند. */
     fun hostMatches(itemWebsite: String, requestHost: String): Boolean {
         val item = normalizeHost(itemWebsite)
         val req = normalizeHost(requestHost)
-        if (item.isEmpty() || req.isEmpty() || !item.contains('.') && item != "localhost") return false
+        if (item.isEmpty() || req.isEmpty()) return false
+        if (item != "localhost" && isPublicSuffix(item)) return false
+        if (IPV4_REGEX.matches(item)) return req == item
         return req == item || req.endsWith(".$item")
     }
 }
@@ -94,22 +122,49 @@ object AutofillMatcher {
 
     fun logins(items: List<VaultItem>) = items.filter { it.payload.kind == ItemKind.Login && (it.payload.username.isNotEmpty() || it.payload.password.isNotEmpty()) }
 
+    private fun extractPackageBinding(website: String): Pair<String, String?>? {
+        val raw = website.trim().lowercase()
+        if (!raw.startsWith("androidapp://")) return null
+        val rest = raw.removePrefix("androidapp://").substringBefore('/')
+        val pkg = rest.substringBefore('@').trim()
+        val cert = rest.substringAfter('@', "").trim().takeIf { it.isNotEmpty() }
+        if (pkg.isEmpty()) return null
+        return pkg to cert
+    }
+
     /**
-     * صفحهٔ وب: فقط ورودی‌هایی که دامنه‌شان مطابقت دارد (سخت‌گیرانه، برای جلوگیری از فیشینگ).
-     * برنامهٔ بومی (بدون دامنه): ورودی‌هایی که عنوان یا سایتشان با بخش‌های نام بسته می‌خواند؛ اگر هیچ‌کدام نبود،
-     * همهٔ ورودی‌ها پیشنهاد می‌شوند تا کاربر خودش آگاهانه انتخاب کند.
+     * صفحهٔ وب: فقط ورودی‌هایی که دامنه‌شان با رعایت مرز پسوند عمومی مطابقت دارد.
+     * برنامهٔ بومی (بدون دامنه): فقط اتصال صریح `androidapp://<pkg>` (با بررسی اختیاری `@<sha256>`)
+     * یا تطبیق با بخش‌های غیرعمومی نام بسته. هرگز کل ورودی‌های خزانه به‌عنوان fallback افشا نمی‌شوند.
      */
-    fun match(items: List<VaultItem>, webHost: String?, packageName: String?): List<VaultItem> {
+    fun match(
+        items: List<VaultItem>,
+        webHost: String?,
+        packageName: String?,
+        packageCertSha256: String? = null,
+    ): List<VaultItem> {
         val all = logins(items)
         if (!webHost.isNullOrBlank()) {
             return all.filter { DomainMatcher.hostMatches(it.payload.website, webHost) }.take(MAX_SUGGESTIONS)
         }
-        val parts = packageName.orEmpty().lowercase().split('.').filter { it.length >= 4 && it !in GENERIC }
-        val byName = all.filter { i ->
+        val pkg = packageName?.trim()?.lowercase().orEmpty()
+        if (pkg.isEmpty()) return emptyList()
+
+        val explicitMatches = all.filter { item ->
+            val binding = extractPackageBinding(item.payload.website) ?: return@filter false
+            if (binding.first != pkg) return@filter false
+            val expectedCert = binding.second ?: return@filter true
+            packageCertSha256 != null && expectedCert == packageCertSha256.lowercase()
+        }
+        if (explicitMatches.isNotEmpty()) return explicitMatches.take(MAX_SUGGESTIONS)
+
+        val parts = pkg.split('.').filter { it.length >= 4 && it !in GENERIC }
+        if (parts.isEmpty()) return emptyList()
+        return all.filter { i ->
+            if (i.payload.website.trim().lowercase().startsWith("androidapp://")) return@filter false
             val hay = (i.payload.title + " " + i.payload.website).lowercase()
             parts.any { hay.contains(it) }
-        }
-        return (byName.ifEmpty { all }).take(MAX_SUGGESTIONS)
+        }.take(MAX_SUGGESTIONS)
     }
 
     private val GENERIC = setOf("android", "mobile", "app", "apps", "main", "client", "google", "com", "org", "net")

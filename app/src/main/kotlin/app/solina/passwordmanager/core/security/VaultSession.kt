@@ -16,13 +16,22 @@ class VaultSession(private val clock: () -> Long = System::currentTimeMillis) {
     private val _unlocked = MutableStateFlow(false)
     val unlocked: StateFlow<Boolean> = _unlocked.asStateFlow()
 
+    private val _requirePasswordReset = MutableStateFlow(false)
+    val requirePasswordReset: StateFlow<Boolean> = _requirePasswordReset.asStateFlow()
+
     @Synchronized
-    fun unlock(key: ByteArray) {
+    fun unlock(key: ByteArray, requireReset: Boolean = false) {
         vaultKey?.wipe()
         vaultKey = key.copyOf()
         key.wipe()
         backgroundedAt = null
+        _requirePasswordReset.value = requireReset
         _unlocked.value = true
+    }
+
+    @Synchronized
+    fun clearPasswordResetRequirement() {
+        _requirePasswordReset.value = false
     }
 
     @Synchronized
@@ -30,6 +39,7 @@ class VaultSession(private val clock: () -> Long = System::currentTimeMillis) {
         vaultKey?.wipe()
         vaultKey = null
         backgroundedAt = null
+        _requirePasswordReset.value = false
         _unlocked.value = false
     }
 

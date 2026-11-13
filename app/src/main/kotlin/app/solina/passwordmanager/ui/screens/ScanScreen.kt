@@ -32,7 +32,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +66,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 fun ScanScreen(activity: MainActivity, onResult: (String) -> Unit, onCancel: () -> Unit, onToast: (String) -> Unit) {
     val c = Solina.colors
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var denied by remember { mutableStateOf(false) }
     val done = remember { AtomicBoolean(false) }
@@ -93,8 +98,12 @@ fun ScanScreen(activity: MainActivity, onResult: (String) -> Unit, onCancel: () 
             handler = { resultCode, data ->
                 val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
                 if (uri != null) {
-                    val text = runCatching { QrDecoder.decodeImage(ctx.contentResolver, uri) }.getOrNull()
-                    if (text != null) deliver(text) else onToast("در این عکس QR پیدا نشد")
+                    scope.launch {
+                        val text = withContext(Dispatchers.IO) {
+                            runCatching { QrDecoder.decodeImage(ctx.contentResolver, uri) }.getOrNull()
+                        }
+                        if (text != null) deliver(text) else onToast("در این عکس QR پیدا نشد")
+                    }
                 }
             },
             onFail = { onToast("انتخاب‌گر عکس در دسترس نیست") },
@@ -159,9 +168,12 @@ private fun CameraPreview(onText: (String) -> Unit) {
 
     DisposableEffect(lifecycleOwner) {
         val future = ProcessCameraProvider.getInstance(ctx)
+        val disposed = AtomicBoolean(false)
         var provider: ProcessCameraProvider? = null
         future.addListener({
-            val p = future.get()
+            if (disposed.get()) return@addListener
+            val p = runCatching { future.get() }.getOrNull() ?: return@addListener
+            if (disposed.get()) return@addListener
             provider = p
             val preview = Preview.Builder().build().also { it.setSurfaceProvider(view.surfaceProvider) }
             val analysis = ImageAnalysis.Builder()
@@ -188,6 +200,7 @@ private fun CameraPreview(onText: (String) -> Unit) {
             }
         }, ContextCompat.getMainExecutor(ctx))
         onDispose {
+            disposed.set(true)
             provider?.unbindAll()
             executor.shutdown()
         }
