@@ -28,15 +28,15 @@ Last updated: 2026-11-13
 
 ## Current blockers (ordered)
 
-1. P1: Complete SLNB v2 verification: parser fuzz/size limits, Room transaction instrumentation, new-device and physical-device tests; SLNB v1 remains password-only.
-2. P1: Verify the new all-or-nothing batch persistence contract against the real Room database and failure injection.
-3. P1: Verify staged SAF sync writes on actual providers and test cross-device concurrent writers; provider rename guarantees vary.
-4. P1: Correct UI success messages after failed storage operations.
-5. P1: Enforce PSL/eTLD+1 and package-signature checks in Autofill; remove unknown-app all-credential fallback.
-6. P2: Do not report Autofill save success while save is unsupported.
-7. P2: Align HOTP claims with actual TOTP-only implementation.
-8. P2: Reconcile planned identity item type with the implemented Login/Card/Note model.
-9. P2: Improve CI supply-chain controls and verify wrapper/build reproducibility.
+1. P1: Verify persisted SAF read/write permission handling and header-update failure reporting; Android URI grants and local configuration must not silently diverge.\n2. P1: Complete SLNB v2 verification: parser fuzz/size limits, Room transaction instrumentation, new-device and physical-device tests; SLNB v1 remains password-only.
+3. P1: Verify the new all-or-nothing batch persistence contract against the real Room database and failure injection.
+4. P1: Verify staged SAF sync writes on actual providers and test cross-device concurrent writers; provider rename guarantees vary.
+5. P1: Correct UI success messages after failed storage operations.
+6. P1: Enforce PSL/eTLD+1 and package-signature checks in Autofill; remove unknown-app all-credential fallback.
+7. P2: Do not report Autofill save success while save is unsupported.
+8. P2: Align HOTP claims with actual TOTP-only implementation.
+9. P2: Reconcile planned identity item type with the implemented Login/Card/Note model.
+10. P2: Improve CI supply-chain controls and verify wrapper/build reproducibility.
 
 ## CI baseline
 
@@ -44,7 +44,7 @@ Last updated: 2026-11-13
 - Backup/password-cleanup fix run #66: **success** — unit tests, debug APK, unsigned/minified release build, Android Lint and artifact uploads all passed.
 - [Run #55](https://github.com/Solina-Projects/Solina-Password-Manager/actions/runs/43340163866) · [Run #66](https://github.com/Solina-Projects/Solina-Password-Manager/actions/runs/43346057262).
 - This validates the current branch build and automated checks; it is not a physical-device security assessment.
-- Phase 2 is closed. SLNB v2 codec and Android UI integration are implemented on `preview/rebuild-phase-01`; CI run #43367372453 passed for codec and run #43369298095 passed for UI integration. Phase 5 backup/restore regression tests and transactional batch-import changes passed CI run #43370732657. Phase 6 adds staged SAF writes and retry repair; its CI result is pending. M6/M8 and release remain unapproved.
+- Phase 2 is closed. SLNB v2 codec and Android UI integration are implemented on `preview/rebuild-phase-01`; CI run #43367372453 passed for codec and run #43369298095 passed for UI integration. Phase 5 backup/restore regression tests and transactional batch-import changes passed CI run #43370732657. Phase 6 adds staged SAF writes and retry repair; CI run #43372548383 passed. M6/M8 and release remain unapproved.
 - CI currently installs Gradle 8.10.2 directly; no Gradle Wrapper files were found.
 
 ## Repository governance observations
@@ -58,7 +58,7 @@ Last updated: 2026-11-13
 - The version catalog includes AndroidX, Compose, Room, Bouncy Castle, ZXing and CameraX; a machine-readable dependency vulnerability/SBOM report has not yet been generated.
 - The checked-in `LICENSE` is GPL-3.0 text; confirm the intended copyright holder and align README notices that claim GPL-3.0-or-later before release.
 
-## Reporting rule
+## Phase 7 — SAF permission persistence (in progress)\n\n- `SyncManager.persist()` now requires a durable Android read/write URI grant before saving the selected tree configuration. Existing persisted flags are reused; missing flags are acquired explicitly.\n- Configuration uses synchronous `commit()` and reports failure instead of silently applying a folder URI. Newly acquired flags are released if saving preferences fails.\n- Unit coverage for the pure missing-grant calculation and Android picker/provider validation are required before closing this phase.\n\n## Reporting rule
 
 At the end of every phase, update this file and `docs/MASTER_PROMPT.md` with:
 1. What was implemented.

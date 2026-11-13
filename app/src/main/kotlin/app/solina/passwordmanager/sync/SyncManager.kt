@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-data class SyncStatus(
+internal fun missingUriPermissionFlags(requiredFlags: Int, persistedFlags: Int): Int =\n    requiredFlags and persistedFlags.inv()\n\ndata class SyncStatus(
     val configured: Boolean = false,
     val folderName: String = "",
     val syncing: Boolean = false,
@@ -61,10 +61,30 @@ class SyncManager(
     }
 
     private fun persist(uri: Uri, kind: String) {
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        val resolver = context.contentResolver
+        val requiredFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val existing = resolver.persistedUriPermissions.firstOrNull { it.uri == uri }
+        val existingFlags =
+            (if (existing?.isReadPermission == true) Intent.FLAG_GRANT_READ_URI_PERMISSION else 0) or
+            (if (existing?.isWritePermission == true) Intent.FLAG_GRANT_WRITE_URI_PERMISSION else 0)
+        val newlyGrantedFlags = missingUriPermissionFlags(requiredFlags, existingFlags)
+
+        // Do not claim the folder is configured unless Android confirms durable read/write access.
+        if (newlyGrantedFlags != 0) {
+            resolver.takePersistableUriPermission(uri, newlyGrantedFlags)
         }
-        prefs.edit().putString("tree", uri.toString()).putString("kind", kind).putLong("last", 0).apply()
+
+        val saved = prefs.edit()
+            .putString("tree", uri.toString())
+            .putString("kind", kind)
+            .putLong("last", 0)
+            .commit()
+        if (!saved) {
+            if (newlyGrantedFlags != 0) {
+                runCatching { resolver.releasePersistableUriPermission(uri, newlyGrantedFlags) }
+            }
+            throw IllegalStateException("Could not persist sync folder configuration")
+        }
     }
 
     /** اتصال یک دستگاهِ دارای خزانه به پوشه (ایجاد یا تأیید vault.hdr). */
