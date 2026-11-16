@@ -62,12 +62,13 @@ import app.solina.passwordmanager.core.storage.ItemKind
 import app.solina.passwordmanager.core.storage.ItemPayload
 import app.solina.passwordmanager.core.storage.SecurityReport
 import app.solina.passwordmanager.core.storage.VaultItem
+import app.solina.passwordmanager.ui.components.AnimatedFilterRow
 import app.solina.passwordmanager.ui.components.Card
-import app.solina.passwordmanager.ui.components.FilterChip
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.ItemAvatar
 import app.solina.passwordmanager.ui.components.Mono
 import app.solina.passwordmanager.ui.components.Pill
+import app.solina.passwordmanager.ui.components.RollingTotpCode
 import app.solina.passwordmanager.ui.components.SIcon
 import app.solina.passwordmanager.ui.components.StrengthBar
 import app.solina.passwordmanager.ui.components.TotpRing
@@ -255,15 +256,7 @@ fun HomeScreen(
                                         c.primary.copy(alpha = 0.2f), c.text,
                                     )
                                 }
-                                Text(
-                                    Totp.group(code),
-                                    color = c.primary,
-                                    fontFamily = Mono,
-                                    fontSize = 22.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Left,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
+                                RollingTotpCode(code, c.primary, 22.sp, modifier = Modifier.fillMaxWidth())
                             }
                         }
                     }
@@ -391,9 +384,7 @@ fun VaultScreen(
                     )
                 }
             }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                filters.forEachIndexed { i, label -> FilterChip(label, filter == i) { filter = i } }
-            }
+            AnimatedFilterRow(filters, filter) { filter = it }
             if (unreadable > 0) {
                 Card(background = c.secondaryContainer, padding = 12.dp) {
                     Text(
@@ -553,7 +544,7 @@ fun DetailScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
                         Text("کد یک‌بارمصرف", color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 12.sp)
-                        Text(Totp.group(code), color = c.onPrimaryContainer, fontFamily = Mono, fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Left)
+                        RollingTotpCode(code, c.onPrimaryContainer, 28.sp)
                     }
                     TotpRing(left, p.totpPeriod, 44.dp, faSecondsLeft(now, p.totpPeriod), if (left <= 5000) c.secondary else c.primary, c.primary.copy(alpha = 0.2f), c.onPrimaryContainer)
                     IconAction(SolinaIcons.Copy, "کپی کد", tint = c.onPrimaryContainer) {
@@ -685,16 +676,7 @@ fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(p.title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         if (p.username.isNotBlank()) Text(p.username, color = c.muted, fontSize = 13.sp, fontFamily = Mono, textAlign = TextAlign.Left)
-                        Text(
-                            Totp.group(code),
-                            color = accent,
-                            fontFamily = Mono,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp,
-                            textAlign = TextAlign.Left,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
+                        RollingTotpCode(code, accent, 32.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 4.dp))
                         if (urgent) {
                             Text(
                                 "بعدی: " + Totp.group(codeFor(p, now, p.totpPeriod * 1000L).orEmpty()),
@@ -1044,6 +1026,6 @@ fun SettingsScreen(
                 Text("• باز کردن با اثر انگشت از Android Keystore استفاده می‌کند و با افزودن اثر انگشت جدید باطل می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
             }
         }
-        Text("Solina 0.0.15-alpha9", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina 0.0.16-alpha10", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }

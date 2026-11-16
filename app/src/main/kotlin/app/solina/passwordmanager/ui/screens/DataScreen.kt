@@ -1,17 +1,26 @@
 package app.solina.passwordmanager.ui.screens
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntOffset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,12 +28,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,6 +46,7 @@ import app.solina.passwordmanager.ui.components.Card
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
+import kotlin.math.roundToInt
 
 enum class DataStep { Menu, ExportPassword, RestorePassword, ImportPassword }
 
@@ -48,17 +62,54 @@ private fun Header(title: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun BigButton(text: String, enabled: Boolean = true, filled: Boolean = true, onClick: () -> Unit) {
+private fun BigButton(text: String, enabled: Boolean = true, filled: Boolean = true, busy: Boolean = false, onClick: () -> Unit) {
     val c = Solina.colors
+    var widthPx by remember { mutableIntStateOf(0) }
     Box(
         Modifier
             .fillMaxWidth()
             .height(56.dp)
+            .onSizeChanged { widthPx = it.width }
             .clip(RoundedCornerShape(28.dp))
             .background(if (!enabled) c.divider else if (filled) c.primary else c.container)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Text(text, color = if (filled && enabled) c.onPrimary else c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+    ) {
+        Text(text, color = if (filled && enabled) c.onPrimary else c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        // حرکت (با الهام از «Action button» و «File transfer» در D3 Motion): وقتی
+        // دکمه مشغول است، یک نوار لغزنده پایین دکمه می‌دود. درصد واقعی نداریم
+        // (رمزگذاری یک مرحله است) پس درصد جعلی نشان نمی‌دهیم.
+        if (busy) {
+            Box(Modifier.align(Alignment.BottomStart)) {
+                BusySlideBar(widthPx, if (filled) c.onPrimary else c.primary)
+            }
+        }
+    }
+}
+
+/** نوار لغزندهٔ «در حال انجام» داخل دکمهٔ مشغول. */
+@Composable
+private fun BusySlideBar(buttonWidthPx: Int, color: Color) {
+    val density = LocalDensity.current
+    val slide by rememberInfiniteTransition(label = "busy-slide").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "busy-slide-value",
+    )
+    if (buttonWidthPx <= 0) return
+    val barWidthPx = (buttonWidthPx * 0.45f).roundToInt()
+    val xPx = (slide * (buttonWidthPx - barWidthPx)).roundToInt()
+    Box(
+        Modifier
+            .offset { IntOffset(xPx, 0) }
+            .size(width = with(density) { barWidthPx.toDp() }, height = 4.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(color.copy(alpha = 0.85f)),
+    )
 }
 
 /** بکاپ رمزشده، بازیابی و ایمپورت. انتخاب فایل را فراخواننده با Storage Access Framework انجام می‌دهد (بدون مجوز). */
@@ -130,7 +181,7 @@ fun DataScreen(
                 if (tooShort) Text("رمز کوتاه است.", color = c.secondary, fontSize = 13.sp)
                 if (mismatch) Text("دو رمز یکسان نیستند.", color = c.secondary, fontSize = 13.sp)
                 if (message != null) Text(message, color = c.secondary, fontSize = 14.sp)
-                BigButton(if (busy) "در حال رمزگذاری…" else "ساخت و ذخیرهٔ فایل", enabled = !busy && pw.length >= MIN_BACKUP_PASSWORD && pw == pw2) {
+                BigButton(if (busy) "در حال رمزگذاری…" else "ساخت و ذخیرهٔ فایل", enabled = !busy && pw.length >= MIN_BACKUP_PASSWORD && pw == pw2, busy = busy) {
                     onSubmitExport(pw.toCharArray())
                 }
             }
@@ -140,7 +191,7 @@ fun DataScreen(
                 Text("این فایل رمزشده است. رمزی را که هنگام خروجی گرفتن از آن برنامه انتخاب کرده بودید وارد کنید. رمز جایی ذخیره نمی‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Field("رمز فایل", pw, { pw = it }, hidden = true)
                 if (message != null) Text(message, color = c.secondary, fontSize = 14.sp, lineHeight = 24.sp)
-                BigButton(if (busy) "در حال بازگشایی…" else "وارد کردن", enabled = !busy && pw.isNotEmpty()) { onSubmitImport(pw.toCharArray()) }
+                BigButton(if (busy) "در حال بازگشایی…" else "وارد کردن", enabled = !busy && pw.isNotEmpty(), busy = busy) { onSubmitImport(pw.toCharArray()) }
             }
 
             DataStep.RestorePassword -> {
@@ -148,7 +199,7 @@ fun DataScreen(
                 Text("رمزی را که هنگام ساخت این بکاپ انتخاب کرده بودید وارد کنید.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Field("رمز بکاپ", pw, { pw = it }, hidden = true)
                 if (message != null) Text(message, color = c.secondary, fontSize = 14.sp, lineHeight = 24.sp)
-                BigButton(if (busy) "در حال بازگشایی…" else "بازیابی", enabled = !busy && pw.isNotEmpty()) { onSubmitRestore(pw.toCharArray()) }
+                BigButton(if (busy) "در حال بازگشایی…" else "بازیابی", enabled = !busy && pw.isNotEmpty(), busy = busy) { onSubmitRestore(pw.toCharArray()) }
             }
         }
         Spacer(Modifier.height(32.dp))

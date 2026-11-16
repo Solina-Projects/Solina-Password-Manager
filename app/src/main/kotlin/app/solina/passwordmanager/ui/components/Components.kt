@@ -8,6 +8,12 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -18,6 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,6 +34,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -182,10 +194,30 @@ fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** حلقهٔ شمارش معکوس TOTP؛ در ۵ ثانیهٔ آخر رنگ هشدار می‌گیرد و عدد باقی‌مانده هم نمایش داده می‌شود. */
+/**
+ * حلقهٔ شمارش معکوس TOTP؛ در ۵ ثانیهٔ آخر رنگ هشدار می‌گیرد و عدد باقی‌مانده هم نمایش داده می‌شود.
+ *
+ * حرکت (با الهام از کارت «Two-factor verification» در D3 Motion): کسر باقی‌مانده
+ * به‌جای پرش هر ۲۵۰ میلی‌ثانیه، نرم دنبال می‌شود؛ در اولین نمایش هم حلقه از
+ * صفر تا مقدار واقعی پر می‌شود (برای کارت «سلامت خزانه» در خانه یعنی جاروی امتیاز).
+ */
 @Composable
 fun TotpRing(remainingMillis: Long, periodSeconds: Int, size: Dp, faSeconds: String, color: Color, track: Color, textColor: Color) {
-    val fraction = remainingMillis.toFloat() / (periodSeconds * 1000f)
+    val targetFraction = (remainingMillis.toFloat() / (periodSeconds * 1000f)).coerceIn(0f, 1f)
+    val animatedFraction = remember { Animatable(0f) }
+    var firstSweep by remember { mutableStateOf(true) }
+    LaunchedEffect(targetFraction) {
+        // مدت اولین جارو را همین‌جا قفل می‌کنیم، نه بعد از تمام شدنش؛ وگرنه
+        // تیک هر ۲۵۰ میلی‌ثانیه انیمیشن ۷۰۰ میلی‌ثانیه‌ای را لغو می‌کند و حلقه
+        // همیشه عقب می‌ماند.
+        val sweepMillis = if (firstSweep) 700 else 250
+        firstSweep = false
+        animatedFraction.animateTo(
+            targetFraction,
+            animationSpec = tween(durationMillis = sweepMillis, easing = LinearEasing),
+        )
+    }
+    val fraction = animatedFraction.value
     Box(
         modifier = Modifier
             .size(size)
@@ -211,18 +243,34 @@ fun StrengthBar(level: Int, label: String) {
         level >= 3 -> c.primary
         else -> c.secondary
     }
+    val animatedColor by animateColorAsState(targetValue = color, animationSpec = tween(durationMillis = 300), label = "strength-color")
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f, fill = false)) {
+            // حرکت (با الهام از «Habit progress» در D3 Motion): هر خانه با کمی تأخیر
+            // نسبت به قبلی پر می‌شود، مثل آبشاری که پلکانی بالا می‌رود.
             repeat(4) { i ->
+                val filled = i < level
+                val fill by animateFloatAsState(
+                    targetValue = if (filled) 1f else 0f,
+                    animationSpec = tween(durationMillis = 350, delayMillis = i * 70, easing = FastOutSlowInEasing),
+                    label = "strength-segment",
+                )
                 Box(
                     Modifier
                         .size(width = 28.dp, height = 6.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(if (i < level) color else c.divider),
-                )
+                        .background(c.divider),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(fill)
+                            .fillMaxHeight()
+                            .background(animatedColor),
+                    )
+                }
             }
         }
-        Text(label, color = color, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Text(label, color = animatedColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }
 

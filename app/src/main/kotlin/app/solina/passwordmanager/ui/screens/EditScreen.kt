@@ -41,10 +41,10 @@ import app.solina.passwordmanager.core.Base32
 import app.solina.passwordmanager.core.PasswordGenerator
 import app.solina.passwordmanager.core.storage.ItemKind
 import app.solina.passwordmanager.core.storage.ItemPayload
+import app.solina.passwordmanager.ui.components.AnimatedFilterRow
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.Mono
 import app.solina.passwordmanager.ui.components.SIcon
-import app.solina.passwordmanager.ui.components.FilterChip
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 
@@ -123,11 +123,21 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
         }
 
         if (isNew) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip("ورود", kind == ItemKind.Login) { kind = ItemKind.Login }
-                FilterChip("کارت", kind == ItemKind.Card) { kind = ItemKind.Card }
-                FilterChip("یادداشت", kind == ItemKind.Note) { kind = ItemKind.Note }
-            }
+            AnimatedFilterRow(
+                labels = listOf("ورود", "کارت", "یادداشت"),
+                selected = when (kind) {
+                    ItemKind.Login -> 0
+                    ItemKind.Card -> 1
+                    ItemKind.Note -> 2
+                },
+                onSelect = {
+                    kind = when (it) {
+                        0 -> ItemKind.Login
+                        1 -> ItemKind.Card
+                        else -> ItemKind.Note
+                    }
+                },
+            )
         }
 
         Field("عنوان", title, { title = it }, error = titleError)
