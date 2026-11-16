@@ -1,7 +1,7 @@
 package app.solina.passwordmanager.ui.components
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
