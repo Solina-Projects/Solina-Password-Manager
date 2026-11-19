@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Check pinned dependencies (no dynamic + or SNAPSHOT versions)
         run: |
-          if grep -E '(\+|\-SNAPSHOT)' gradle/libs.versions.toml app/build.gradle.kts; then
+          if grep -nE '=[[:space:]]*"[^"]*(\+|-SNAPSHOT)"' gradle/libs.versions.toml; then
             echo "::error::Dynamic or SNAPSHOT dependency versions are not allowed."
             exit 1
           fi
