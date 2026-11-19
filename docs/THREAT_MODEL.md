@@ -61,7 +61,7 @@
 - [x] نگهبان‌های رگرسیون برای مجوز، export و لاگ
 - [x] ساخت release با R8 در CI
 - [x] lint بدون خطا و مسدودکننده در CI
-- [x] اسکن وابستگی (Dependabot + `actions/dependency-review-action` در PRها)
+- [x] اسکن و بهداشت وابستگی (Dependabot + بررسی پین‌بودن نسخه‌ها و Guard/Fuzz در `.github/workflows/security.yml`)
 - [x] CodeQL (`.github/workflows/security.yml`)
 - [ ] تست روی چند دستگاه واقعی (Keystore، بایومتریک، Autofill در مرورگرهای مختلف)
 - [ ] امضای release و ساخت بازتولیدپذیر
