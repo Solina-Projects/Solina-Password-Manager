@@ -4,9 +4,16 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:pathData="M54 27C62 31 70 33 77 34V53C77 67 68 76 54 82C40 76 31 67 31 53V34C38 33 46 31 54 27z M54 46.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11z M52 58.5h4v9h-4z"
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="1"
-        android:fillType="evenOdd"/>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.74"
+        android:scaleY="0.74"
+        android:translateY="-10">
+        <path
+            android:pathData="M54 27C62 31 70 33 77 34V53C77 67 68 76 54 82C40 76 31 67 31 53V34C38 33 46 31 54 27z M54 46.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11z M52 58.5h4v9h-4z"
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="1"
+            android:fillType="evenOdd"/>
+    </group>
 </vector>
