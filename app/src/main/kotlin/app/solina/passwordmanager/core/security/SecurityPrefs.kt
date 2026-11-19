@@ -5,28 +5,52 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class AutoLockOption(val millis: Long, val label: String) {
-    Immediate(0L, "فوری پس از خروج"),
-    ThirtySeconds(30_000L, "۳۰ ثانیه"),
-    OneMinute(60_000L, "۱ دقیقه"),
-    FiveMinutes(300_000L, "۵ دقیقه");
+enum class AutoLockOption(val millis: Long, val labelFa: String, val labelEn: String) {
+    Immediate(0L, "فوری پس از خروج", "Immediately on leave"),
+    ThirtySeconds(30_000L, "۳۰ ثانیه", "30 seconds"),
+    OneMinute(60_000L, "۱ دقیقه", "1 minute"),
+    FiveMinutes(300_000L, "۵ دقیقه", "5 minutes");
+
+    val label: String get() = labelFa
 
     companion object {
         fun parse(name: String?): AutoLockOption = entries.firstOrNull { it.name == name } ?: OneMinute
     }
 }
 
-enum class ClipboardClearOption(val millis: Long, val label: String) {
-    FifteenSeconds(15_000L, "۱۵ ثانیه"),
-    ThirtySeconds(30_000L, "۳۰ ثانیه"),
-    SixtySeconds(60_000L, "۶۰ ثانیه");
+enum class ClipboardClearOption(val millis: Long, val labelFa: String, val labelEn: String) {
+    FifteenSeconds(15_000L, "۱۵ ثانیه", "15 seconds"),
+    ThirtySeconds(30_000L, "۳۰ ثانیه", "30 seconds"),
+    SixtySeconds(60_000L, "۶۰ ثانیه", "60 seconds");
+
+    val label: String get() = labelFa
 
     companion object {
         fun parse(name: String?): ClipboardClearOption = entries.firstOrNull { it.name == name } ?: ThirtySeconds
     }
 }
 
-/** تنظیمات امنیتی قابل تغییر توسط کاربر (مهلت قفل خودکار و پاک‌سازی کلیپ‌بورد). */
+enum class ThemeMode(val labelFa: String, val labelEn: String) {
+    System("مطابق سیستم", "System default"),
+    Light("روشن", "Light"),
+    Dark("تاریک", "Dark"),
+    Amoled("مشکی AMOLED", "AMOLED Black");
+
+    companion object {
+        fun parse(name: String?): ThemeMode = entries.firstOrNull { it.name == name } ?: System
+    }
+}
+
+enum class AppLanguage(val label: String) {
+    FA("فارسی"),
+    EN("English");
+
+    companion object {
+        fun parse(name: String?): AppLanguage = entries.firstOrNull { it.name == name } ?: FA
+    }
+}
+
+/** تنظیمات امنیتی و شخصی‌سازی کاربر (قفل خودکار، کلیپ‌بورد، تم و زبان). */
 class SecurityPrefs(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("security_prefs", Context.MODE_PRIVATE)
 
@@ -35,6 +59,12 @@ class SecurityPrefs(context: Context) {
 
     private val _clipboardClear = MutableStateFlow(ClipboardClearOption.parse(prefs.getString("clipboard_clear", null)))
     val clipboardClear: StateFlow<ClipboardClearOption> = _clipboardClear.asStateFlow()
+
+    private val _themeMode = MutableStateFlow(ThemeMode.parse(prefs.getString("theme_mode", null)))
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    private val _language = MutableStateFlow(AppLanguage.parse(prefs.getString("language", null)))
+    val language: StateFlow<AppLanguage> = _language.asStateFlow()
 
     fun autoLockMillis(): Long = _autoLock.value.millis
     fun clipboardClearMillis(): Long = _clipboardClear.value.millis
@@ -49,9 +79,21 @@ class SecurityPrefs(context: Context) {
         _clipboardClear.value = option
     }
 
+    fun setThemeMode(mode: ThemeMode) {
+        prefs.edit().putString("theme_mode", mode.name).apply()
+        _themeMode.value = mode
+    }
+
+    fun setLanguage(lang: AppLanguage) {
+        prefs.edit().putString("language", lang.name).apply()
+        _language.value = lang
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
         _autoLock.value = AutoLockOption.OneMinute
         _clipboardClear.value = ClipboardClearOption.ThirtySeconds
+        _themeMode.value = ThemeMode.System
+        _language.value = AppLanguage.FA
     }
 }

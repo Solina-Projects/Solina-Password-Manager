@@ -44,11 +44,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.solina.passwordmanager.ui.components.Card
 import app.solina.passwordmanager.ui.components.IconAction
+import app.solina.passwordmanager.core.backup.BackupHeaderInfo
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 import kotlin.math.roundToInt
 
-enum class DataStep { Menu, ExportPassword, RestorePassword, ImportPassword }
+enum class DataStep { Menu, ExportPassword, ExportAuthPassword, RestorePassword, ImportPassword }
 
 private const val MIN_BACKUP_PASSWORD = 10
 
@@ -119,9 +120,13 @@ fun DataScreen(
     busy: Boolean,
     message: String?,
     itemCount: Int,
+    authCount: Int = 0,
+    restoreHeaderInfo: BackupHeaderInfo? = null,
     onBack: () -> Unit,
     onStartExport: () -> Unit,
     onSubmitExport: (CharArray) -> Unit,
+    onStartAuthExport: () -> Unit = {},
+    onSubmitAuthExport: (CharArray) -> Unit = {},
     onPickRestore: () -> Unit,
     onSubmitRestore: (CharArray) -> Unit,
     onPickImport: () -> Unit,
@@ -146,7 +151,8 @@ fun DataScreen(
                                 "این رمز را فراموش کنید، بکاپ قابل‌بازیابی نیست. فایل را جایی امن (فضای ابری یا حافظهٔ جدا) نگه دارید.",
                             color = c.muted, fontSize = 14.sp, lineHeight = 24.sp,
                         )
-                        BigButton("ساخت بکاپ", enabled = itemCount > 0, onClick = onStartExport)
+                        BigButton("ساخت بکاپ کامل خزانه", enabled = itemCount > 0, onClick = onStartExport)
+                        BigButton("بکاپ مستقل Authenticator (${authCount} حساب)", filled = false, enabled = authCount > 0, onClick = onStartAuthExport)
                         BigButton("بازیابی از بکاپ Solina", filled = false, onClick = onPickRestore)
                     }
                 }
@@ -194,8 +200,31 @@ fun DataScreen(
                 BigButton(if (busy) "در حال بازگشایی…" else "وارد کردن", enabled = !busy && pw.isNotEmpty(), busy = busy) { onSubmitImport(pw.toCharArray()) }
             }
 
+            DataStep.ExportAuthPassword -> {
+                Header("بکاپ مستقل Authenticator", onBack)
+                Text("فقط حساب‌های احراز هویت (TOTP و HOTP) در این فایل با Argon2id و AES-256-GCM رمزگذاری می‌شوند. حداقل ${MIN_BACKUP_PASSWORD} نویسه.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
+                Field("رمز بکاپ Authenticator", pw, { pw = it }, hidden = true)
+                Field("تکرار رمز بکاپ", pw2, { pw2 = it }, hidden = true)
+                val tooShort = pw.length in 1 until MIN_BACKUP_PASSWORD
+                val mismatch = pw2.isNotEmpty() && pw != pw2
+                if (tooShort) Text("رمز کوتاه است.", color = c.secondary, fontSize = 13.sp)
+                if (mismatch) Text("دو رمز یکسان نیستند.", color = c.secondary, fontSize = 13.sp)
+                if (message != null) Text(message, color = c.secondary, fontSize = 14.sp)
+                BigButton(if (busy) "در حال رمزگذاری…" else "ذخیره بکاپ Authenticator", enabled = !busy && pw.length >= MIN_BACKUP_PASSWORD && pw == pw2, busy = busy) {
+                    onSubmitAuthExport(pw.toCharArray())
+                }
+            }
             DataStep.RestorePassword -> {
                 Header("بازیابی بکاپ", onBack)
+                if (restoreHeaderInfo != null) {
+                    Card(background = c.primaryContainer) {
+                        Text(
+                            "فایل بکاپ معتبر است · نسخه ${restoreHeaderInfo.version} · Argon2id (${restoreHeaderInfo.kdf.memoryKiB / 1024} MiB × ${restoreHeaderInfo.kdf.iterations}) · ${restoreHeaderInfo.totalBytes} بایت",
+                            color = c.onPrimaryContainer,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
                 Text("رمزی را که هنگام ساخت این بکاپ انتخاب کرده بودید وارد کنید.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
                 Field("رمز بکاپ", pw, { pw = it }, hidden = true)
                 if (message != null) Text(message, color = c.secondary, fontSize = 14.sp, lineHeight = 24.sp)

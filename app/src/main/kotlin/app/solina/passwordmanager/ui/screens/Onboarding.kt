@@ -158,7 +158,7 @@ private fun Notice(text: String, error: Boolean = false) {
 // ───────────────────────── خوش‌آمدگویی ─────────────────────────
 
 @Composable
-fun WelcomeScreen(message: String? = null, onCreate: () -> Unit, onJoinCloud: () -> Unit, onJoinStorage: () -> Unit, onDiagnostics: () -> Unit = {}) {
+fun WelcomeScreen(message: String? = null, onCreate: () -> Unit, onJoinCloud: () -> Unit, onJoinStorage: () -> Unit, onJoinWebDav: () -> Unit = {}, onDiagnostics: () -> Unit = {}) {
     val c = Solina.colors
     Page {
         Spacer(Modifier.height(24.dp))
@@ -174,6 +174,7 @@ fun WelcomeScreen(message: String? = null, onCreate: () -> Unit, onJoinCloud: ()
         PrimaryButton("ساخت خزانهٔ جدید", onClick = onCreate)
         SecondaryButton("بازیابی از فضای ابری", onClick = onJoinCloud)
         SecondaryButton("بازیابی از فضای ذخیره‌سازی", onClick = onJoinStorage)
+        SecondaryButton("بازیابی از سرور اختصاصی (WebDAV)", onClick = onJoinWebDav)
         TextLink("گزارش عیب‌یابی", onDiagnostics)
     }
 }
@@ -386,5 +387,39 @@ fun ResetPasswordScreen(busy: Boolean, onSubmit: (CharArray) -> Unit) {
             color = c.muted, fontSize = 13.sp,
         )
         PrimaryButton(if (busy) "لطفاً صبر کنید…" else "ذخیره", enabled = ok && !busy) { onSubmit(pass.toCharArray()) }
+    }
+}
+
+
+@Composable
+fun ChangeMasterPasswordScreen(
+    busy: Boolean,
+    message: String?,
+    onSubmit: (current: CharArray, next: CharArray) -> Unit,
+    onBack: () -> Unit,
+) {
+    val c = Solina.colors
+    var current by remember { mutableStateOf("") }
+    var next by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    val ok = current.isNotEmpty() && next.length >= MIN_MASTER_LENGTH && next == confirm
+    Page {
+        Heading("تغییر رمز اصلی", "ابتدا رمز فعلی را تأیید و سپس رمز اصلی جدید را وارد کنید. عبارت بازیابی ۲۴ کلمه‌ای همچنان معتبر می‌ماند.")
+        SecretField("رمز اصلی فعلی", current, { current = it })
+        SecretField("رمز اصلی جدید", next, { next = it })
+        SecretField("تکرار رمز جدید", confirm, { confirm = it })
+        if (next.isNotEmpty() && next.length < MIN_MASTER_LENGTH) {
+            Text("حداقل ${MIN_MASTER_LENGTH.fa()} نویسه لازم است.", color = c.secondary, fontSize = 13.sp)
+        } else if (confirm.isNotEmpty() && next != confirm) {
+            Text("دو رمز جدید یکسان نیستند.", color = c.secondary, fontSize = 13.sp)
+        }
+        if (message != null) Notice(message, error = true)
+        PrimaryButton(if (busy) "در حال تغییر رمز…" else "ذخیره رمز جدید", enabled = ok && !busy) {
+            onSubmit(current.toCharArray(), next.toCharArray())
+            current = ""
+            next = ""
+            confirm = ""
+        }
+        TextLink("انصراف و بازگشت", onBack)
     }
 }

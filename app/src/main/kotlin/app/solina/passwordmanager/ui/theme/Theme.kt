@@ -12,8 +12,13 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import app.solina.passwordmanager.core.security.AppLanguage
+import app.solina.passwordmanager.core.security.ThemeMode
+import app.solina.passwordmanager.ui.i18n.AppStrings
+import app.solina.passwordmanager.ui.i18n.LocalAppStrings
+import app.solina.passwordmanager.ui.i18n.stringsFor
 
-/** توکن‌های رنگ Solina (طبق docs/DESIGN.md). */
+/** توکن‌های رنگ Solina (روشن، تاریک و AMOLED). */
 @Immutable
 class SolinaColors(
     val isDark: Boolean,
@@ -72,6 +77,25 @@ val DarkColors = SolinaColors(
     success = Color(0xFF4ADE80),
 )
 
+val AmoledColors = SolinaColors(
+    isDark = true,
+    bg = Color(0xFF000000),
+    surface = Color(0xFF0A0D12),
+    container = Color(0xFF121822),
+    primary = Color(0xFF5EEAD4),
+    onPrimary = Color(0xFF003731),
+    primaryContainer = Color(0xFF083F3A),
+    onPrimaryContainer = Color(0xFFCCFBF1),
+    secondary = Color(0xFFFBBF24),
+    secondaryContainer = Color(0xFF241B0B),
+    onSecondaryContainer = Color(0xFFFDE68A),
+    text = Color(0xFFF1F5F9),
+    muted = Color(0xFF94A3B8),
+    outline = Color(0xFF64748B),
+    divider = Color(0xFF1E293B),
+    success = Color(0xFF4ADE80),
+)
+
 val LocalSolinaColors = staticCompositionLocalOf { LightColors }
 
 object Solina {
@@ -79,15 +103,27 @@ object Solina {
         @Composable
         @ReadOnlyComposable
         get() = LocalSolinaColors.current
+
+    val strings: AppStrings
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalAppStrings.current
 }
 
 @Composable
 fun SolinaTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: ThemeMode = ThemeMode.System,
+    language: AppLanguage = AppLanguage.FA,
     content: @Composable () -> Unit,
 ) {
-    val c = if (darkTheme) DarkColors else LightColors
-    val scheme = if (darkTheme) {
+    val systemDark = isSystemInDarkTheme()
+    val c = when (themeMode) {
+        ThemeMode.Light -> LightColors
+        ThemeMode.Dark -> DarkColors
+        ThemeMode.Amoled -> AmoledColors
+        ThemeMode.System -> if (systemDark) DarkColors else LightColors
+    }
+    val scheme = if (c.isDark) {
         darkColorScheme(
             primary = c.primary,
             onPrimary = c.onPrimary,
@@ -104,10 +140,11 @@ fun SolinaTheme(
             onSurface = c.text,
         )
     }
-    // رابط فارسی است: چیدمان همیشه راست‌به‌چپ.
+    val direction = if (language == AppLanguage.FA) LayoutDirection.Rtl else LayoutDirection.Ltr
     CompositionLocalProvider(
         LocalSolinaColors provides c,
-        LocalLayoutDirection provides LayoutDirection.Rtl,
+        LocalAppStrings provides stringsFor(language),
+        LocalLayoutDirection provides direction,
     ) {
         MaterialTheme(colorScheme = scheme, content = content)
     }

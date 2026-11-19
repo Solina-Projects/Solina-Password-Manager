@@ -27,12 +27,13 @@ class ImportersTest {
 
     @Test fun aegisPlain() {
         val json = """{"version":1,"header":{"slots":null,"params":null},"db":{"version":2,"entries":[
-          {"type":"totp","name":"ali@mail.com","issuer":"Google","info":{"secret":"JBSWY3DPEHPK3PXP","algo":"SHA1","digits":6,"period":30}},
+          {"type":"totp","name":"ali@mail.com","issuer":"Google","groups":["Work"],"info":{"secret":"JBSWY3DPEHPK3PXP","algo":"SHA1","digits":6,"period":30}},
           {"type":"steam","name":"s","issuer":"Steam","info":{"secret":"JBSWY3DPEHPK3PXP","algo":"SHA1","digits":5,"period":30}},
-          {"type":"hotp","name":"h","issuer":"H","info":{"secret":"JBSWY3DPEHPK3PXP","algo":"SHA1","digits":6,"counter":1}}]}}"""
+          {"type":"hotp","name":"h","issuer":"H","info":{"secret":"JBSWY3DPEHPK3PXP","algo":"SHA1","digits":6,"counter":5}}]}}"""
         val r = Importers.parse(json)
-        assertEquals(1, r.items.size); assertEquals(2, r.skipped)
-        assertEquals("Google", r.items[0].title); assertEquals("ali@mail.com", r.items[0].username)
+        assertEquals(2, r.items.size); assertEquals(1, r.skipped)
+        assertEquals("Google", r.items[0].title); assertEquals("ali@mail.com", r.items[0].username); assertEquals("Work", r.items[0].category)
+        assertEquals("H", r.items[1].title); assertEquals(app.solina.passwordmanager.core.OtpType.HOTP, r.items[1].otpType); assertEquals(5L, r.items[1].totpCounter)
     }
 
     @Test fun aegisEncryptedRejected() {

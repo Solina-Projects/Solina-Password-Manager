@@ -1,6 +1,7 @@
 package app.solina.passwordmanager.core.importer
 
 import app.solina.passwordmanager.core.Base32
+import app.solina.passwordmanager.core.OtpType
 import app.solina.passwordmanager.core.otp.OtpImport
 import app.solina.passwordmanager.core.storage.ItemKind
 import app.solina.passwordmanager.core.storage.ItemPayload
@@ -130,13 +131,35 @@ object Importers {
 
     private val ALGOS = setOf("SHA1", "SHA256", "SHA512")
 
-    private fun otpLogin(issuer: String, account: String, secretRaw: String, algoRaw: String, digits: Int, period: Int, note: String = "", fav: Boolean = false): ItemPayload? {
+    private fun otpLogin(
+        issuer: String,
+        account: String,
+        secretRaw: String,
+        algoRaw: String,
+        digits: Int,
+        period: Int,
+        note: String = "",
+        fav: Boolean = false,
+        otpType: OtpType = OtpType.TOTP,
+        counter: Long = 0L,
+        category: String = "",
+    ): ItemPayload? {
         val secret = secretRaw.replace(" ", "").uppercase()
         val algo = algoRaw.uppercase().replace("-", "").ifEmpty { "SHA1" }
-        if (Base32.decode(secret) == null || algo !in ALGOS || digits !in 6..8 || period !in 1..300) return null
+        if (Base32.decode(secret) == null || algo !in ALGOS || digits !in 6..8 || period !in 1..300 || counter < 0L) return null
         return ItemPayload(
-            ItemKind.Login, issuer.ifEmpty { account }, if (issuer.isNotEmpty()) account else "", note = note,
-            totpSecret = secret, totpDigits = digits, totpPeriod = period, totpAlgorithm = algo, favorite = fav,
+            ItemKind.Login,
+            issuer.ifEmpty { account },
+            if (issuer.isNotEmpty()) account else "",
+            note = note,
+            totpSecret = secret,
+            totpDigits = digits,
+            totpPeriod = period,
+            totpAlgorithm = algo,
+            favorite = fav,
+            otpType = otpType,
+            totpCounter = if (otpType == OtpType.HOTP) counter else 0L,
+            category = category,
         )
     }
 
@@ -144,12 +167,22 @@ object Importers {
         val out = ArrayList<ItemPayload>(); var skipped = 0
         for (i in 0 until a.length()) {
             val e = a.getJSONObject(i)
-            val p = if (e.optString("type", "TOTP").equals("TOTP", true))
-                otpLogin(e.optString("issuer"), e.optString("label"), e.optString("secret"), e.optString("algorithm", "SHA1"), e.optInt("digits", 6), e.optInt("period", 30))
+            val typeStr = e.optString("type", "TOTP").uppercase()
+            val otpType = when (typeStr) {
+                "TOTP" -> OtpType.TOTP
+                "HOTP" -> OtpType.HOTP
+                else -> null
+            }
+            val p = if (otpType != null)
+                otpLogin(
+                    e.optString("issuer"), e.optString("label"), e.optString("secret"),
+                    e.optString("algorithm", "SHA1"), e.optInt("digits", 6), e.optInt("period", 30),
+                    otpType = otpType, counter = e.optLong("counter", 0L),
+                )
             else null
             if (p == null) skipped++ else out += p
         }
-        if (out.isEmpty()) throw ImportException("هیچ کد TOTP قابل‌استفاده‌ای در فایل نبود.")
+        if (out.isEmpty()) throw ImportException("هیچ کد OTP قابل‌استفاده‌ای در فایل نبود.")
         return ImportResult(out, "andOTP", skipped)
     }
 
@@ -203,11 +236,17 @@ object Importers {
             val e = arr.getJSONObject(i)
             val otp = e.optJSONObject("otp")
             val type = otp?.optString("tokenType", "TOTP") ?: "TOTP"
-            val p = if (type.equals("TOTP", true)) otpLogin(
+            val otpType = when (type.uppercase()) {
+                "TOTP" -> OtpType.TOTP
+                "HOTP" -> OtpType.HOTP
+                else -> null
+            }
+            val p = if (otpType != null) otpLogin(
                 otp?.optString("issuer").orEmpty().ifEmpty { e.optString("name") },
                 otp?.optString("account").orEmpty(),
                 e.optString("secret"), otp?.optString("algorithm", "SHA1").orEmpty(),
                 otp?.optInt("digits", 6) ?: 6, otp?.optInt("period", 30) ?: 30,
+                otpType = otpType, counter = otp?.optLong("counter", 0L) ?: 0L,
             ) else null
             if (p == null) skipped++ else out += p
         }
@@ -360,6 +399,15 @@ object Importers {
     private fun aegis(o: JSONObject, password: CharArray?): ImportResult {
         val header = o.optJSONObject("header")
         val db = if (header != null && !header.isNull("slots")) aegisDecrypt(o, header, password) else o.getJSONObject("db")
+        val groupNames = HashMap<String, String>()
+        db.optJSONArray("groups")?.let { gs ->
+            for (i in 0 until gs.length()) {
+                val g = gs.optJSONObject(i) ?: continue
+                val uuid = g.optString("uuid")
+                val gname = g.optString("name")
+                if (uuid.isNotEmpty() && gname.isNotEmpty()) groupNames[uuid] = gname
+            }
+        }
         val entries = db.getJSONArray("entries")
         val out = ArrayList<ItemPayload>()
         var skipped = 0
@@ -370,14 +418,33 @@ object Importers {
             val algo = info?.optString("algo", "SHA1")?.uppercase().orEmpty().ifEmpty { "SHA1" }
             val digits = info?.optInt("digits", 6) ?: 6
             val period = info?.optInt("period", 30) ?: 30
-            if (e.optString("type").lowercase() != "totp" || Base32.decode(secret) == null ||
-                algo !in setOf("SHA1", "SHA256", "SHA512") || digits !in 6..8 || period !in 1..300
+            val counter = info?.optLong("counter", 0L) ?: 0L
+            val otpType = when (e.optString("type").lowercase()) {
+                "totp" -> OtpType.TOTP
+                "hotp" -> OtpType.HOTP
+                else -> null
+            }
+            if (otpType == null || Base32.decode(secret) == null ||
+                algo !in setOf("SHA1", "SHA256", "SHA512") || digits !in 6..8 || period !in 1..300 || counter < 0L
             ) { skipped++; continue }
             val issuer = e.optString("issuer")
             val name = e.optString("name")
+            val firstGroup = e.optJSONArray("groups")?.let { ga ->
+                if (ga.length() > 0) groupNames[ga.optString(0)] ?: "" else ""
+            }.orEmpty()
             out += ItemPayload(
-                ItemKind.Login, issuer.ifEmpty { name }, if (issuer.isNotEmpty()) name else "", note = e.optString("note"),
-                totpSecret = secret, totpDigits = digits, totpPeriod = period, totpAlgorithm = algo, favorite = e.optBoolean("favorite"),
+                ItemKind.Login,
+                issuer.ifEmpty { name },
+                if (issuer.isNotEmpty()) name else "",
+                note = e.optString("note"),
+                totpSecret = secret,
+                totpDigits = digits,
+                totpPeriod = period,
+                totpAlgorithm = algo,
+                favorite = e.optBoolean("favorite"),
+                otpType = otpType,
+                totpCounter = if (otpType == OtpType.HOTP) counter else 0L,
+                category = firstGroup,
             )
         }
         return ImportResult(out, "Aegis", skipped)

@@ -9,6 +9,7 @@ import app.solina.passwordmanager.core.crypto.CorruptVaultException
 import app.solina.passwordmanager.core.crypto.VaultCrypto
 import app.solina.passwordmanager.core.crypto.VaultHeader
 import app.solina.passwordmanager.core.crypto.wipe
+import app.solina.passwordmanager.core.security.KeystoreSecretStore
 import app.solina.passwordmanager.core.security.VaultFiles
 import app.solina.passwordmanager.core.security.VaultSession
 import app.solina.passwordmanager.core.storage.ItemStore
@@ -17,6 +18,8 @@ import app.solina.passwordmanager.core.sync.BackupSchedule
 import app.solina.passwordmanager.core.sync.BackupTrigger
 import app.solina.passwordmanager.core.sync.SyncEngine
 import app.solina.passwordmanager.core.sync.SyncEpochStore
+import app.solina.passwordmanager.core.sync.SyncRemote
+import app.solina.passwordmanager.core.sync.WebDavProtocol
 import app.solina.passwordmanager.core.sync.shouldRunAutomatically
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.net.URI
 
 data class SyncStatus(
     val configured: Boolean = false,
@@ -32,17 +36,20 @@ data class SyncStatus(
     val syncing: Boolean = false,
     val lastSyncAt: Long = 0,
     val schedule: BackupSchedule = BackupSchedule.OnChange,
-    /** "cloud" یا "storage" — فقط برای متن واضح‌تر در تنظیمات. */
+    /** "cloud" یا "storage" یا "webdav" */
     val kind: String = "storage",
     val message: String? = null,
 )
 
-/** هدر خوانده‌شده از پوشه پیش از تایید رمز کاربر؛ هنوز روی دیسک ذخیره نشده است. */
+/** هدر خوانده‌شده از پوشه یا سرور WebDAV پیش از تایید رمز کاربر؛ هنوز روی دیسک ذخیره نشده است. */
 class StagedJoin(
-    val uri: Uri,
+    val uri: Uri?,
     val kind: String,
     val header: VaultHeader,
     val folderName: String,
+    val webDavUrl: String = "",
+    val webDavUser: String = "",
+    val webDavPass: String = "",
 )
 
 sealed interface ConnectResult {
@@ -58,7 +65,10 @@ sealed interface StageJoinResult {
     data class Failed(val reason: String) : StageJoinResult
 }
 
-/** پیکربندی و اجرای همگام‌سازی پوشه‌ای. فقط وقتی خزانه باز است همگام‌سازی می‌کند (کلید MAC از کلید خزانه می‌آید). */
+/**
+ * پیکربندی و اجرای همگام‌سازی رمزگذاری‌شدهٔ سرتاسری (پوشه‌ای SAF یا سرور اختصاصی WebDAV HTTPS).
+ * فقط وقتی خزانه باز است همگام‌سازی می‌کند (کلیدهای HMAC و مانیفست از VaultKey مشتق می‌شوند).
+ */
 class SyncManager(
     private val context: Context,
     private val files: VaultFiles,
@@ -67,6 +77,7 @@ class SyncManager(
     private val repository: () -> VaultRepository,
 ) {
     private val prefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)
+    private val secrets = KeystoreSecretStore(context, "sync_secrets")
     private val mutex = Mutex()
     private val _status = MutableStateFlow(load())
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
@@ -82,7 +93,39 @@ class SyncManager(
 
     private fun treeUri(): Uri? = prefs.getString("tree", null)?.let(Uri::parse)
 
+    private fun webDavUrl(): String? = prefs.getString("webdav_url", null)?.takeIf { it.isNotBlank() }
+
+    private fun activeRemote(): SyncRemote? {
+        val kind = prefs.getString("kind", "storage") ?: "storage"
+        if (kind == "webdav") {
+            val url = webDavUrl() ?: return null
+            val user = secrets.getString("webdav_user").orEmpty()
+            val pass = secrets.getString("webdav_pass").orEmpty()
+            return runCatching { WebDavRemote(url, user, pass) }.getOrNull()
+        }
+        val uri = treeUri() ?: return null
+        return FolderRemote(context, uri)
+    }
+
+    private fun webDavDisplayName(url: String): String = runCatching {
+        val u = URI(url)
+        (u.host ?: url) + (u.path?.takeIf { it.length > 1 } ?: "")
+    }.getOrDefault(url)
+
     private fun load(): SyncStatus {
+        val kind = prefs.getString("kind", "storage") ?: "storage"
+        if (kind == "webdav") {
+            val url = webDavUrl() ?: return SyncStatus()
+            return SyncStatus(
+                configured = true,
+                folderName = webDavDisplayName(url),
+                syncing = false,
+                lastSyncAt = prefs.getLong("last", 0),
+                schedule = BackupSchedule.parse(prefs.getString("schedule", null)),
+                kind = "webdav",
+                message = null,
+            )
+        }
         val uri = treeUri() ?: return SyncStatus()
         return SyncStatus(
             true,
@@ -90,22 +133,39 @@ class SyncManager(
             false,
             prefs.getLong("last", 0),
             BackupSchedule.parse(prefs.getString("schedule", null)),
-            prefs.getString("kind", "storage") ?: "storage",
+            kind,
             null,
         )
     }
 
-    private fun persist(uri: Uri, kind: String) {
+    private fun persistFolder(uri: Uri, kind: String) {
         runCatching {
             context.contentResolver.takePersistableUriPermission(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
         }
-        prefs.edit().putString("tree", uri.toString()).putString("kind", kind).putLong("last", 0).apply()
+        secrets.clearAll()
+        prefs.edit()
+            .remove("webdav_url")
+            .putString("tree", uri.toString())
+            .putString("kind", kind)
+            .putLong("last", 0)
+            .apply()
     }
 
-    /** اتصال یک دستگاهِ دارای خزانه به پوشه (ایجاد یا تأیید vault.hdr). */
+    private fun persistWebDav(normalizedUrl: String, username: String, password: String) {
+        secrets.putString("webdav_user", username)
+        secrets.putString("webdav_pass", password)
+        prefs.edit()
+            .remove("tree")
+            .putString("webdav_url", normalizedUrl)
+            .putString("kind", "webdav")
+            .putLong("last", 0)
+            .apply()
+    }
+
+    /** اتصال یک دستگاهِ دارای خزانه به پوشه (SAF). */
     suspend fun connect(uri: Uri, kind: String = "storage"): ConnectResult {
         return try {
             val remote = FolderRemote(context, uri)
@@ -119,10 +179,9 @@ class SyncManager(
                 } catch (e: CorruptVaultException) {
                     return ConnectResult.Failed("فایل vault.hdr داخل پوشه خراب است.")
                 }
-                // هویت خزانه = بستهٔ کلید بازیابی؛ با تغییر رمز اصلی عوض نمی‌شود.
                 if (!other.wrappedVkByRecovery.contentEquals(local.wrappedVkByRecovery)) return ConnectResult.DifferentVault
             }
-            persist(uri, kind)
+            persistFolder(uri, kind)
             _status.value = load()
             ConnectResult.Ok
         } catch (e: Exception) {
@@ -131,17 +190,47 @@ class SyncManager(
         }
     }
 
-    /**
-     * مرحلهٔ ۱ پیوستن به خزانه از پوشه: فقط هدر را در حافظه می‌خواند و اعتبارسنجی می‌کند.
-     * هیچ فایلی روی دیسک نوشته نمی‌شود تا کاربر رمز اصلی را در [commitStagedJoin] تأیید کند.
-     */
+    /** اتصال یک دستگاهِ دارای خزانه به سرور اختصاصی WebDAV (فقط HTTPS). */
+    suspend fun connectWebDav(rawUrl: String, username: String, password: String): ConnectResult =
+        withContext(Dispatchers.IO) {
+            val normalized = try {
+                WebDavProtocol.normalizeHttpsBaseUrl(rawUrl)
+            } catch (e: Exception) {
+                return@withContext ConnectResult.Failed(e.message ?: "نشانی HTTPS سرور معتبر نیست.")
+            }
+            try {
+                val remote = WebDavRemote(normalized, username.trim(), password)
+                remote.ensureReady()
+                val local = files.readHeader()
+                val remoteBytes = remote.readHeader()
+                if (remoteBytes == null) {
+                    remote.writeHeader(local.encode())
+                } else {
+                    val other = try {
+                        VaultHeader.decode(remoteBytes)
+                    } catch (e: CorruptVaultException) {
+                        return@withContext ConnectResult.Failed("فایل vault.hdr روی سرور خراب است.")
+                    }
+                    if (!other.wrappedVkByRecovery.contentEquals(local.wrappedVkByRecovery)) {
+                        return@withContext ConnectResult.DifferentVault
+                    }
+                }
+                persistWebDav(normalized, username.trim(), password)
+                _status.value = load()
+                ConnectResult.Ok
+            } catch (e: Exception) {
+                DiagLog.logError("CONNECT", e, "connectWebDav")
+                ConnectResult.Failed("اتصال به سرور WebDAV ناموفق بود؛ نشانی HTTPS و اعتبارنامه را بررسی کنید.")
+            }
+        }
+
+    /** مرحلهٔ ۱ پیوستن از پوشه: فقط هدر را در حافظه می‌خواند. */
     suspend fun stageJoinFromFolder(uri: Uri, kind: String = "storage"): StageJoinResult {
         DiagLog.log("JOIN", "stage folder selected")
         if (files.hasVault()) return StageJoinResult.Failed("روی این دستگاه از قبل خزانه وجود دارد.")
         return try {
             val remote = FolderRemote(context, uri)
             val bytes = remote.readHeader()
-            DiagLog.log("JOIN", "header read: ${if (bytes == null) "absent" else "${bytes.size} bytes"}")
             if (bytes == null) return StageJoinResult.NoVaultInFolder
             val header = try {
                 VaultHeader.decode(bytes)
@@ -155,10 +244,41 @@ class SyncManager(
         }
     }
 
-    /**
-     * مرحلهٔ ۲ پیوستن: رمز اصلی را مقابل هدر در حافظه بررسی می‌کند و تنها در صورت موفقیت،
-     * هدر و مجوز پوشه را روی دیسک ذخیره و نشست را باز می‌کند.
-     */
+    /** مرحلهٔ ۱ پیوستن از سرور WebDAV (برای انتقال به گوشی جدید). */
+    suspend fun stageJoinFromWebDav(rawUrl: String, username: String, password: String): StageJoinResult =
+        withContext(Dispatchers.IO) {
+            if (files.hasVault()) return@withContext StageJoinResult.Failed("روی این دستگاه از قبل خزانه وجود دارد.")
+            val normalized = try {
+                WebDavProtocol.normalizeHttpsBaseUrl(rawUrl)
+            } catch (e: Exception) {
+                return@withContext StageJoinResult.Failed(e.message ?: "نشانی HTTPS معتبر نیست.")
+            }
+            try {
+                val remote = WebDavRemote(normalized, username.trim(), password)
+                val bytes = remote.readHeader() ?: return@withContext StageJoinResult.NoVaultInFolder
+                val header = try {
+                    VaultHeader.decode(bytes)
+                } catch (e: CorruptVaultException) {
+                    return@withContext StageJoinResult.Failed("فایل vault.hdr روی سرور خراب است.")
+                }
+                StageJoinResult.Ready(
+                    StagedJoin(
+                        uri = null,
+                        kind = "webdav",
+                        header = header,
+                        folderName = webDavDisplayName(normalized),
+                        webDavUrl = normalized,
+                        webDavUser = username.trim(),
+                        webDavPass = password,
+                    ),
+                )
+            } catch (e: Exception) {
+                DiagLog.logError("JOIN", e, "stageJoinFromWebDav")
+                StageJoinResult.Failed("خواندن از سرور WebDAV ناموفق بود.")
+            }
+        }
+
+    /** مرحلهٔ ۲ پیوستن: رمز اصلی را مقابل هدر در حافظه بررسی و سپس روی دیسک ذخیره می‌کند. */
     suspend fun commitStagedJoin(staged: StagedJoin, password: CharArray): Boolean = withContext(Dispatchers.Default) {
         val vk = try {
             VaultCrypto.unlockWithPassword(staged.header, password)
@@ -166,19 +286,23 @@ class SyncManager(
             return@withContext false
         }
         files.writeHeader(staged.header)
-        persist(staged.uri, staged.kind)
+        if (staged.kind == "webdav") {
+            persistWebDav(staged.webDavUrl, staged.webDavUser, staged.webDavPass)
+        } else {
+            staged.uri?.let { persistFolder(it, staged.kind) }
+        }
         session.unlock(vk)
         _status.value = load()
         DiagLog.log("JOIN", "staged join committed")
         true
     }
 
-    /** دستگاه جدید بدون خزانه (سازگاری قبلی): هدر را از پوشه می‌گیرد. */
+    /** دستگاه جدید بدون خزانه (سازگاری قبلی). */
     suspend fun joinFromFolder(uri: Uri, kind: String = "storage"): ConnectResult {
         return when (val r = stageJoinFromFolder(uri, kind)) {
             is StageJoinResult.Ready -> {
                 files.writeHeader(r.staged.header)
-                persist(uri, kind)
+                r.staged.uri?.let { persistFolder(it, kind) }
                 _status.value = load()
                 ConnectResult.Ok
             }
@@ -192,7 +316,6 @@ class SyncManager(
         _status.value = _status.value.copy(schedule = schedule)
     }
 
-    /** اجرای خودکار بر اساس زمان‌بندی؛ برای حالت دستی هیچ کاری نمی‌کند. */
     suspend fun syncIfDue(trigger: BackupTrigger): StatusMessage? {
         val st = _status.value
         if (!st.configured) return null
@@ -201,19 +324,24 @@ class SyncManager(
     }
 
     fun disconnect() {
+        secrets.clearAll()
         prefs.edit().clear().apply()
         _status.value = SyncStatus()
     }
 
-    /**
-     * پس از تغییر رمز اصلی، هدر جدید را در پوشه می‌نویسد تا دستگاه تازه با رمز جدید بتواند وصل شود.
-     * در صورت شکست، فلگ header_dirty ثبت می‌شود تا در اولین همگام‌سازی بعدی دوباره ارسال شود.
-     */
+    private suspend fun writeHeaderToRemote(remote: SyncRemote, bytes: ByteArray) {
+        when (remote) {
+            is FolderRemote -> remote.writeHeader(bytes)
+            is WebDavRemote -> remote.writeHeader(bytes)
+            else -> remote.write("vault.hdr", bytes)
+        }
+    }
+
     suspend fun pushHeader(): Boolean {
         prefs.edit().putBoolean("header_dirty", true).apply()
-        val uri = treeUri() ?: return false
+        val remote = activeRemote() ?: return false
         return runCatching {
-            FolderRemote(context, uri).writeHeader(files.readHeader().encode())
+            writeHeaderToRemote(remote, files.readHeader().encode())
             prefs.edit().putBoolean("header_dirty", false).apply()
             true
         }.onFailure { e ->
@@ -222,7 +350,7 @@ class SyncManager(
     }
 
     suspend fun syncNow(): StatusMessage {
-        val uri = treeUri() ?: return StatusMessage.NotConfigured
+        val remote = activeRemote() ?: return StatusMessage.NotConfigured
         val key = session.keyCopy() ?: return StatusMessage.Locked
         DiagLog.log("SYNC", "start")
         if (!mutex.tryLock()) {
@@ -232,10 +360,9 @@ class SyncManager(
         _status.value = _status.value.copy(syncing = true, message = null)
         try {
             val repo = repository()
-            val remote = FolderRemote(context, uri)
             if (prefs.getBoolean("header_dirty", false)) {
                 runCatching {
-                    remote.writeHeader(files.readHeader().encode())
+                    writeHeaderToRemote(remote, files.readHeader().encode())
                     prefs.edit().putBoolean("header_dirty", false).apply()
                 }
             }
@@ -250,13 +377,13 @@ class SyncManager(
                 append("دریافت ${report.pulled}، ارسال ${report.pushed}")
                 if (report.conflicts > 0) append("، ${report.conflicts} تعارض (نسخهٔ بازنده در تاریخچه ماند)")
                 if (report.rejected > 0) append("، ${report.rejected} فایل نامعتبر نادیده گرفته شد")
-                if (report.rollbackDetected) append("، هشدار: احتمال بازگشت پوشه به نسخهٔ قدیمی تشخیص داده شد")
+                if (report.rollbackDetected) append("، هشدار: احتمال بازگشت پوشه/سرور به نسخهٔ قدیمی تشخیص داده شد")
             }
             _status.value = _status.value.copy(syncing = false, lastSyncAt = now, message = msg)
             return StatusMessage.Done(report.pulled, report.pushed, report.conflicts, report.rejected)
         } catch (e: Exception) {
             DiagLog.logError("SYNC", e, "syncNow")
-            _status.value = _status.value.copy(syncing = false, message = "همگام‌سازی ناموفق بود؛ پوشه در دسترس نیست؟")
+            _status.value = _status.value.copy(syncing = false, message = "همگام‌سازی ناموفق بود؛ اتصال پوشه یا سرور را بررسی کنید.")
             return StatusMessage.Failed
         } finally {
             key.wipe()

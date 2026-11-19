@@ -2,6 +2,7 @@ package app.solina.passwordmanager.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,12 +13,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,15 +43,17 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.solina.passwordmanager.core.Base32
+import app.solina.passwordmanager.core.OtpType
 import app.solina.passwordmanager.core.PasswordGenerator
 import app.solina.passwordmanager.core.storage.ItemKind
 import app.solina.passwordmanager.core.storage.ItemPayload
 import app.solina.passwordmanager.ui.components.AnimatedFilterRow
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.Mono
-import app.solina.passwordmanager.ui.components.SIcon
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
+
+private val ICON_CHOICES = listOf("", "🔑", "🏦", "📧", "💼", "🛒", "🌐", "🪪", "🛡️", "💳", "📝")
 
 @Composable
 internal fun Field(
@@ -89,84 +96,191 @@ internal fun Field(
 }
 
 /**
- * ایجاد/ویرایش ورودی. [initial] برابر null یعنی ورودی جدید.
- * یادداشت‌های کوتاه: عنوان اجباری است؛ راز TOTP اگر پر شود باید Base32 معتبر باشد.
+ * ایجاد/ویرایش ورودی (Login، Card، Identity، Note) با پشتیبانی از دسته‌بندی، آیکون اختصاصی و TOTP/HOTP.
  */
 @Composable
 fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (ItemPayload) -> Unit, onCancel: () -> Unit) {
     val c = Solina.colors
+    val str = Solina.strings
     val start = initial ?: ItemPayload()
     var kind by remember { mutableStateOf(start.kind) }
     var title by remember { mutableStateOf(start.title) }
+    var category by remember { mutableStateOf(start.category) }
+    var icon by remember { mutableStateOf(start.icon) }
+    var favorite by remember { mutableStateOf(start.favorite) }
+
+    // Login & OTP
     var username by remember { mutableStateOf(start.username) }
     var password by remember { mutableStateOf(start.password) }
     var showPw by remember { mutableStateOf(isNew) }
     var website by remember { mutableStateOf(start.website) }
     var totp by remember { mutableStateOf(start.totpSecret) }
-    var note by remember { mutableStateOf(start.note) }
+    var otpType by remember { mutableStateOf(start.otpType) }
+    var otpDigits by remember { mutableStateOf(start.totpDigits) }
+    var otpAlgo by remember { mutableStateOf(start.totpAlgorithm) }
+    var otpCounter by remember { mutableStateOf(start.totpCounter.toString()) }
+
+    // Card
+    var bankName by remember { mutableStateOf(start.bankName) }
     var holder by remember { mutableStateOf(start.cardHolder) }
     var number by remember { mutableStateOf(start.cardNumber) }
     var expiry by remember { mutableStateOf(start.cardExpiry) }
     var cvv by remember { mutableStateOf(start.cardCvv) }
+    var cardPin by remember { mutableStateOf(start.cardPin) }
+
+    // Identity
+    var fullName by remember { mutableStateOf(start.fullName) }
+    var email by remember { mutableStateOf(start.email) }
+    var phone by remember { mutableStateOf(start.phone) }
+    var nationalId by remember { mutableStateOf(start.nationalId) }
+    var company by remember { mutableStateOf(start.company) }
+    var address by remember { mutableStateOf(start.address) }
+    var city by remember { mutableStateOf(start.city) }
+    var postalCode by remember { mutableStateOf(start.postalCode) }
+    var country by remember { mutableStateOf(start.country) }
+
+    var note by remember { mutableStateOf(start.note) }
     var tried by remember { mutableStateOf(false) }
 
-    val titleError = if (tried && title.isBlank()) "عنوان لازم است" else null
-    val totpError = if (totp.isNotBlank() && Base32.decode(totp) == null) "راز TOTP باید Base32 معتبر باشد (حروف A–Z و ارقام ۲–۷)" else null
+    val titleError = if (tried && title.isBlank()) (if (str.isFa) "عنوان لازم است" else "Title is required") else null
+    val totpError = if (totp.isNotBlank() && Base32.decode(totp) == null) {
+        if (str.isFa) "راز OTP باید Base32 معتبر باشد (A–Z و ۲–۷)" else "OTP secret must be valid Base32"
+    } else null
 
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(Modifier.statusBarsPadding().padding(top = 12.dp).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconAction(SolinaIcons.ChevronRight, "انصراف", tint = c.text, onClick = onCancel)
-            Text(if (isNew) "ورودی جدید" else "ویرایش", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            IconAction(SolinaIcons.ChevronRight, str.cancel, tint = c.text, onClick = onCancel)
+            Text(if (isNew) str.newItem else str.editItem, color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         }
 
         if (isNew) {
             AnimatedFilterRow(
-                labels = listOf("ورود", "کارت", "یادداشت"),
+                labels = listOf(str.kindLogin, str.kindCard, str.kindIdentity, str.kindNote),
                 selected = when (kind) {
                     ItemKind.Login -> 0
                     ItemKind.Card -> 1
-                    ItemKind.Note -> 2
+                    ItemKind.Identity -> 2
+                    ItemKind.Note -> 3
                 },
                 onSelect = {
                     kind = when (it) {
                         0 -> ItemKind.Login
                         1 -> ItemKind.Card
+                        2 -> ItemKind.Identity
                         else -> ItemKind.Note
                     }
                 },
             )
         }
 
-        Field("عنوان", title, { title = it }, error = titleError)
+        Field(if (str.isFa) "عنوان" else "Title", title, { title = it }, error = titleError)
+        Field(str.categoryLabel, category, { category = it })
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(str.customIconLabel, color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ICON_CHOICES.forEach { choice ->
+                    val selected = icon == choice
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(if (selected) c.primaryContainer else c.container)
+                            .clickable(role = Role.RadioButton) { icon = choice },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(if (choice.isEmpty()) "A" else choice, color = if (selected) c.onPrimaryContainer else c.muted, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(str.favoriteLabel, color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+            Switch(
+                checked = favorite,
+                onCheckedChange = { favorite = it },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = c.onPrimary, checkedTrackColor = c.primary,
+                    uncheckedThumbColor = c.outline, uncheckedTrackColor = c.container, uncheckedBorderColor = c.outline,
+                ),
+            )
+        }
+
         when (kind) {
             ItemKind.Login -> {
-                Field("نام کاربری یا ایمیل", username, { username = it }, mono = true, keyboard = KeyboardType.Email)
+                Field(if (str.isFa) "نام کاربری یا ایمیل" else "Username or Email", username, { username = it }, mono = true, keyboard = KeyboardType.Email)
                 Field(
-                    "رمز عبور", password, { password = it }, mono = true, hidden = !showPw,
+                    if (str.isFa) "رمز عبور" else "Password", password, { password = it }, mono = true, hidden = !showPw,
                     trailing = {
-                        IconAction(if (showPw) SolinaIcons.EyeOff else SolinaIcons.Eye, if (showPw) "پنهان کردن رمز" else "نمایش رمز") { showPw = !showPw }
-                        IconAction(SolinaIcons.Refresh, "ساخت رمز تصادفی") {
+                        IconAction(if (showPw) SolinaIcons.EyeOff else SolinaIcons.Eye, "toggle") { showPw = !showPw }
+                        IconAction(SolinaIcons.Refresh, "generate") {
                             password = PasswordGenerator.generate(20); showPw = true
                         }
                     },
                 )
-                Field("وب‌سایت", website, { website = it }, mono = true, keyboard = KeyboardType.Uri)
-                Field("راز TOTP (Base32، اختیاری)", totp, { totp = it.uppercase() }, mono = true, error = totpError)
+                Field(if (str.isFa) "وب‌سایت" else "Website", website, { website = it }, mono = true, keyboard = KeyboardType.Uri)
+                Field(if (str.isFa) "راز احراز هویت OTP (Base32، اختیاری)" else "OTP Secret (Base32, optional)", totp, { totp = it.uppercase() }, mono = true, error = totpError)
+                if (totp.isNotBlank()) {
+                    AnimatedFilterRow(
+                        labels = listOf("TOTP (زمانی)", "HOTP (شمارنده‌ای)"),
+                        selected = if (otpType == OtpType.TOTP) 0 else 1,
+                        onSelect = { otpType = if (it == 0) OtpType.TOTP else OtpType.HOTP },
+                    )
+                    AnimatedFilterRow(
+                        labels = listOf("6 digits", "8 digits"),
+                        selected = if (otpDigits == 8) 1 else 0,
+                        onSelect = { otpDigits = if (it == 1) 8 else 6 },
+                    )
+                    AnimatedFilterRow(
+                        labels = listOf("SHA1", "SHA256", "SHA512"),
+                        selected = when (otpAlgo) { "SHA256" -> 1; "SHA512" -> 2; else -> 0 },
+                        onSelect = { otpAlgo = when (it) { 1 -> "SHA256"; 2 -> "SHA512"; else -> "SHA1" } },
+                    )
+                    if (otpType == OtpType.HOTP) {
+                        Field(str.counterLabel, otpCounter, { otpCounter = it.filter { ch -> ch.isDigit() } }, mono = true, keyboard = KeyboardType.Number)
+                    }
+                }
             }
             ItemKind.Card -> {
-                Field("نام دارندهٔ کارت", holder, { holder = it })
-                Field("شمارهٔ کارت", number, { number = it.filter { ch -> ch.isDigit() }.take(19) }, mono = true, keyboard = KeyboardType.Number)
+                Field(if (str.isFa) "نام بانک" else "Bank Name", bankName, { bankName = it })
+                Field(if (str.isFa) "نام دارندهٔ کارت" else "Cardholder Name", holder, { holder = it })
+                Field(if (str.isFa) "شمارهٔ کارت" else "Card Number", number, { number = it.filter { ch -> ch.isDigit() }.take(19) }, mono = true, keyboard = KeyboardType.Number)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.weight(1f)) { Field("انقضا (MM/YY)", expiry, { expiry = it.take(5) }, mono = true) }
+                    Box(Modifier.weight(1f)) { Field(if (str.isFa) "انقضا (MM/YY)" else "Expiry (MM/YY)", expiry, { expiry = it.take(5) }, mono = true) }
                     Box(Modifier.weight(1f)) { Field("CVV2", cvv, { cvv = it.filter { ch -> ch.isDigit() }.take(4) }, mono = true, keyboard = KeyboardType.NumberPassword) }
                 }
+                Field(if (str.isFa) "رمز کارت / PIN (اختیاری)" else "Card PIN (optional)", cardPin, { cardPin = it.filter { ch -> ch.isDigit() }.take(8) }, mono = true, hidden = true, keyboard = KeyboardType.NumberPassword)
+            }
+            ItemKind.Identity -> {
+                Field(if (str.isFa) "نام و نام خانوادگی" else "Full Name", fullName, { fullName = it })
+                Field(if (str.isFa) "ایمیل" else "Email", email, { email = it }, mono = true, keyboard = KeyboardType.Email)
+                Field(if (str.isFa) "تلفن" else "Phone", phone, { phone = it }, mono = true, keyboard = KeyboardType.Phone)
+                Field(if (str.isFa) "کد ملی / شماره شناسایی" else "National ID / SSN", nationalId, { nationalId = it }, mono = true)
+                Field(if (str.isFa) "شرکت / سازمان" else "Company", company, { company = it })
+                Field(if (str.isFa) "نشانی" else "Address", address, { address = it }, multiline = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.weight(1f)) { Field(if (str.isFa) "شهر" else "City", city, { city = it }) }
+                    Box(Modifier.weight(1f)) { Field(if (str.isFa) "کد پستی" else "Postal Code", postalCode, { postalCode = it }, mono = true) }
+                }
+                Field(if (str.isFa) "کشور" else "Country", country, { country = it })
             }
             ItemKind.Note -> Unit
         }
-        Field(if (kind == ItemKind.Note) "متن یادداشت" else "یادداشت (اختیاری)", note, { note = it }, multiline = true)
+
+        Field(
+            if (kind == ItemKind.Note) (if (str.isFa) "متن یادداشت" else "Secure Note")
+            else (if (str.isFa) "یادداشت (اختیاری)" else "Notes (optional)"),
+            note,
+            { note = it },
+            multiline = true,
+        )
 
         Box(
             Modifier
@@ -179,15 +293,41 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
                     if (title.isNotBlank() && totpError == null) {
                         onSave(
                             start.copy(
-                                kind = kind, title = title.trim(), username = username.trim(), password = password,
-                                website = website.trim(), totpSecret = totp.trim(), note = note,
-                                cardHolder = holder.trim(), cardNumber = number, cardExpiry = expiry.trim(), cardCvv = cvv,
+                                kind = kind,
+                                title = title.trim(),
+                                category = category.trim(),
+                                icon = icon,
+                                favorite = favorite,
+                                username = username.trim(),
+                                password = password,
+                                website = website.trim(),
+                                totpSecret = totp.trim(),
+                                otpType = otpType,
+                                totpDigits = otpDigits,
+                                totpAlgorithm = otpAlgo,
+                                totpCounter = if (otpType == OtpType.HOTP) (otpCounter.toLongOrNull() ?: 0L).coerceAtLeast(0L) else 0L,
+                                note = note,
+                                bankName = bankName.trim(),
+                                cardHolder = holder.trim(),
+                                cardNumber = number,
+                                cardExpiry = expiry.trim(),
+                                cardCvv = cvv,
+                                cardPin = cardPin,
+                                fullName = fullName.trim(),
+                                email = email.trim(),
+                                phone = phone.trim(),
+                                nationalId = nationalId.trim(),
+                                company = company.trim(),
+                                address = address.trim(),
+                                city = city.trim(),
+                                postalCode = postalCode.trim(),
+                                country = country.trim(),
                             ),
                         )
                     }
                 },
             contentAlignment = Alignment.Center,
-        ) { Text("ذخیره", color = c.onPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+        ) { Text(str.save, color = c.onPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
         Spacer(Modifier.height(32.dp))
     }
 }

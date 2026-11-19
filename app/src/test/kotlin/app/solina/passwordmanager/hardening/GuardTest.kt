@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** نگهبان‌های رگرسیون: اگر کسی ناخواسته مجوز، لاگ یا مؤلفهٔ export‌شده اضافه کند CI قرمز می‌شود. */
+/** نگهبان‌های رگرسیون: اگر کسی ناخواسته مجوز، لاگ، ترافیک غیررمزنگاری یا مؤلفهٔ export‌شده اضافه کند CI قرمز می‌شود. */
 class GuardTest {
     private fun moduleDir(): File {
         var d = File("").absoluteFile
@@ -16,22 +16,29 @@ class GuardTest {
     /** متن مانیفست بدون کامنت‌های XML (تا اشاره‌ها در توضیحات باعث مثبت کاذب نشود). */
     private val manifest get() = File(moduleDir(), "src/main/AndroidManifest.xml").readText().replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "")
 
-    @Test fun onlyCameraAndNotificationPermissionsAndNoNetwork() {
+    @Test fun onlyExpectedMinimalPermissions() {
         val perms = Regex("""<uses-permission[^>]*android:name="([^"]+)"""").findAll(manifest).map { it.groupValues[1] }.toSet()
-        // POST_NOTIFICATIONS فقط برای نوتیف محلی خطا است (0.0.11-alpha5، به درخواست کاربر):
-        // هیچ داده‌ای ارسال نمی‌شود و متن خطا در نوتیف نمی‌آید. INTERNET همچنان ممنوع است.
-        assertEquals(setOf("android.permission.CAMERA", "android.permission.POST_NOTIFICATIONS"), perms)
-        assertTrue("INTERNET نباید اضافه شود", !manifest.contains("INTERNET"))
+        // CAMERA: اسکن QR؛ POST_NOTIFICATIONS: اعلان محلی خطا؛ INTERNET: فقط برای امکانات اختیاری HTTPS-only (WebDAV، k-Anonymity HIBP، OAuth PKCE).
+        assertEquals(
+            setOf(
+                "android.permission.CAMERA",
+                "android.permission.POST_NOTIFICATIONS",
+                "android.permission.INTERNET",
+            ),
+            perms,
+        )
     }
 
-    @Test fun backupDisabledAndNoDebuggableFlag() {
+    @Test fun backupDisabledCleartextBlockedAndNoDebuggableFlag() {
         assertTrue(manifest.contains("""android:allowBackup="false""""))
         assertTrue(!manifest.contains("android:debuggable"))
-        assertTrue(!manifest.contains("usesCleartextTraffic"))
+        assertTrue(manifest.contains("""android:usesCleartextTraffic="false""""))
+        assertTrue(manifest.contains("""android:networkSecurityConfig="@xml/network_security_config""""))
+        val netSec = File(moduleDir(), "src/main/res/xml/network_security_config.xml").readText()
+        assertTrue(netSec.contains("""cleartextTrafficPermitted="false""""))
     }
 
     @Test fun onlyExpectedComponentsAreExported() {
-        // هر تگ را جدا بررسی می‌کنیم تا regex از یک تگ به تگ بعدی نپرد.
         val tags = Regex("""<(activity|service|receiver|provider)\b[^>]*>""").findAll(manifest).map { it.value }.toList()
         val names = tags.filter { it.contains("""android:exported="true"""") }
             .map { Regex("""android:name="([^"]+)"""").find(it)!!.groupValues[1] }.toSet()

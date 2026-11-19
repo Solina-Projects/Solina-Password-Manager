@@ -5,6 +5,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import app.solina.passwordmanager.auth.ExternalAccountManager
+import app.solina.passwordmanager.core.security.BiometricKeystore
 import app.solina.passwordmanager.core.security.SecurityPrefs
 import app.solina.passwordmanager.core.security.VaultFiles
 import app.solina.passwordmanager.core.security.VaultSession
@@ -17,26 +19,26 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
 
-/** ظرف ساده برای وابستگی‌های سراسری (در M1 با Hilt جایگزین می‌شود). */
+/** ظرف وابستگی‌های سراسری Solina با جداسازی لایه‌های امنیتی، داده و همگام‌سازی. */
 class AppContainer(context: Context) {
-    val files = VaultFiles(File(context.filesDir, "solina"))
-    val securityPrefs = SecurityPrefs(context)
+    private val appContext = context.applicationContext
+    val files = VaultFiles(File(appContext.filesDir, "solina"))
+    val securityPrefs = SecurityPrefs(appContext)
+    val externalAccounts = ExternalAccountManager(appContext)
     val session = VaultSession(clock = SystemClock::elapsedRealtime)
-    val database by lazy { SolinaDatabase.open(context) }
+    val database by lazy { SolinaDatabase.open(appContext) }
     val itemStore by lazy { RoomItemStore(database) }
     val repository by lazy { VaultRepository(itemStore, session) }
-    val sync = app.solina.passwordmanager.sync.SyncManager(context.applicationContext, files, session, { itemStore }, { repository })
+    val sync = app.solina.passwordmanager.sync.SyncManager(appContext, files, session, { itemStore }, { repository })
 
     private val handler = Handler(Looper.getMainLooper())
     private val lockCheck = Runnable { session.enforceTimeout(securityPrefs.autoLockMillis()) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     init {
-        // هر وقت خزانه قفل شد (از هر مسیری)، فهرست رمزگشایی‌شده از حافظه پاک می‌شود.
         scope.launch { session.unlocked.collect { if (!it) repository.clear() } }
     }
 
-    /** شروع مهلت قفل خودکار؛ در پس‌زمینه هم (بدون نیاز به بازگشت به اپ) قفل انجام می‌شود. */
     fun scheduleAutoLock() {
         handler.removeCallbacks(lockCheck)
         val timeout = securityPrefs.autoLockMillis()
@@ -49,6 +51,23 @@ class AppContainer(context: Context) {
     }
 
     fun cancelAutoLock() = handler.removeCallbacks(lockCheck)
+
+    /**
+     * خروج کامل و پاک‌سازی امن تمام اطلاعات محلی (دیتابیس با secure_delete + VACUUM،
+     * فایل‌های هدر خزانه، کلید بیومتریک Keystore، اتصال همگام‌سازی و حساب‌های خارجی).
+     */
+    suspend fun wipeLocalVaultSecurely() {
+        cancelAutoLock()
+        session.lock()
+        repository.clear()
+        runCatching { itemStore.wipeAll() }
+        runCatching { BiometricKeystore.deleteKey() }
+        files.deleteAll()
+        sync.disconnect()
+        externalAccounts.clearAll()
+        securityPrefs.clear()
+        DiagLog.log("WIPE", "local vault securely wiped")
+    }
 }
 
 class SolinaApplication : Application() {

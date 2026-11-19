@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -45,19 +44,20 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.solina.passwordmanager.core.Base32
+import app.solina.passwordmanager.core.OtpType
 import app.solina.passwordmanager.core.PasswordGenerator
 import app.solina.passwordmanager.core.Totp
 import app.solina.passwordmanager.core.fa
-import app.solina.passwordmanager.core.Base32
 import app.solina.passwordmanager.core.formatJalali
+import app.solina.passwordmanager.core.security.AppLanguage
 import app.solina.passwordmanager.core.security.AutoLockOption
 import app.solina.passwordmanager.core.security.ClipboardClearOption
+import app.solina.passwordmanager.core.security.ThemeMode
 import app.solina.passwordmanager.core.storage.Flag
 import app.solina.passwordmanager.core.storage.HistoryEntry
 import app.solina.passwordmanager.core.storage.ItemKind
@@ -65,6 +65,7 @@ import app.solina.passwordmanager.core.storage.ItemPayload
 import app.solina.passwordmanager.core.storage.SecurityReport
 import app.solina.passwordmanager.core.storage.VaultItem
 import app.solina.passwordmanager.ui.components.AnimatedFilterRow
+import app.solina.passwordmanager.ui.components.CLIPBOARD_CLEAR_MILLIS
 import app.solina.passwordmanager.ui.components.Card
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.ItemAvatar
@@ -74,10 +75,10 @@ import app.solina.passwordmanager.ui.components.RollingTotpCode
 import app.solina.passwordmanager.ui.components.SIcon
 import app.solina.passwordmanager.ui.components.StrengthBar
 import app.solina.passwordmanager.ui.components.TotpRing
-import app.solina.passwordmanager.ui.components.CLIPBOARD_CLEAR_MILLIS
 import app.solina.passwordmanager.ui.components.copySensitive
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
+import app.solina.passwordmanager.ui.viewmodel.BreachScanState
 import kotlinx.coroutines.delay
 
 /** زمان زنده برای کدهای TOTP؛ هر ۲۵۰ میلی‌ثانیه به‌روز می‌شود. */
@@ -93,11 +94,16 @@ private fun rememberNow(): Long {
     return now
 }
 
-
 private fun secretBytes(p: ItemPayload): ByteArray? = if (p.totpSecret.isBlank()) null else Base32.decode(p.totpSecret)
 
 private fun codeFor(p: ItemPayload, now: Long, offsetMillis: Long = 0L): String? = secretBytes(p)?.let {
-    runCatching { Totp.generate(it, now + offsetMillis, p.totpPeriod, p.totpDigits, "Hmac" + p.totpAlgorithm) }.getOrNull()
+    runCatching {
+        if (p.otpType == OtpType.HOTP) {
+            Totp.generateHotp(it, p.totpCounter, p.totpDigits, "Hmac" + p.totpAlgorithm)
+        } else {
+            Totp.generate(it, now + offsetMillis, p.totpPeriod, p.totpDigits, "Hmac" + p.totpAlgorithm)
+        }
+    }.getOrNull()
 }
 
 private fun faSecondsLeft(now: Long, period: Int = 30): String {
@@ -163,6 +169,8 @@ private fun EmptyState(title: String, body: String, action: String? = null, onAc
 fun HomeScreen(
     items: List<VaultItem>,
     report: SecurityReport,
+    breachState: BreachScanState = BreachScanState(),
+    onRunBreachCheck: () -> Unit = {},
     onLock: () -> Unit,
     onOpenItem: (String) -> Unit,
     onGoVault: () -> Unit,
@@ -172,9 +180,11 @@ fun HomeScreen(
     onScan: () -> Unit,
 ) {
     val c = Solina.colors
+    val str = Solina.strings
     val now = rememberNow()
     val withTotp = items.filter { secretBytes(it.payload) != null }
     val recent = items.sortedByDescending { it.payload.editedAt }.take(3)
+    val breachedCount = breachState.breachedIds.size
 
     Column(
         Modifier
@@ -184,9 +194,9 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { ScreenTitle("خانه") }
+            Box(Modifier.weight(1f)) { ScreenTitle(str.tabHome) }
             Box(Modifier.statusBarsPadding().padding(top = 12.dp)) {
-                IconAction(SolinaIcons.Lock, "قفل کردن خزانه", tint = c.text, background = c.container, onClick = onLock)
+                IconAction(SolinaIcons.Lock, str.lockVault, tint = c.text, background = c.container, onClick = onLock)
             }
         }
 
@@ -199,40 +209,78 @@ fun HomeScreen(
             )
         } else {
             Card(background = c.primaryContainer, padding = 18.dp) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    TotpRing(
-                        remainingMillis = (report.score * 300L).coerceAtLeast(1L),
-                        periodSeconds = 30,
-                        size = 88.dp,
-                        faSeconds = "${report.score.fa()}٪",
-                        color = c.primary,
-                        track = c.primary.copy(alpha = 0.2f),
-                        textColor = c.onPrimaryContainer,
-                    )
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("سلامت خزانه", color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 13.sp)
-                        Text(
-                            if (report.weak == 0 && report.reused == 0 && report.insecureHttp == 0) "رمز ضعیف، تکراری یا نشانی ناامن ندارید."
-                            else buildString {
-                                append("${report.reused.fa()} رمز تکراری و ${report.weak.fa()} رمز ضعیف")
-                                if (report.insecureHttp > 0) append(" و ${report.insecureHttp.fa()} نشانی HTTP ناامن")
-                                append(" دارید.")
-                            },
-                            color = c.onPrimaryContainer,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            lineHeight = 24.sp,
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        TotpRing(
+                            remainingMillis = (report.score * 300L).coerceAtLeast(1L),
+                            periodSeconds = 30,
+                            size = 88.dp,
+                            faSeconds = "${report.score.fa()}٪",
+                            color = c.primary,
+                            track = c.primary.copy(alpha = 0.2f),
+                            textColor = c.onPrimaryContainer,
                         )
-                        if (report.weak > 0 || report.reused > 0 || report.insecureHttp > 0) {
-                            Box(
-                                Modifier
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(c.primary)
-                                    .clickable(role = Role.Button, onClick = onGoVault)
-                                    .padding(horizontal = 18.dp),
-                                contentAlignment = Alignment.Center,
-                            ) { Text("رفع مشکلات", color = c.onPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(str.vaultHealth, color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 13.sp)
+                            Text(
+                                if (report.weak == 0 && report.reused == 0 && report.insecureHttp == 0 && breachedCount == 0) {
+                                    "رمز ضعیف، تکراری یا نشانی ناامن ندارید."
+                                } else {
+                                    buildString {
+                                        append("${report.reused.fa()} رمز تکراری و ${report.weak.fa()} رمز ضعیف")
+                                        if (report.insecureHttp > 0) append(" و ${report.insecureHttp.fa()} نشانی HTTP ناامن")
+                                        if (breachedCount > 0) append(" و ${breachedCount.fa()} رمز افشاشده")
+                                        append(" دارید.")
+                                    }
+                                },
+                                color = c.onPrimaryContainer,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                lineHeight = 24.sp,
+                            )
+                            if (report.weak > 0 || report.reused > 0 || report.insecureHttp > 0 || breachedCount > 0) {
+                                Box(
+                                    Modifier
+                                        .height(38.dp)
+                                        .clip(RoundedCornerShape(19.dp))
+                                        .background(c.primary)
+                                        .clickable(role = Role.Button, onClick = onGoVault)
+                                        .padding(horizontal = 16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) { Text("رفع مشکلات", color = c.onPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium) }
+                            }
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.onPrimaryContainer.copy(alpha = 0.14f)))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                if (breachState.scanning) str.checkingBreaches
+                                else if (breachState.error != null) breachState.error
+                                else if (breachState.checkedCount > 0) {
+                                    if (breachedCount == 0) "${breachState.checkedCount.fa()} رمز بررسی شد — افشایی یافت نشد."
+                                    else "${breachedCount.fa()} رمز در نشت‌های عمومی یافت شد!"
+                                } else "بررسی اختیاری نشت رمز (فقط ۵ کاراکتر اول SHA-1 ارسال می‌شود)",
+                                color = if (breachedCount > 0) c.secondary else c.onPrimaryContainer.copy(alpha = 0.85f),
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp,
+                            )
+                        }
+                        Box(
+                            Modifier
+                                .height(36.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(c.surface)
+                                .clickable(enabled = !breachState.scanning, role = Role.Button, onClick = onRunBreachCheck)
+                                .padding(horizontal = 14.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                if (breachState.scanning) "…" else str.checkBreaches,
+                                color = c.text,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
                         }
                     }
                 }
@@ -242,7 +290,7 @@ fun HomeScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("کدهای من", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Text("همه", color = c.primary, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.clickable(onClick = onGoCodes).padding(8.dp))
+                        Text(str.all, color = c.primary, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.clickable(onClick = onGoCodes).padding(8.dp))
                     }
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         withTotp.take(3).forEach { item ->
@@ -252,16 +300,21 @@ fun HomeScreen(
                                     .width(156.dp)
                                     .clip(RoundedCornerShape(20.dp))
                                     .background(c.surface)
+                                    .clickable(role = Role.Button) { onOpenItem(item.id) }
                                     .padding(14.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(item.payload.title, color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
-                                    TotpRing(
-                                        Totp.remainingMillis(now, item.payload.totpPeriod), item.payload.totpPeriod, 34.dp, faSecondsLeft(now, item.payload.totpPeriod),
-                                        if (Totp.remainingMillis(now, item.payload.totpPeriod) <= 5000) c.secondary else c.primary,
-                                        c.primary.copy(alpha = 0.2f), c.text,
-                                    )
+                                    if (item.payload.otpType == OtpType.HOTP) {
+                                        Pill("#${item.payload.totpCounter.toInt().fa()}", c.primaryContainer, c.onPrimaryContainer)
+                                    } else {
+                                        TotpRing(
+                                            Totp.remainingMillis(now, item.payload.totpPeriod), item.payload.totpPeriod, 34.dp, faSecondsLeft(now, item.payload.totpPeriod),
+                                            if (Totp.remainingMillis(now, item.payload.totpPeriod) <= 5000) c.secondary else c.primary,
+                                            c.primary.copy(alpha = 0.2f), c.text,
+                                        )
+                                    }
                                 }
                                 RollingTotpCode(code, c.primary, 22.sp, modifier = Modifier.fillMaxWidth())
                             }
@@ -278,7 +331,14 @@ fun HomeScreen(
 
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("اخیر", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 6.dp))
-                recent.forEach { item -> ItemRow(item, report.flags[item.id].orEmpty(), onClick = { onOpenItem(item.id) }) }
+                recent.forEach { item ->
+                    ItemRow(
+                        item = item,
+                        flags = report.flags[item.id].orEmpty(),
+                        breached = item.id in breachState.breachedIds,
+                        onClick = { onOpenItem(item.id) },
+                    )
+                }
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -304,13 +364,15 @@ private fun QuickAction(text: String, icon: androidx.compose.ui.graphics.vector.
 // ───────────────────────── خزانه ─────────────────────────
 
 @Composable
-private fun ItemRow(item: VaultItem, flags: Set<Flag>, onClick: () -> Unit) {
+private fun ItemRow(item: VaultItem, flags: Set<Flag>, breached: Boolean = false, onClick: () -> Unit) {
     val c = Solina.colors
+    val str = Solina.strings
     val p = item.payload
     val subtitle = when (p.kind) {
-        ItemKind.Login -> p.username
-        ItemKind.Card -> if (p.cardNumber.length >= 4) "•••• " + p.cardNumber.takeLast(4) else "کارت"
-        ItemKind.Note -> "یادداشت امن"
+        ItemKind.Login -> p.username.ifBlank { p.website }
+        ItemKind.Card -> if (p.cardNumber.length >= 4) "•••• " + p.cardNumber.takeLast(4) else p.bankName.ifBlank { str.kindCard }
+        ItemKind.Identity -> p.fullName.ifBlank { p.email.ifBlank { p.phone.ifBlank { str.kindIdentity } } }
+        ItemKind.Note -> p.category.ifBlank { "یادداشت امن" }
     }
     Row(
         Modifier
@@ -321,20 +383,38 @@ private fun ItemRow(item: VaultItem, flags: Set<Flag>, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        when (p.kind) {
-            ItemKind.Card -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Card, c.text) }
-            ItemKind.Note -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
-            ItemKind.Login -> ItemAvatar(p.title.ifBlank { "?" })
+        if (p.icon.isNotBlank()) {
+            Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) {
+                Text(p.icon, fontSize = 20.sp)
+            }
+        } else {
+            when (p.kind) {
+                ItemKind.Card -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Card, c.text) }
+                ItemKind.Identity -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.primaryContainer), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Shield, c.onPrimaryContainer) }
+                ItemKind.Note -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
+                ItemKind.Login -> ItemAvatar(p.title.ifBlank { "?" })
+            }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(p.title, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-            if (subtitle.isNotBlank()) Text(subtitle, color = c.muted, fontSize = 13.sp, fontFamily = Mono, textAlign = TextAlign.Left, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(p.title, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                if (p.favorite) Text("★", color = c.primary, fontSize = 13.sp)
+            }
+            val line2 = buildString {
+                if (subtitle.isNotBlank()) append(subtitle)
+                if (p.category.isNotBlank() && p.category != subtitle) {
+                    if (isNotEmpty()) append(" · ")
+                    append(p.category)
+                }
+            }
+            if (line2.isNotBlank()) Text(line2, color = c.muted, fontSize = 13.sp, fontFamily = Mono, textAlign = TextAlign.Left, maxLines = 1)
         }
         when {
+            breached -> Pill(str.breachedBadge, c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
             Flag.Weak in flags -> Pill("ضعیف", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
             Flag.Reused in flags -> Pill("تکراری", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Copy)
             Flag.InsecureHttp in flags -> Pill("HTTP", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
-            p.totpSecret.isNotBlank() -> Pill("۲FA", c.primaryContainer, c.onPrimaryContainer)
+            p.totpSecret.isNotBlank() -> Pill(if (p.otpType == OtpType.HOTP) "HOTP" else "۲FA", c.primaryContainer, c.onPrimaryContainer)
         }
     }
 }
@@ -344,31 +424,47 @@ fun VaultScreen(
     items: List<VaultItem>,
     report: SecurityReport,
     unreadable: Int,
+    breachState: BreachScanState = BreachScanState(),
     onOpenItem: (String) -> Unit,
     onAdd: () -> Unit,
 ) {
     val c = Solina.colors
+    val str = Solina.strings
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(0) }
-    val filters = listOf("همه", "ورود", "کارت", "یادداشت", "ضعیف")
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    val filters = listOf(str.all, str.kindLogin, str.kindCard, str.kindIdentity, str.kindNote, str.filterIssues)
+    val categories = remember(items) { items.mapNotNull { it.payload.category.trim().ifBlank { null } }.distinct().sorted() }
 
     val shown = items.filter { item ->
         val p = item.payload
         val flags = report.flags[item.id].orEmpty()
+        val breached = item.id in breachState.breachedIds
         val byFilter = when (filter) {
             1 -> p.kind == ItemKind.Login
             2 -> p.kind == ItemKind.Card
-            3 -> p.kind == ItemKind.Note
-            4 -> Flag.Weak in flags || Flag.Reused in flags || Flag.InsecureHttp in flags
+            3 -> p.kind == ItemKind.Identity
+            4 -> p.kind == ItemKind.Note
+            5 -> Flag.Weak in flags || Flag.Reused in flags || Flag.InsecureHttp in flags || breached
             else -> true
         }
+        val byCat = selectedCategory == null || p.category.trim().equals(selectedCategory, ignoreCase = true)
         val q = query.trim()
-        byFilter && (q.isEmpty() || p.title.contains(q, ignoreCase = true) || p.username.contains(q, ignoreCase = true) || p.website.contains(q, ignoreCase = true))
-    }
+        byFilter && byCat && (
+            q.isEmpty() ||
+                p.title.contains(q, ignoreCase = true) ||
+                p.username.contains(q, ignoreCase = true) ||
+                p.website.contains(q, ignoreCase = true) ||
+                p.category.contains(q, ignoreCase = true) ||
+                p.fullName.contains(q, ignoreCase = true) ||
+                p.email.contains(q, ignoreCase = true) ||
+                p.bankName.contains(q, ignoreCase = true)
+            )
+    }.sortedByDescending { it.payload.favorite }
 
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            ScreenTitle("خزانه")
+        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ScreenTitle(str.tabVault)
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -381,7 +477,7 @@ fun VaultScreen(
             ) {
                 SIcon(SolinaIcons.Search, c.muted, 20.dp)
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    if (query.isEmpty()) Text("جست‌وجو در ${items.size.fa()} ورودی", color = c.muted, fontSize = 15.sp)
+                    if (query.isEmpty()) Text("${str.searchVault} (${items.size.fa()})", color = c.muted, fontSize = 15.sp)
                     BasicTextField(
                         value = query,
                         onValueChange = { query = it },
@@ -393,6 +489,28 @@ fun VaultScreen(
                 }
             }
             AnimatedFilterRow(filters, filter) { filter = it }
+            if (categories.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val allCat = selectedCategory == null
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (allCat) c.primaryContainer else c.container)
+                            .clickable(role = Role.RadioButton) { selectedCategory = null }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) { Text(str.all, color = if (allCat) c.onPrimaryContainer else c.muted, fontSize = 12.sp) }
+                    categories.forEach { cat ->
+                        val active = selectedCategory == cat
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (active) c.primaryContainer else c.container)
+                                .clickable(role = Role.RadioButton) { selectedCategory = if (active) null else cat }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) { Text(cat, color = if (active) c.onPrimaryContainer else c.muted, fontSize = 12.sp) }
+                    }
+                }
+            }
             if (unreadable > 0) {
                 Card(background = c.secondaryContainer, padding = 12.dp) {
                     Text(
@@ -402,14 +520,21 @@ fun VaultScreen(
                 }
             }
             if (items.isEmpty()) {
-                EmptyState("هنوز ورودی‌ای ندارید", "با دکمهٔ + یک رمز، کارت یا یادداشت امن اضافه کنید.")
+                EmptyState("هنوز ورودی‌ای ندارید", "با دکمهٔ + یک رمز، کارت، هویت یا یادداشت امن اضافه کنید.")
             } else if (shown.isEmpty()) {
                 Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
                     Text("موردی پیدا نشد", color = c.muted, fontSize = 15.sp)
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    items(shown, key = { it.id }) { item -> ItemRow(item, report.flags[item.id].orEmpty()) { onOpenItem(item.id) } }
+                    items(shown, key = { it.id }) { item ->
+                        ItemRow(
+                            item = item,
+                            flags = report.flags[item.id].orEmpty(),
+                            breached = item.id in breachState.breachedIds,
+                            onClick = { onOpenItem(item.id) },
+                        )
+                    }
                     item { Spacer(Modifier.height(96.dp)) }
                 }
             }
@@ -445,19 +570,23 @@ private fun CopyRow(label: String, value: String, mono: Boolean = true, copyLabe
 fun DetailScreen(
     item: VaultItem?,
     history: List<HistoryEntry>,
+    breachCount: Int = 0,
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onRestore: (HistoryEntry) -> Unit,
+    onIncrementHotp: () -> Unit = {},
     onToast: (String) -> Unit,
     clipboardClearMillis: Long = CLIPBOARD_CLEAR_MILLIS,
 ) {
     val c = Solina.colors
+    val str = Solina.strings
     val ctx = LocalContext.current
     val now = rememberNow()
     var shown by remember(item?.id) { mutableStateOf(false) }
     var confirmDelete by remember(item?.id) { mutableStateOf(false) }
     var showHistory by remember(item?.id) { mutableStateOf(false) }
+
     if (item == null) {
         LaunchedEffect(Unit) { onBack() }
         return
@@ -470,18 +599,42 @@ fun DetailScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(Modifier.statusBarsPadding().padding(top = 12.dp).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.statusBarsPadding().padding(top = 12.dp).height(48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             IconAction(SolinaIcons.ChevronRight, "بازگشت", tint = c.text, onClick = onBack)
-            Box(Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
             IconAction(SolinaIcons.Edit, "ویرایش", tint = c.text, background = c.container, onClick = onEdit)
         }
 
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ItemAvatar(p.title.ifBlank { "?" }, 72.dp)
-            Text(p.title, color = c.text, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+            if (p.icon.isNotBlank()) {
+                Box(Modifier.size(72.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) {
+                    Text(p.icon, fontSize = 34.sp)
+                }
+            } else {
+                ItemAvatar(p.title.ifBlank { "?" }, 72.dp)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(p.title, color = c.text, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                if (p.favorite) Text("★", color = c.primary, fontSize = 18.sp)
+            }
             if (p.website.isNotEmpty()) Text(p.website, color = c.primary, fontSize = 14.sp, fontFamily = Mono)
+            if (p.category.isNotBlank()) Pill(p.category, c.container, c.text)
+        }
+
+        if (breachCount > 0) {
+            Card(background = c.secondaryContainer, padding = 14.dp) {
+                Text(
+                    "هشدار افشا: این رمز عبور ${breachCount.fa()} بار در نشت‌های عمومی دیده شده است. بهتر است هرچه سریع‌تر آن را تغییر دهید.",
+                    color = c.onSecondaryContainer,
+                    fontSize = 13.sp,
+                    lineHeight = 22.sp,
+                )
+            }
         }
 
         when (p.kind) {
@@ -523,6 +676,10 @@ fun DetailScreen(
             ItemKind.Card -> {
                 Card(padding = 6.dp) {
                     Column {
+                        if (p.bankName.isNotEmpty()) {
+                            CopyRow("بانک", p.bankName, mono = false, copyLabel = "کپی نام بانک") { copySensitive(ctx, "bank", p.bankName, clipboardClearMillis); onToast("کپی شد") }
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                        }
                         if (p.cardHolder.isNotEmpty()) {
                             CopyRow("نام دارندهٔ کارت", p.cardHolder, mono = false, copyLabel = "کپی نام دارنده") { copySensitive(ctx, "holder", p.cardHolder, clipboardClearMillis); onToast("کپی شد") }
                             Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
@@ -534,6 +691,10 @@ fun DetailScreen(
                         CopyRow("تاریخ انقضا", p.cardExpiry, copyLabel = "کپی تاریخ انقضا") { copySensitive(ctx, "expiry", p.cardExpiry, clipboardClearMillis); onToast("کپی شد") }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                         CopyRow("CVV2", if (shown) p.cardCvv else "•••", copyLabel = "کپی CVV2") { copySensitive(ctx, "cvv", p.cardCvv, clipboardClearMillis); onToast("CVV2 کپی شد. ${(clipboardClearMillis / 1000L).toInt().fa()} ثانیهٔ دیگر پاک می‌شود.") }
+                        if (p.cardPin.isNotEmpty()) {
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                            CopyRow("رمز کارت (PIN)", if (shown) p.cardPin else "••••", copyLabel = "کپی PIN") { copySensitive(ctx, "pin", p.cardPin, clipboardClearMillis); onToast("PIN کپی شد") }
+                        }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                         Row(
                             Modifier.fillMaxWidth().height(52.dp).clickable(role = Role.Button) { shown = !shown }.padding(horizontal = 12.dp),
@@ -544,27 +705,77 @@ fun DetailScreen(
                     }
                 }
             }
+            ItemKind.Identity -> {
+                val fields = listOf(
+                    Triple("نام و نام خانوادگی", p.fullName, false),
+                    Triple("ایمیل", p.email, true),
+                    Triple("تلفن", p.phone, true),
+                    Triple("کد ملی / شناسه", p.nationalId, true),
+                    Triple("سازمان / شرکت", p.company, false),
+                    Triple("نشانی", p.address, false),
+                    Triple("شهر", p.city, false),
+                    Triple("کد پستی", p.postalCode, true),
+                    Triple("کشور", p.country, false),
+                ).filter { it.second.isNotBlank() }
+                if (fields.isNotEmpty()) {
+                    Card(padding = 6.dp) {
+                        Column {
+                            fields.forEachIndexed { idx, (label, value, isMono) ->
+                                if (idx > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                                CopyRow(label, value, mono = isMono, copyLabel = "کپی $label") {
+                                    copySensitive(ctx, label, value, clipboardClearMillis)
+                                    onToast("$label کپی شد")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             ItemKind.Note -> Unit
         }
 
         if (code != null) {
-            val left = Totp.remainingMillis(now, p.totpPeriod)
             Card(background = c.primaryContainer) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("کد یک‌بارمصرف", color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 12.sp)
-                        RollingTotpCode(code, c.onPrimaryContainer, 28.sp)
+                if (p.otpType == OtpType.HOTP) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                Text("کد شمارنده (HOTP · ${str.counterLabel}: ${p.totpCounter.toInt().fa()})", color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 12.sp)
+                                RollingTotpCode(code, c.onPrimaryContainer, 28.sp)
+                            }
+                            IconAction(SolinaIcons.Copy, "کپی کد", tint = c.onPrimaryContainer) {
+                                copySensitive(ctx, "hotp", code, clipboardClearMillis)
+                                onToast("کد کپی شد")
+                            }
+                        }
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .clip(RoundedCornerShape(21.dp))
+                                .background(c.primary)
+                                .clickable(role = Role.Button, onClick = onIncrementHotp),
+                            contentAlignment = Alignment.Center,
+                        ) { Text(str.nextHotpCode, color = c.onPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                     }
-                    TotpRing(left, p.totpPeriod, 44.dp, faSecondsLeft(now, p.totpPeriod), if (left <= 5000) c.secondary else c.primary, c.primary.copy(alpha = 0.2f), c.onPrimaryContainer)
-                    IconAction(SolinaIcons.Copy, "کپی کد", tint = c.onPrimaryContainer) {
-                        copySensitive(ctx, "totp", code, clipboardClearMillis)
-                        onToast("کد کپی شد")
+                } else {
+                    val left = Totp.remainingMillis(now, p.totpPeriod)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("کد یک‌بارمصرف (TOTP · ${p.totpDigits.fa()} رقمی)", color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 12.sp)
+                            RollingTotpCode(code, c.onPrimaryContainer, 28.sp)
+                        }
+                        TotpRing(left, p.totpPeriod, 44.dp, faSecondsLeft(now, p.totpPeriod), if (left <= 5000) c.secondary else c.primary, c.primary.copy(alpha = 0.2f), c.onPrimaryContainer)
+                        IconAction(SolinaIcons.Copy, "کپی کد", tint = c.onPrimaryContainer) {
+                            copySensitive(ctx, "totp", code, clipboardClearMillis)
+                            onToast("کد کپی شد")
+                        }
                     }
                 }
             }
         } else if (p.totpSecret.isNotBlank()) {
             Card(background = c.secondaryContainer, padding = 12.dp) {
-                Text("راز TOTP معتبر نیست (Base32 نیست). آن را از «ویرایش» اصلاح کنید.", color = c.onSecondaryContainer, fontSize = 13.sp, lineHeight = 22.sp)
+                Text("راز OTP معتبر نیست (Base32 نیست). آن را از «ویرایش» اصلاح کنید.", color = c.onSecondaryContainer, fontSize = 13.sp, lineHeight = 22.sp)
             }
         }
 
@@ -578,8 +789,8 @@ fun DetailScreen(
         }
 
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-            Text("ایجاد: ${formatJalali(p.createdAt)}", color = c.muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
-            Text("آخرین ویرایش: ${formatJalali(p.editedAt)}", color = c.muted, fontSize = 12.sp)
+            Text("${str.createdLabel}: ${formatJalali(p.createdAt)}", color = c.muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text("${str.editedLabel}: ${formatJalali(p.editedAt)}", color = c.muted, fontSize = 12.sp)
         }
 
         if (history.isNotEmpty()) {
@@ -639,7 +850,7 @@ fun DetailScreen(
     }
 }
 
-// ───────────────────────── کدها ─────────────────────────
+// ───────────────────────── کدها (Authenticator داخلی) ─────────────────────────
 
 @Composable
 fun CodesScreen(
@@ -648,33 +859,101 @@ fun CodesScreen(
     onOpenItem: (String) -> Unit,
     onScan: () -> Unit,
     onAdd: () -> Unit,
+    onIncrementHotp: (VaultItem) -> Unit = {},
+    onBackupAuth: () -> Unit = {},
     clipboardClearMillis: Long = CLIPBOARD_CLEAR_MILLIS,
 ) {
     val c = Solina.colors
+    val str = Solina.strings
     val ctx = LocalContext.current
     val now = rememberNow()
-    val withTotp = items.filter { codeFor(it.payload, now) != null }
+    var query by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    val allOtp = items.filter { codeFor(it.payload, now) != null }
+    val categories = remember(allOtp) { allOtp.mapNotNull { it.payload.category.trim().ifBlank { null } }.distinct().sorted() }
+    val withOtp = allOtp.filter { item ->
+        val p = item.payload
+        val q = query.trim()
+        val byCat = selectedCategory == null || p.category.trim().equals(selectedCategory, ignoreCase = true)
+        byCat && (q.isEmpty() || p.title.contains(q, ignoreCase = true) || p.username.contains(q, ignoreCase = true) || p.category.contains(q, ignoreCase = true))
+    }.sortedByDescending { it.payload.favorite }
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { ScreenTitle("کدها") }
+            Box(Modifier.weight(1f)) { ScreenTitle(str.tabCodes) }
             Row(Modifier.statusBarsPadding().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (allOtp.isNotEmpty()) {
+                    IconAction(SolinaIcons.Shield, str.authBackupButton, tint = c.text, background = c.container, onClick = onBackupAuth)
+                }
                 IconAction(SolinaIcons.Plus, "افزودن دستی کد", tint = c.text, background = c.container, onClick = onAdd)
                 IconAction(SolinaIcons.Qr, "اسکن QR", tint = c.onPrimary, background = c.primary, onClick = onScan)
             }
         }
-        if (withTotp.isEmpty()) {
+        if (allOtp.isNotEmpty()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(c.container)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SIcon(SolinaIcons.Search, c.muted, 18.dp)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (query.isEmpty()) Text(str.searchCodes, color = c.muted, fontSize = 14.sp)
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = c.text, fontSize = 14.sp),
+                        cursorBrush = SolidColor(c.primary),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            if (categories.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val allCat = selectedCategory == null
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (allCat) c.primaryContainer else c.container)
+                            .clickable(role = Role.RadioButton) { selectedCategory = null }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) { Text(str.all, color = if (allCat) c.onPrimaryContainer else c.muted, fontSize = 12.sp) }
+                    categories.forEach { cat ->
+                        val active = selectedCategory == cat
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (active) c.primaryContainer else c.container)
+                                .clickable(role = Role.RadioButton) { selectedCategory = if (active) null else cat }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) { Text(cat, color = if (active) c.onPrimaryContainer else c.muted, fontSize = 12.sp) }
+                    }
+                }
+            }
+        }
+        if (allOtp.isEmpty()) {
             EmptyState(
                 "هنوز کدی ندارید",
-                "هنگام افزودن یا ویرایش یک ورودی، «راز TOTP» (کلید Base32 که سرویس نشان می‌دهد) را وارد کنید تا کد زنده اینجا بیاید. با دکمهٔ + (افزودن دستی) یا دکمهٔ اسکن QR بالای صفحه می‌توانید کد اضافه کنید.",
+                "هنگام افزودن یا ویرایش یک ورودی، کلید مخفی TOTP یا HOTP (Base32) را وارد کنید یا QR را اسکن کنید تا کدهای ۶ یا ۸ رقمی اینجا نمایش داده شوند.",
             )
+        } else if (withOtp.isEmpty()) {
+            Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                Text("کدی با این فیلتر پیدا نشد", color = c.muted, fontSize = 14.sp)
+            }
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(withTotp, key = { it.id }) { item ->
+            items(withOtp, key = { it.id }) { item ->
                 val p = item.payload
                 val code = codeFor(p, now) ?: return@items
-                val left = Totp.remainingMillis(now, p.totpPeriod)
-                val urgent = left <= 5000
+                val isHotp = p.otpType == OtpType.HOTP
+                val left = if (isHotp) 30_000L else Totp.remainingMillis(now, p.totpPeriod)
+                val urgent = !isHotp && left <= 5000
                 val accent = if (urgent) c.secondary else c.primary
                 Row(
                     Modifier
@@ -682,7 +961,7 @@ fun CodesScreen(
                         .clip(RoundedCornerShape(22.dp))
                         .background(if (urgent) c.secondaryContainer else c.surface)
                         .clickable(role = Role.Button, onClickLabel = "کپی کد ${p.title}") {
-                            copySensitive(ctx, "totp", code, clipboardClearMillis)
+                            copySensitive(ctx, "otp", code, clipboardClearMillis)
                             onToast("کد ${p.title} کپی شد")
                         }
                         .padding(16.dp),
@@ -690,7 +969,11 @@ fun CodesScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(p.title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (p.icon.isNotBlank()) Text(p.icon, fontSize = 16.sp)
+                            Text(p.title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            if (p.category.isNotBlank()) Pill(p.category, c.container, c.muted)
+                        }
                         if (p.username.isNotBlank()) Text(p.username, color = c.muted, fontSize = 13.sp, fontFamily = Mono, textAlign = TextAlign.Left)
                         RollingTotpCode(code, accent, 32.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 4.dp))
                         if (urgent) {
@@ -701,9 +984,27 @@ fun CodesScreen(
                                 fontSize = 14.sp,
                                 textAlign = TextAlign.Left,
                             )
+                        } else if (isHotp) {
+                            Text("HOTP · ${str.counterLabel}: ${p.totpCounter.toInt().fa()}", color = c.muted, fontSize = 12.sp)
                         }
                     }
-                    TotpRing(left, p.totpPeriod, 52.dp, faSecondsLeft(now, p.totpPeriod), accent, accent.copy(alpha = 0.2f), c.text)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (isHotp) {
+                            Box(
+                                Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(c.primaryContainer)
+                                    .clickable(role = Role.Button, onClickLabel = str.nextHotpCode) { onIncrementHotp(item) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("+1", color = c.onPrimaryContainer, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            TotpRing(left, p.totpPeriod, 52.dp, faSecondsLeft(now, p.totpPeriod), accent, accent.copy(alpha = 0.2f), c.text)
+                        }
+                        IconAction(SolinaIcons.Edit, "جزئیات و ویرایش ${p.title}", tint = c.muted) { onOpenItem(item.id) }
+                    }
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
@@ -893,6 +1194,7 @@ fun SettingsScreen(
     syncStatus: app.solina.passwordmanager.sync.SyncStatus,
     onSyncConnectCloud: () -> Unit,
     onSyncConnectStorage: () -> Unit,
+    onSyncConnectWebDav: () -> Unit = {},
     onSyncNow: () -> Unit,
     onSyncDisconnect: () -> Unit,
     onSetSchedule: (app.solina.passwordmanager.core.sync.BackupSchedule) -> Unit,
@@ -900,12 +1202,23 @@ fun SettingsScreen(
     onSetAutoLock: (AutoLockOption) -> Unit,
     clipboardClear: ClipboardClearOption,
     onSetClipboardClear: (ClipboardClearOption) -> Unit,
+    themeMode: ThemeMode = ThemeMode.System,
+    onSetThemeMode: (ThemeMode) -> Unit = {},
+    language: AppLanguage = AppLanguage.FA,
+    onSetLanguage: (AppLanguage) -> Unit = {},
+    externalAccountCount: Int = 0,
+    onOpenExternalAccounts: () -> Unit = {},
+    onChangeMasterPassword: () -> Unit = {},
+    onWipeLocalVault: () -> Unit = {},
     onDiagnostics: () -> Unit,
     onLock: () -> Unit,
 ) {
     val c = Solina.colors
+    val str = Solina.strings
+    var confirmWipe by remember { mutableStateOf(false) }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        ScreenTitle("تنظیمات")
+        ScreenTitle(str.tabSettings)
         Card {
             Column {
                 Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -929,9 +1242,9 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("پر کردن خودکار (Autofill)", color = c.text, fontSize = 15.sp)
+                        Text("پر کردن خودکار (Autofill + Inline)", color = c.text, fontSize = 15.sp)
                         Text(
-                            if (autofillEnabled) "فعال است. در Chrome گزینهٔ «Autofill using another service» را هم روشن کنید."
+                            if (autofillEnabled) "فعال است (با پشتیبانی Inline روی اندروید ۱۱ به بالا). در Chrome گزینهٔ «Autofill using another service» را هم روشن کنید."
                             else "غیرفعال؛ برای انتخاب Solina به‌عنوان سرویس بزنید",
                             color = c.muted, fontSize = 12.sp, lineHeight = 18.sp,
                         )
@@ -960,8 +1273,23 @@ fun SettingsScreen(
                     Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onOpenData),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("بکاپ و ایمپورت", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    Text("بکاپ، بکاپ Authenticator و ایمپورت", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
                     SIcon(SolinaIcons.ChevronRight, c.muted, 20.dp)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Row(
+                    Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onOpenExternalAccounts).padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(str.externalAccountsTitle, color = c.text, fontSize = 15.sp)
+                        Text(str.externalAccountsSub, color = c.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                    }
+                    if (externalAccountCount > 0) {
+                        Pill("${externalAccountCount.fa()} متصل", c.primaryContainer, c.onPrimaryContainer)
+                    } else {
+                        SIcon(SolinaIcons.ChevronRight, c.muted, 20.dp)
+                    }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                 Row(
@@ -969,11 +1297,16 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(if (syncStatus.configured) "پشتیبان‌گیری / همگام‌سازی اکنون" else "پشتیبان در فضای ابری", color = c.text, fontSize = 15.sp)
+                        Text(if (syncStatus.configured) "پشتیبان‌گیری / همگام‌سازی اکنون" else "پشتیبان در فضای ابری (SAF)", color = c.text, fontSize = 15.sp)
                         Text(
-                            if (!syncStatus.configured) "پوشه‌ای در فضای ابری خودتان (Google Drive، Nextcloud، Syncthing یا هر ارائه‌دهندهٔ فایل) انتخاب کنید. فقط داده‌های رمزشده نوشته می‌شود؛ با همان پوشه و رمز اصلی یا ۲۴ کلمه روی دستگاه جدید بازیابی می‌شود."
+                            if (!syncStatus.configured) "پوشه‌ای در فضای ابری خودتان (Google Drive، Nextcloud، Syncthing) انتخاب کنید. فقط داده‌های رمزشده نوشته می‌شود."
                             else buildString {
-                                append((if (syncStatus.kind == "cloud") "فضای ابری: " else "فضای ذخیره‌سازی: ") + syncStatus.folderName)
+                                val prefix = when (syncStatus.kind) {
+                                    "webdav" -> "سرور WebDAV: "
+                                    "cloud" -> "فضای ابری: "
+                                    else -> "فضای ذخیره‌سازی: "
+                                }
+                                append(prefix + syncStatus.folderName)
                                 if (syncStatus.lastSyncAt > 0) append(" · آخرین: ${app.solina.passwordmanager.core.formatJalali(syncStatus.lastSyncAt)}")
                                 if (syncStatus.syncing) append(" · در حال همگام‌سازی…")
                                 syncStatus.message?.let { append("\n$it") }
@@ -981,29 +1314,42 @@ fun SettingsScreen(
                             color = c.muted, fontSize = 12.sp, lineHeight = 18.sp,
                         )
                     }
+                    if (syncStatus.configured) Pill("همگام", c.primaryContainer, c.onPrimaryContainer)
+                    else SIcon(SolinaIcons.ChevronRight, c.muted, 20.dp)
                 }
                 if (!syncStatus.configured) {
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                    Row(
+                        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onSyncConnectWebDav).padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(str.webdavSyncTitle, color = c.text, fontSize = 15.sp)
+                            Text(str.webdavSyncSub, color = c.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                        }
+                        SIcon(SolinaIcons.ChevronRight, c.muted, 20.dp)
+                    }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                     Row(
                         Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onSyncConnectStorage).padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text("پشتیبان در فضای ذخیره‌سازی", color = c.text, fontSize = 15.sp)
-                            Text("پوشه‌ای در حافظهٔ داخلی، کارت حافظه یا فلش.", color = c.muted, fontSize = 12.sp)
+                            Text("پشتیبان در پوشهٔ گوشی / کارت حافظه", color = c.text, fontSize = 15.sp)
+                            Text("یک پوشه روی حافظهٔ داخلی یا SD انتخاب کنید؛ تمام داده‌ها قبل از ذخیره رمزگذاری می‌شوند.", color = c.muted, fontSize = 12.sp, lineHeight = 18.sp)
                         }
+                        SIcon(SolinaIcons.ChevronRight, c.muted, 20.dp)
                     }
-                }
-                if (syncStatus.configured) {
+                } else {
                     Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
-                    Text("زمان‌بندی پشتیبان (فقط وقتی خزانه باز است اجرا می‌شود)", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
-                    for ((option, label) in listOf(
-                        app.solina.passwordmanager.core.sync.BackupSchedule.OnChange to "با هر تغییر",
-                        app.solina.passwordmanager.core.sync.BackupSchedule.Daily to "روزانه",
-                        app.solina.passwordmanager.core.sync.BackupSchedule.Weekly to "هفتگی",
-                        app.solina.passwordmanager.core.sync.BackupSchedule.Monthly to "ماهانه",
-                        app.solina.passwordmanager.core.sync.BackupSchedule.Manual to "فقط دستی",
-                    )) {
+                    Text("زمان‌بندی پشتیبان خودکار", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                    val schedules = listOf(
+                        app.solina.passwordmanager.core.sync.BackupSchedule.OnChange to "هر زمان تغییری دادم (پیشنهادی)",
+                        app.solina.passwordmanager.core.sync.BackupSchedule.Daily to "روزی یک‌بار",
+                        app.solina.passwordmanager.core.sync.BackupSchedule.Weekly to "هفته‌ای یک‌بار",
+                        app.solina.passwordmanager.core.sync.BackupSchedule.Manual to "فقط دستی (خودم دکمه بزنم)",
+                    )
+                    for ((option, label) in schedules) {
                         Row(
                             Modifier.fillMaxWidth().height(44.dp).clickable(role = Role.RadioButton) { onSetSchedule(option) },
                             verticalAlignment = Alignment.CenterVertically,
@@ -1016,23 +1362,37 @@ fun SettingsScreen(
                     Row(
                         Modifier.fillMaxWidth().height(52.dp).clickable(role = Role.Button, onClick = onSyncDisconnect),
                         verticalAlignment = Alignment.CenterVertically,
-                    ) { Text("قطع اتصال همگام‌سازی (فایل‌های پوشه پاک نمی‌شوند)", color = c.secondary, fontSize = 14.sp) }
+                    ) { Text("قطع اتصال همگام‌سازی (فایل‌های ریموت پاک نمی‌شوند)", color = c.secondary, fontSize = 14.sp) }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                 Row(
-                    Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onDiagnostics),
+                    Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onChangeMasterPassword),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("گزارش عیب‌یابی", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                    SIcon(SolinaIcons.ChevronRight, c.muted, 20.dp)
+                    Text(str.changeMasterTitle, color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    SIcon(SolinaIcons.Key, c.muted, 20.dp)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
-                Row(
-                    Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onLock),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("قفل کردن خزانه", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                    SIcon(SolinaIcons.Lock, c.muted, 20.dp)
+                Text(str.themeTitle, color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                for (option in ThemeMode.entries) {
+                    Row(
+                        Modifier.fillMaxWidth().height(44.dp).clickable(role = Role.RadioButton) { onSetThemeMode(option) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(option.labelFa, color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        if (themeMode == option) Text("●", color = c.primary, fontSize = 14.sp)
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Text(str.languageTitle, color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                for (option in AppLanguage.entries) {
+                    Row(
+                        Modifier.fillMaxWidth().height(44.dp).clickable(role = Role.RadioButton) { onSetLanguage(option) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(option.label, color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        if (language == option) Text("●", color = c.primary, fontSize = 14.sp)
+                    }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                 Text("زمان قفل خودکار پس از رفتن اپ به پس‌زمینه", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
@@ -1056,38 +1416,71 @@ fun SettingsScreen(
                         if (clipboardClear == option) Text("●", color = c.primary, fontSize = 14.sp)
                     }
                 }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Row(
+                    Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onDiagnostics),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("گزارش عیب‌یابی", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    SIcon(SolinaIcons.ChevronRight, c.muted, 20.dp)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Row(
+                    Modifier.fillMaxWidth().height(56.dp).clickable(role = Role.Button, onClick = onLock),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(str.lockVault, color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    SIcon(SolinaIcons.Lock, c.muted, 20.dp)
+                }
             }
         }
-        Card(background = c.secondaryContainer) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("نسخهٔ پیش‌نمایش", color = c.onSecondaryContainer, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    "ورودی‌ها اکنون واقعی و رمزشده روی همین دستگاه ذخیره می‌شوند، ولی این نسخه هنوز بازبینی امنیتی مستقل نشده است. Autofill پر کردن و ذخیرهٔ رمز جدید (هنگام باز بودن خزانه) را پشتیبانی می‌کند. همگام‌سازی فقط پوشه‌ای است (WebDAV و Drive هنوز نیستند). فعلاً رمزهای حیاتی خود را در آن نگه ندارید و حتماً کلمات بازیابی را جدا یادداشت کنید.",
-                    color = c.onSecondaryContainer,
-                    fontSize = 14.sp,
-                    lineHeight = 24.sp,
-                )
+
+        if (confirmWipe) {
+            Card(background = c.secondaryContainer) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(str.wipeVaultTitle, color = c.onSecondaryContainer, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(str.wipeVaultConfirm, color = c.onSecondaryContainer, fontSize = 13.sp, lineHeight = 22.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlineButton(str.cancel, SolinaIcons.Check, Modifier.weight(1f)) { confirmWipe = false }
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(c.secondary)
+                                .clickable(role = Role.Button) {
+                                    confirmWipe = false
+                                    onWipeLocalVault()
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) { Text("پاک‌سازی کامل", color = c.bg, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                    }
+                }
+            }
+        } else {
+            Card {
+                Row(
+                    Modifier.fillMaxWidth().height(52.dp).clickable(role = Role.Button) { confirmWipe = true },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(str.wipeVaultTitle, color = c.secondary, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    SIcon(SolinaIcons.Warning, c.secondary, 20.dp)
+                }
             }
         }
+
         Card {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("آنچه واقعی است", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                Text("• هر ورودی با کلید تصادفی خودش و AES-256-GCM رمز می‌شود؛ فقط شناسه و زمان‌ها آشکارند.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• هر ویرایش نسخهٔ قبلی را رمزشده در تاریخچه (تا ۱۰ نسخه) نگه می‌دارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• کدهای TOTP طبق RFC 6238 محاسبه می‌شوند (با بردارهای رسمی تست شده‌اند).", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• مولد رمز با SecureRandom کار می‌کند.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• کپی در کلیپ‌بورد با علامت «حساس» انجام می‌شود و بعد از ۳۰ ثانیه پاک می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• اسکرین‌شات و پیش‌نمایش اپ‌های اخیر مسدود است.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• Autofill در صفحات وب فقط ورودی‌هایی را پیشنهاد می‌دهد که دامنه‌شان دقیقاً مطابقت دارد (یا زیردامنه است).", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• دوربین فقط هنگام باز بودن صفحهٔ اسکن روشن است؛ تصویری ذخیره یا ارسال نمی‌شود. اسکن از عکس گالری هم ممکن است.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• ورود از Google Authenticator (QR خروجی) و لینک‌های otpauth پشتیبانی می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• بکاپ فقط با رمز جداگانهٔ خودتان رمز می‌شود (Argon2id + AES-256-GCM) و بدون مجوز ذخیره‌سازی، از طریق انتخاب‌گر فایل سیستم نوشته می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• همگام‌سازی: هر نسخه از هر ورودی یک فایل تغییرناپذیر و احراز‌شده (HMAC) است. در ویرایش هم‌زمان هیچ نسخه‌ای گم نمی‌شود (بازنده در تاریخچه می‌ماند). فایل vault.hdr هم در پوشه است؛ پس رمز اصلی قوی لازم است.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• اپ هیچ مجوز شبکه‌ای ندارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• خزانه با Argon2id ساخته می‌شود و عبارت بازیابی ۲۴ کلمه‌ای (BIP-39) دارد.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Text("• باز کردن با اثر انگشت از Android Keystore استفاده می‌کند و با افزودن اثر انگشت جدید باطل می‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
+                Text("معماری امنیتی Solina", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("• رمزگذاری سرتاسری Zero-Knowledge: هر ورودی با کلید تصادفی اختصاصی (DEK) و AES-256-GCM رمز می‌شود؛ کلید اصلی با Argon2id و عبارت بازیابی ۲۴ کلمه‌ای BIP-39 محافظت می‌شود.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
+                Text("• Authenticator داخلی: پشتیبانی کامل از TOTP (RFC 6238) و HOTP (RFC 4226) با ۶/۸ رقم، SHA1/256/512، اسکن QR، ورود از Aegis/2FAS/andOTP/Google Authenticator و بکاپ جداگانهٔ رمزشده.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
+                Text("• Autofill مدرن: پشتیبانی از Android Autofill Framework و Inline Suggestions روی اندروید ۱۱ به بالا با تطبیق دقیق دامنه و نام پکیج.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
+                Text("• همگام‌سازی اختیاری HTTPS-only: پوشهٔ محلی/ابری (SAF) یا سرور شخصی WebDAV (Nextcloud / OwnCloud) با فایل‌های تغییرناپذیر احرازشده (HMAC-SHA256).", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
+                Text("• شبکه کاملاً اختیاری و TLS-only (Cleartext مسدود): اینترنت فقط هنگام اجرای دستی بررسی افشا (k-Anonymity)، اتصال WebDAV یا OAuth 2.0 + PKCE استفاده می‌شود.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
+                Text("• امنیت محلی: FLAG_SECURE (ضد اسکرین‌شات)، پاک‌سازی خودکار کلیپ‌بورد، قفل خودکار پس‌زمینه، و ذخیرهٔ تنظیمات حساس با Android Keystore.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
             }
         }
-        Text("Solina 1.0.0", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina 2.0.0 · GPL-3.0", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Spacer(Modifier.height(12.dp))
     }
 }

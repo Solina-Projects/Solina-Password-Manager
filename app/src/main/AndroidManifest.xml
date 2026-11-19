@@ -1,20 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- عمداً هیچ مجوزی (از جمله INTERNET) ندارد: نسخهٔ پیش‌نمایش هیچ ارتباط شبکه‌ای ندارد.
-         (BIND_AUTOFILL_SERVICE روی خود سرویس است و مجوزی نیست که اپ بخواهد.) -->
-
-    <!-- فقط برای اسکن QR کدهای TOTP و فقط وقتی صفحهٔ اسکن باز است؛ دوربین اجباری نیست. -->
+    <!-- فقط برای اسکن QR کدهای TOTP/HOTP و فقط وقتی صفحهٔ اسکن باز است؛ دوربین اجباری نیست. -->
     <uses-permission android:name="android.permission.CAMERA" />
 
-    <!-- نوتیفیکیشن خطا: فقط وقتی خطایی در گزارش عیب‌یابی ثبت شد، یک نوتیف محلی می‌آید
-         («خطایی ثبت شد — گزارش عیب‌یابی را ببینید») تا کاربر بداند باید لاگ را بخواند.
-         هیچ داده‌ای ارسال نمی‌شود و متن خطا (که ممکن است ورودی کاربر باشد) در نوتیف نمی‌آید. -->
+    <!-- نوتیفیکیشن محلی خطا (بدون ارسال داده و بدون متن حساس در اعلان). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- برای اینکه پیش از باز کردن انتخاب‌گر پوشه/فایل بتوانیم بفهمیم روی دستگاه
-         برنامه‌ای برای آن هست یا نه (در اندروید ۱۱ به بعد بدون این بخش،
-         resolveActivity همیشه خالی برمی‌گرداند). -->
+    <!-- ارتباط شبکه کاملاً اختیاری و صرفاً HTTPS (network_security_config):
+         فقط در صورت اقدام مستقیم کاربر برای همگام‌سازی WebDAV، اتصال حساب Google/GitHub (OAuth PKCE)
+         یا بررسی افشای رمز عبور (k-Anonymity SHA-1 prefix). هیچ ترافیک پس‌زمینهٔ خودکاری وجود ندارد. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- برای بررسی وجود انتخاب‌گر پوشه/فایل و مرورگر در اندروید ۱۱+ -->
     <queries>
         <intent>
             <action android:name="android.intent.action.OPEN_DOCUMENT_TREE" />
@@ -28,7 +26,13 @@
         <intent>
             <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
+
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
@@ -39,16 +43,29 @@
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Solina">
+        android:theme="@style/Theme.Solina"
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- بازگشت امن OAuth 2.0 + PKCE (RFC 8252) برای اتصال اختیاری Google و GitHub -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="oauth"
+                    android:path="/callback"
+                    android:scheme="solina-auth" />
             </intent-filter>
         </activity>
 

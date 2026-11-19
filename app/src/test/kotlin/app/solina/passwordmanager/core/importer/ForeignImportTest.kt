@@ -46,8 +46,9 @@ class ForeignImportTest {
 
     @Test fun aegisEncryptedRoundTrip() {
         val r = Importers.parse(aegisEncrypted("correct horse"), "correct horse".toCharArray())
-        assertEquals("Aegis", r.source); assertEquals(1, r.items.size); assertEquals(1, r.skipped)
+        assertEquals("Aegis", r.source); assertEquals(2, r.items.size); assertEquals(0, r.skipped)
         assertEquals("GitHub", r.items[0].title); assertEquals(secret, r.items[0].totpSecret)
+        assertEquals(app.solina.passwordmanager.core.OtpType.HOTP, r.items[1].otpType); assertEquals(1L, r.items[1].totpCounter)
     }
 
     @Test fun aegisWrongOrMissingPassword() {
@@ -147,7 +148,8 @@ class ForeignImportTest {
 
     @Test fun andOtpAndRaivo() {
         val a = Importers.parse("""[{"secret":"$secret","issuer":"Iss","label":"user","digits":6,"type":"TOTP","algorithm":"SHA1","period":30},{"secret":"$secret","issuer":"H","label":"h","type":"HOTP"}]""")
-        assertEquals("andOTP", a.source); assertEquals(1, a.items.size); assertEquals(1, a.skipped)
+        assertEquals("andOTP", a.source); assertEquals(2, a.items.size); assertEquals(0, a.skipped)
+        assertEquals(app.solina.passwordmanager.core.OtpType.HOTP, a.items[1].otpType)
         val r = Importers.parse("""[{"kind":"TOTP","issuer":"R","account":"acc","secret":"$secret","algorithm":"SHA256","digits":"8","timer":"45"}]""")
         assertEquals("Raivo", r.source); assertEquals(8, r.items[0].totpDigits); assertEquals(45, r.items[0].totpPeriod)
     }

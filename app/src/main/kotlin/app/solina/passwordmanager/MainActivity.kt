@@ -4,11 +4,12 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.WindowManager
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import android.view.autofill.AutofillManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,12 +24,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import app.solina.passwordmanager.ui.components.copySensitive
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,73 +47,68 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import app.solina.passwordmanager.core.crypto.CreatedVault
-import android.net.Uri
-import android.provider.Settings
-import android.view.autofill.AutofillManager
-import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModelProvider
+import app.solina.passwordmanager.auth.OAuthLinkResult
+import app.solina.passwordmanager.core.AuthenticationFailedException
+import app.solina.passwordmanager.core.backup.Backup
+import app.solina.passwordmanager.core.backup.BackupFormatException
+import app.solina.passwordmanager.core.backup.BackupHeaderInfo
 import app.solina.passwordmanager.core.fa
+import app.solina.passwordmanager.core.importer.ImportException
+import app.solina.passwordmanager.core.importer.Importers
+import app.solina.passwordmanager.core.otp.OtpImport
 import app.solina.passwordmanager.core.storage.HistoryEntry
 import app.solina.passwordmanager.core.storage.ItemPayload
 import app.solina.passwordmanager.core.storage.SecurityAnalyzer
-import app.solina.passwordmanager.ui.components.SIcon
-import app.solina.passwordmanager.ui.screens.BiometricOfferScreen
-import app.solina.passwordmanager.core.backup.Backup
-import app.solina.passwordmanager.core.backup.BackupFormatException
-import app.solina.passwordmanager.core.crypto.AuthenticationFailedException
-import app.solina.passwordmanager.core.importer.ImportException
-import app.solina.passwordmanager.core.importer.Importers
-import app.solina.passwordmanager.ui.screens.DataScreen
-import app.solina.passwordmanager.ui.screens.DiagnosticsScreen
-import app.solina.passwordmanager.core.security.KdfCalibrator
 import app.solina.passwordmanager.sync.ConnectResult
 import app.solina.passwordmanager.sync.StageJoinResult
 import app.solina.passwordmanager.sync.StagedJoin
 import app.solina.passwordmanager.sync.SyncManager
-import kotlinx.coroutines.flow.first
-import app.solina.passwordmanager.ui.screens.DataStep
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import app.solina.passwordmanager.ui.components.SIcon
+import app.solina.passwordmanager.ui.components.copySensitive
+import app.solina.passwordmanager.ui.screens.BiometricOfferScreen
+import app.solina.passwordmanager.ui.screens.ChangeMasterPasswordScreen
 import app.solina.passwordmanager.ui.screens.CodesScreen
 import app.solina.passwordmanager.ui.screens.ConfirmWordsScreen
 import app.solina.passwordmanager.ui.screens.CreatePasswordScreen
+import app.solina.passwordmanager.ui.screens.DataScreen
+import app.solina.passwordmanager.ui.screens.DataStep
 import app.solina.passwordmanager.ui.screens.DetailScreen
+import app.solina.passwordmanager.ui.screens.DiagnosticsScreen
 import app.solina.passwordmanager.ui.screens.EditScreen
+import app.solina.passwordmanager.ui.screens.ExternalAccountsScreen
 import app.solina.passwordmanager.ui.screens.GeneratorScreen
 import app.solina.passwordmanager.ui.screens.HomeScreen
 import app.solina.passwordmanager.ui.screens.RecoveryEntryScreen
-import app.solina.passwordmanager.ui.screens.ScanScreen
-import app.solina.passwordmanager.core.otp.OtpImport
 import app.solina.passwordmanager.ui.screens.RecoveryWordsScreen
 import app.solina.passwordmanager.ui.screens.ResetPasswordScreen
+import app.solina.passwordmanager.ui.screens.ScanScreen
 import app.solina.passwordmanager.ui.screens.SettingsScreen
 import app.solina.passwordmanager.ui.screens.VaultScreen
 import app.solina.passwordmanager.ui.screens.VaultUnlockScreen
+import app.solina.passwordmanager.ui.screens.WebDavSetupScreen
 import app.solina.passwordmanager.ui.screens.WelcomeScreen
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 import app.solina.passwordmanager.ui.theme.SolinaTheme
+import app.solina.passwordmanager.ui.viewmodel.SolinaViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : FragmentActivity() {
     companion object {
         /** وقتی نوتیف خطا زده شد، با این extra باز می‌شود تا مستقیم گزارش عیب‌یابی نشان داده شود. */
         const val EXTRA_SHOW_DIAGNOSTICS = "solina_show_diagnostics"
 
-        /**
-         * کدهای درخواست کوچک و ثابت برای startActivityForResult / requestPermissions.
-         * چرا ثابت و کوچک: ActivityResultRegistry در androidx.activity برای هر لانچر
-         * کد تصادفی ‎>= 65536‎ می‌سازد (Random.nextInt(2147418112) + 65536) و
-         * FragmentActivity فقط ۱۶ بیت پایین کد را قبول می‌کند؛ برای همین همهٔ لانچرهای
-         * Activity Result در این اپ با IllegalArgumentException
-         * «Can only use lower 16 bits for requestCode» می‌مردند (0.0.11-alpha5:
-         * کرش در شروع اپ، کرش اسکن QR، و باز نشدن انتخاب‌گر پوشه). این کدها همه
-         * زیر 0xFFFF هستند و چون دیگر هیچ لانچری در اپ نیست، با چیزی تداخل ندارند.
-         */
         const val RC_JOIN_FOLDER = 1001
         const val RC_CONNECT_FOLDER = 1002
         const val RC_EXPORT_FILE = 1003
@@ -124,17 +120,24 @@ class MainActivity : FragmentActivity() {
     }
 
     private val container get() = (application as SolinaApplication).container
+    private val _pendingOAuthCallback = MutableStateFlow<Uri?>(null)
+    val pendingOAuthCallback = _pendingOAuthCallback.asStateFlow()
+
+    fun consumeOAuthCallback() {
+        _pendingOAuthCallback.value = null
+    }
+
+    private fun captureOAuthIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme.equals("solina-auth", ignoreCase = true) && data.host.equals("oauth", ignoreCase = true)) {
+            _pendingOAuthCallback.value = data
+        }
+    }
 
     /** نتیجهٔ startActivityForResult را به تابعی که هنگام شروع ثبت شد می‌رساند. */
     private val activityResultHandlers = mutableMapOf<Int, (resultCode: Int, data: Intent?) -> Unit>()
     private val permissionHandlers = mutableMapOf<Int, (granted: Boolean) -> Unit>()
 
-    /**
-     * جایگزین ActivityResultLauncher: اکتیویتی را با کد کوچک و ثابت شروع می‌کند و
-     * نتیجه را به [handler] می‌دهد. اگر شروع ناموفق بود (مثلاً هیچ برنامه‌ای برای
-     * آن Intent نیست)، خطا در گزارش عیب‌یابی ثبت می‌شود و [onFail] صدا زده می‌شود؛
-     * هیچ‌وقت کرش نمی‌کند.
-     */
     @Suppress("DEPRECATION")
     fun launchForResult(intent: Intent, requestCode: Int, handler: (resultCode: Int, data: Intent?) -> Unit, onFail: () -> Unit) {
         try {
@@ -148,11 +151,6 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    /**
-     * جایگزین RequestPermission: اگر مجوز از قبل داده شده، همان‌جا true برمی‌گرداند
-     * و دیالوگ سیستم باز نمی‌شود. فقط از ضربهٔ کاربر صدا زده می‌شود، هرگز خودکار
-     * در شروع اپ یا LaunchedEffect نیست.
-     */
     fun requestPermissionOnce(permission: String, requestCode: Int, handler: (granted: Boolean) -> Unit, onFail: () -> Unit = {}) {
         try {
             if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
@@ -170,7 +168,6 @@ class MainActivity : FragmentActivity() {
 
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        // اول super: FragmentActivity نتیجه را به فرگمنت‌ها و رجیستری می‌رساند.
         super.onActivityResult(requestCode, resultCode, data)
         activityResultHandlers.remove(requestCode)?.invoke(resultCode, data)
     }
@@ -182,24 +179,31 @@ class MainActivity : FragmentActivity() {
         )
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        captureOAuthIntent(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // جلوگیری از اسکرین‌شات و نمایش محتوا در پیش‌نمایش اپ‌های اخیر.
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
+        captureOAuthIntent(intent)
         val auth = AuthController(container)
+        val viewModel = ViewModelProvider(this)[SolinaViewModel::class.java]
         DiagLog.log("ACT", "onCreate")
         setContent {
-            SolinaTheme {
+            val themeMode by container.securityPrefs.themeMode.collectAsState()
+            val language by container.securityPrefs.language.collectAsState()
+            SolinaTheme(themeMode = themeMode, language = language) {
                 var showDiag by remember { mutableStateOf(intent.getBooleanExtra(EXTRA_SHOW_DIAGNOSTICS, false)) }
-                // مجوز نوتیفیکیشن دیگر اینجا خودکار خواسته نمی‌شود: در 0.0.11-alpha5
-                // همان درخواست در اولین ترکیب‌بندی کرش می‌کرد و اپ اصلاً بالا نمی‌آمد.
-                // حالا فقط از تنظیمات و با ضربهٔ کاربر درخواست می‌شود (SettingsScreen).
                 Box(Modifier.fillMaxSize().background(Solina.colors.bg)) {
                     if (showDiag) {
                         DiagScreenHost(this@MainActivity) { showDiag = false }
                     } else {
-                        Root(this@MainActivity, container, auth, onDiagnostics = { showDiag = true })
+                        Root(this@MainActivity, container, auth, viewModel, onDiagnostics = { showDiag = true })
                         CrashBanner(this@MainActivity) { showDiag = true }
                     }
                 }
@@ -316,7 +320,13 @@ internal fun messageFor(result: UnlockResult): String? = when (result) {
 }
 
 @Composable
-private fun Root(activity: MainActivity, container: AppContainer, auth: AuthController, onDiagnostics: () -> Unit) {
+private fun Root(
+    activity: MainActivity,
+    container: AppContainer,
+    auth: AuthController,
+    viewModel: SolinaViewModel,
+    onDiagnostics: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val unlocked by container.session.unlocked.collectAsState()
 
@@ -335,7 +345,11 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
     var mustReset by remember { mutableStateOf(false) }
     var joinMessage by remember { mutableStateOf<String?>(null) }
     var showJoinCloud by remember { mutableStateOf(false) }
+    var showJoinWebDav by remember { mutableStateOf(false) }
+    var webDavJoinBusy by remember { mutableStateOf(false) }
+    var webDavJoinMsg by remember { mutableStateOf<String?>(null) }
     var stagedJoin by remember { mutableStateOf<StagedJoin?>(null) }
+
     fun launchJoinFolder(kind: String) {
         if (!hasFolderPicker(activity)) {
             DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
@@ -381,7 +395,7 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
                     message = null
                     scope.launch {
                         val ok = container.sync.commitStagedJoin(staged, password)
-                        password.fill(' ')
+                        password.fill(' ')
                         busy = false
                         if (ok) {
                             stagedJoin = null
@@ -400,6 +414,32 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
             )
         }
 
+        !hasVault && showJoinWebDav -> {
+            BackHandler { showJoinWebDav = false; webDavJoinMsg = null }
+            WebDavSetupScreen(
+                isJoin = true,
+                busy = webDavJoinBusy,
+                message = webDavJoinMsg,
+                onSubmit = { url, user, pass ->
+                    webDavJoinBusy = true
+                    webDavJoinMsg = null
+                    scope.launch {
+                        when (val r = container.sync.stageJoinFromWebDav(url, user, pass)) {
+                            is StageJoinResult.Ready -> {
+                                showJoinWebDav = false
+                                message = null
+                                stagedJoin = r.staged
+                            }
+                            StageJoinResult.NoVaultInFolder -> webDavJoinMsg = "در این مسیر WebDAV خزانه‌ای پیدا نشد."
+                            is StageJoinResult.Failed -> webDavJoinMsg = r.reason
+                        }
+                        webDavJoinBusy = false
+                    }
+                },
+                onBack = { showJoinWebDav = false; webDavJoinMsg = null },
+            )
+        }
+
         !hasVault -> when (stage) {
             Stage.Welcome -> {
                 WelcomeScreen(
@@ -408,6 +448,7 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
                     onDiagnostics = onDiagnostics,
                     onJoinCloud = { joinMessage = null; DiagLog.log("JOIN", "cloud button tapped"); showJoinCloud = true },
                     onJoinStorage = { joinMessage = null; DiagLog.log("JOIN", "storage button tapped"); launchJoinFolder("storage") },
+                    onJoinWebDav = { joinMessage = null; webDavJoinMsg = null; showJoinWebDav = true },
                 )
                 if (showJoinCloud) {
                     val providers = remember { app.solina.passwordmanager.sync.listCloudProviders(activity) }
@@ -451,7 +492,6 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
                 if (ok) {
                     mustReset = false
                     container.sync.pushHeader()
-                    // پس از بازیابی، میان‌بر اثر انگشت برای احتیاط غیرفعال می‌شود (از تنظیمات دوباره فعال می‌شود).
                     auth.disableBiometric()
                 } else {
                     container.session.lock()
@@ -506,37 +546,91 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
             )
         }
 
-        else -> MainApp(activity, container, auth, onDiagnostics)
+        else -> MainApp(
+            activity = activity,
+            container = container,
+            auth = auth,
+            viewModel = viewModel,
+            onDiagnostics = onDiagnostics,
+            onVaultWiped = {
+                viewModel.clearBreachState()
+                hasVault = false
+                stage = Stage.Welcome
+                message = null
+                joinMessage = "خزانهٔ محلی به‌طور امن پاک‌سازی شد."
+            },
+        )
     }
 }
 
-private enum class Tab(val label: String, val icon: ImageVector) {
-    Home("خانه", SolinaIcons.Home),
-    Vault("خزانه", SolinaIcons.Lock),
-    Codes("کدها", SolinaIcons.Clock),
-    Settings("تنظیمات", SolinaIcons.Sliders),
+private enum class Tab(val icon: ImageVector) {
+    Home(SolinaIcons.Home),
+    Vault(SolinaIcons.Lock),
+    Codes(SolinaIcons.Clock),
+    Settings(SolinaIcons.Sliders),
 }
 
 @Composable
-private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthController, onDiagnostics: () -> Unit) {
+private fun MainApp(
+    activity: MainActivity,
+    container: AppContainer,
+    auth: AuthController,
+    viewModel: SolinaViewModel,
+    onDiagnostics: () -> Unit,
+    onVaultWiped: () -> Unit,
+) {
     val c = Solina.colors
     val scope = rememberCoroutineScope()
     val repo = container.repository
     val items by repo.items.collectAsState()
     val unreadable by repo.unreadable.collectAsState()
     val report = remember(items) { SecurityAnalyzer.analyze(items) }
+    val breachState by viewModel.breachState.collectAsState()
+    val externalAccounts by container.externalAccounts.accounts.collectAsState()
+    val pendingOAuthUri by activity.pendingOAuthCallback.collectAsState()
 
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
     val autoLock by container.securityPrefs.autoLock.collectAsState()
     val clipboardClear by container.securityPrefs.clipboardClear.collectAsState()
-    var editing by remember { mutableStateOf(false) } // با detailId == null یعنی ورودی جدید
+    val themeMode by container.securityPrefs.themeMode.collectAsState()
+    val language by container.securityPrefs.language.collectAsState()
+    var editing by remember { mutableStateOf(false) }
     var generator by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
+    var showExternalAccounts by remember { mutableStateOf(false) }
+    var oauthBusy by remember { mutableStateOf(false) }
+    var oauthMessage by remember { mutableStateOf<String?>(null) }
+    var showWebDavConnect by remember { mutableStateOf(false) }
+    var webDavBusy by remember { mutableStateOf(false) }
+    var webDavMessage by remember { mutableStateOf<String?>(null) }
+    var showChangePassword by remember { mutableStateOf(false) }
+    var changePwBusy by remember { mutableStateOf(false) }
+    var changePwMessage by remember { mutableStateOf<String?>(null) }
+
     val syncStatus by container.sync.status.collectAsState()
     val localRev by repo.localChanges.collectAsState()
     var showConnectCloud by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pendingOAuthUri) {
+        val uri = pendingOAuthUri ?: return@LaunchedEffect
+        activity.consumeOAuthCallback()
+        oauthBusy = true
+        oauthMessage = null
+        showExternalAccounts = true
+        when (val res = container.externalAccounts.completeCallback(uri)) {
+            is OAuthLinkResult.Linked -> {
+                oauthMessage = null
+                toast = "حساب ${res.account.provider.displayName} متصل شد"
+            }
+            is OAuthLinkResult.Failed -> {
+                oauthMessage = res.reason
+            }
+        }
+        oauthBusy = false
+    }
+
     fun launchConnectFolder(kind: String) {
         if (!hasFolderPicker(activity)) {
             DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
@@ -560,8 +654,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
             onFail = { toast = "انتخاب‌گر پوشه روی این دستگاه در دسترس نیست" },
         )
     }
-    // هم‌گام‌سازی خودکار: بعد از باز شدن خزانه، و ۱٫۵ ثانیه بعد از هر تغییر محلی (debounce).
-    // زمان‌بندی کاربر اعمال می‌شود: هر تغییر / روزانه / هفتگی / ماهانه / دستی.
+
     LaunchedEffect(Unit) { container.sync.syncIfDue(app.solina.passwordmanager.core.sync.BackupTrigger.Unlock) }
     LaunchedEffect(localRev) {
         if (localRev > 0) {
@@ -569,11 +662,13 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
             container.sync.syncIfDue(app.solina.passwordmanager.core.sync.BackupTrigger.Change)
         }
     }
+
     var dataStep by remember { mutableStateOf<DataStep?>(null) }
     var dataBusy by remember { mutableStateOf(false) }
     var dataMessage by remember { mutableStateOf<String?>(null) }
     var pendingExport by remember { mutableStateOf<ByteArray?>(null) }
     var pendingRestore by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingRestoreInfo by remember { mutableStateOf<BackupHeaderInfo?>(null) }
     var pendingImport by remember { mutableStateOf<ByteArray?>(null) }
     val resolver = activity.contentResolver
 
@@ -623,8 +718,19 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                 val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
                 if (uri != null) {
                     val bytes = runCatching { readLimited(uri, 64 * 1024 * 1024) }.getOrNull()
-                    if (bytes == null) dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
-                    else { pendingRestore = bytes; dataMessage = null; dataStep = DataStep.RestorePassword }
+                    if (bytes == null) {
+                        dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
+                    } else {
+                        try {
+                            val headerInfo = Backup.inspect(bytes)
+                            pendingRestore = bytes
+                            pendingRestoreInfo = headerInfo
+                            dataMessage = null
+                            dataStep = DataStep.RestorePassword
+                        } catch (e: BackupFormatException) {
+                            dataMessage = e.message ?: "ساختار فایل بکاپ معتبر نیست."
+                        }
+                    }
                 }
             },
             onFail = { dataMessage = "انتخاب‌گر فایل در دسترس نیست." },
@@ -688,14 +794,13 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
             onFail = { dataMessage = "انتخاب‌گر فایل در دسترس نیست." },
         )
     }
+
     var prefill by remember { mutableStateOf<ItemPayload?>(null) }
     var saving by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
     var biometricEnabled by remember { mutableStateOf(auth.hasBiometric()) }
     fun autofillOn() = activity.getSystemService(AutofillManager::class.java)?.hasEnabledAutofillServices() == true
     var autofillEnabled by remember { mutableStateOf(autofillOn()) }
-    // اعلان خطا (اندروید ۱۳ به بعد): فقط از تنظیمات و با ضربهٔ کاربر درخواست می‌شود؛
-    // درخواست خودکار در شروع اپ در 0.0.11-alpha5 باعث کرش می‌شد.
     val notifSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
     var notifGranted by remember {
         mutableStateOf(
@@ -731,7 +836,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
         scanning = false
         val parsed = OtpImport.parse(text)
         if (parsed == null) {
-            toast = "این QR یک کد TOTP معتبر نیست"
+            toast = "این QR یک کد OTP معتبر نیست"
         } else if (parsed.size == 1) {
             prefill = parsed[0]; detailId = null; editing = true
         } else {
@@ -752,10 +857,20 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
             onDismiss = { showConnectCloud = false },
         )
     }
-    val inSub = generator || editing || detailId != null || scanning || dataStep != null
+
+    val inSub = generator || editing || detailId != null || scanning || dataStep != null ||
+        showExternalAccounts || showWebDavConnect || showChangePassword
+
     BackHandler(enabled = inSub) {
         when {
-            dataStep != null -> { if (dataStep == DataStep.Menu) dataStep = null else { dataStep = DataStep.Menu; pendingRestore = null; pendingImport = null }; dataMessage = null }
+            showChangePassword -> { showChangePassword = false; changePwMessage = null }
+            showWebDavConnect -> { showWebDavConnect = false; webDavMessage = null }
+            showExternalAccounts -> { showExternalAccounts = false; oauthMessage = null }
+            dataStep != null -> {
+                if (dataStep == DataStep.Menu) dataStep = null
+                else { dataStep = DataStep.Menu; pendingRestore = null; pendingRestoreInfo = null; pendingImport = null }
+                dataMessage = null
+            }
             scanning -> scanning = false
             editing -> { editing = false; prefill = null }
             generator -> generator = false
@@ -763,16 +878,92 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
         }
     }
 
+    val authItemsCount = remember(items) { items.count { it.payload.totpSecret.isNotBlank() } }
+
     Box(Modifier.fillMaxSize().background(c.bg)) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {
                 when {
+                    showChangePassword -> ChangeMasterPasswordScreen(
+                        busy = changePwBusy,
+                        message = changePwMessage,
+                        onSubmit = { current, next ->
+                            changePwBusy = true
+                            changePwMessage = null
+                            scope.launch {
+                                val ok = auth.verifyAndChangePassword(current, next)
+                                current.fill('\u0000')
+                                next.fill('\u0000')
+                                changePwBusy = false
+                                if (ok) {
+                                    container.sync.pushHeader()
+                                    showChangePassword = false
+                                    toast = "رمز اصلی با موفقیت تغییر کرد"
+                                } else {
+                                    changePwMessage = "رمز اصلی فعلی درست نیست."
+                                }
+                            }
+                        },
+                        onBack = { showChangePassword = false; changePwMessage = null },
+                    )
+                    showWebDavConnect -> WebDavSetupScreen(
+                        isJoin = false,
+                        busy = webDavBusy,
+                        message = webDavMessage,
+                        onSubmit = { url, user, pass ->
+                            webDavBusy = true
+                            webDavMessage = null
+                            scope.launch {
+                                when (val r = container.sync.connectWebDav(url, user, pass)) {
+                                    ConnectResult.Ok -> {
+                                        showWebDavConnect = false
+                                        toast = "سرور WebDAV متصل شد؛ در حال همگام‌سازی…"
+                                        container.sync.syncNow()
+                                    }
+                                    ConnectResult.DifferentVault -> webDavMessage = "در این مسیر خزانهٔ دیگری ذخیره شده است."
+                                    ConnectResult.NoVaultInFolder -> webDavMessage = "خزانه‌ای در مسیر یافت نشد."
+                                    is ConnectResult.Failed -> webDavMessage = r.reason
+                                }
+                                webDavBusy = false
+                            }
+                        },
+                        onBack = { showWebDavConnect = false; webDavMessage = null },
+                    )
+                    showExternalAccounts -> ExternalAccountsScreen(
+                        accounts = externalAccounts,
+                        initialGoogleClientId = container.externalAccounts.savedClientId(app.solina.passwordmanager.core.auth.OAuthProvider.Google),
+                        initialGitHubClientId = container.externalAccounts.savedClientId(app.solina.passwordmanager.core.auth.OAuthProvider.GitHub),
+                        busy = oauthBusy,
+                        message = oauthMessage,
+                        onConnect = { provider, clientId ->
+                            try {
+                                oauthMessage = null
+                                val authUrl = container.externalAccounts.beginSignIn(provider, clientId)
+                                val browse = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
+                                    .addCategory(Intent.CATEGORY_BROWSABLE)
+                                activity.startActivity(browse)
+                            } catch (e: Exception) {
+                                oauthMessage = e.message ?: "باز کردن مرورگر برای OAuth انجام نشد."
+                            }
+                        },
+                        onDisconnect = { id ->
+                            container.externalAccounts.disconnect(id)
+                            toast = "اتصال حساب خارجی قطع شد"
+                        },
+                        onBack = { showExternalAccounts = false; oauthMessage = null },
+                    )
                     dataStep != null -> DataScreen(
                         step = dataStep!!,
                         busy = dataBusy,
                         message = dataMessage,
                         itemCount = items.size,
-                        onBack = { if (dataStep == DataStep.Menu) dataStep = null else { dataStep = DataStep.Menu; pendingRestore = null; pendingImport = null }; dataMessage = null },
+                        authCount = authItemsCount,
+                        restoreHeaderInfo = pendingRestoreInfo,
+                        onBack = {
+                            if (dataStep == DataStep.Menu) dataStep = null
+                            else { dataStep = DataStep.Menu; pendingRestore = null; pendingRestoreInfo = null; pendingImport = null }
+                            dataMessage = null
+                        },
                         onStartExport = { dataMessage = null; dataStep = DataStep.ExportPassword },
                         onSubmitExport = { pw ->
                             dataBusy = true
@@ -791,6 +982,31 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                                 }
                             }
                         },
+                        onStartAuthExport = { dataMessage = null; dataStep = DataStep.ExportAuthPassword },
+                        onSubmitAuthExport = { pw ->
+                            dataBusy = true
+                            dataMessage = null
+                            scope.launch {
+                                try {
+                                    val payloads = items.map { it.payload }
+                                    val bytes = withContext(Dispatchers.Default) {
+                                        Backup.encodeAuthenticatorOnly(payloads, pw, System.currentTimeMillis(), KdfCalibrator.pickOnDevice())
+                                    }
+                                    pw.fill('\u0000')
+                                    pendingExport = bytes
+                                    val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
+                                    launchExportFile("solina-authenticator-$stamp.slnb")
+                                } catch (e: BackupFormatException) {
+                                    pw.fill('\u0000')
+                                    dataMessage = e.message
+                                    dataBusy = false
+                                } catch (e: Exception) {
+                                    pw.fill('\u0000')
+                                    dataMessage = "ساخت بکاپ Authenticator ناموفق بود."
+                                    dataBusy = false
+                                }
+                            }
+                        },
                         onPickRestore = { dataMessage = null; launchRestoreFile() },
                         onSubmitRestore = { pw ->
                             val bytes = pendingRestore
@@ -802,6 +1018,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                                         val payloads = withContext(Dispatchers.Default) { Backup.decode(bytes, pw) }
                                         val stats = repo.importItems(payloads)
                                         pendingRestore = null
+                                        pendingRestoreInfo = null
                                         dataStep = DataStep.Menu
                                         toast = "${stats.added.fa()} ورودی بازیابی شد" + if (stats.skipped > 0) " (${stats.skipped.fa()} تکراری)" else ""
                                     } catch (e: AuthenticationFailedException) {
@@ -860,6 +1077,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                     detailId != null -> DetailScreen(
                         item = detailItem,
                         history = history,
+                        breachCount = detailId?.let { breachState.breachedIds[it] } ?: 0,
                         onBack = { detailId = null },
                         onEdit = { editing = true },
                         onDelete = {
@@ -876,6 +1094,15 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                                 toast = "نسخهٔ قدیمی بازگردانده شد"
                             }
                         },
+                        onIncrementHotp = {
+                            val currentItem = detailItem ?: return@DetailScreen
+                            scope.launch {
+                                runCatching {
+                                    repo.update(currentItem.id, currentItem.payload.copy(totpCounter = currentItem.payload.totpCounter + 1L))
+                                }
+                                toast = "شمارندهٔ HOTP افزایش یافت"
+                            }
+                        },
                         onToast = { toast = it },
                         clipboardClearMillis = clipboardClear.millis,
                     )
@@ -883,6 +1110,8 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                         Tab.Home -> HomeScreen(
                             items = items,
                             report = report,
+                            breachState = breachState,
+                            onRunBreachCheck = { viewModel.runBreachCheck(items) },
                             onLock = { container.session.lock() },
                             onOpenItem = { detailId = it },
                             onGoVault = { tab = Tab.Vault },
@@ -895,10 +1124,27 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             items = items,
                             report = report,
                             unreadable = unreadable,
+                            breachState = breachState,
                             onOpenItem = { detailId = it },
                             onAdd = { detailId = null; prefill = null; editing = true },
                         )
-                        Tab.Codes -> CodesScreen(items = items, onToast = { toast = it }, onOpenItem = { detailId = it }, onScan = { scanning = true }, onAdd = { detailId = null; prefill = null; editing = true }, clipboardClearMillis = clipboardClear.millis)
+                        Tab.Codes -> CodesScreen(
+                            items = items,
+                            onToast = { toast = it },
+                            onOpenItem = { detailId = it },
+                            onScan = { scanning = true },
+                            onAdd = { detailId = null; prefill = null; editing = true },
+                            onIncrementHotp = { target ->
+                                scope.launch {
+                                    runCatching {
+                                        repo.update(target.id, target.payload.copy(totpCounter = target.payload.totpCounter + 1L))
+                                    }
+                                    toast = "کد بعدی HOTP ساخته شد"
+                                }
+                            },
+                            onBackupAuth = { dataMessage = null; dataStep = DataStep.ExportAuthPassword },
+                            clipboardClearMillis = clipboardClear.millis,
+                        )
                         Tab.Settings -> SettingsScreen(
                             biometricAvailable = auth.biometricAvailable(activity),
                             biometricEnabled = biometricEnabled,
@@ -933,9 +1179,10 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             syncStatus = syncStatus,
                             onSyncConnectCloud = { showConnectCloud = true },
                             onSyncConnectStorage = { launchConnectFolder("storage") },
+                            onSyncConnectWebDav = { webDavMessage = null; showWebDavConnect = true },
                             onSyncNow = {
                                 scope.launch {
-                                    toast = when (val r = container.sync.syncNow()) {
+                                    toast = when (container.sync.syncNow()) {
                                         is SyncManager.StatusMessage.Done -> "همگام‌سازی انجام شد"
                                         SyncManager.StatusMessage.Busy -> "همگام‌سازی در حال انجام است"
                                         SyncManager.StatusMessage.Failed -> "همگام‌سازی ناموفق بود"
@@ -949,6 +1196,19 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             onSetAutoLock = { container.securityPrefs.setAutoLock(it) },
                             clipboardClear = clipboardClear,
                             onSetClipboardClear = { container.securityPrefs.setClipboardClear(it) },
+                            themeMode = themeMode,
+                            onSetThemeMode = { container.securityPrefs.setThemeMode(it) },
+                            language = language,
+                            onSetLanguage = { container.securityPrefs.setLanguage(it) },
+                            externalAccountCount = externalAccounts.size,
+                            onOpenExternalAccounts = { oauthMessage = null; showExternalAccounts = true },
+                            onChangeMasterPassword = { changePwMessage = null; showChangePassword = true },
+                            onWipeLocalVault = {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) { container.wipeLocalVaultSecurely() }
+                                    onVaultWiped()
+                                }
+                            },
                             onDiagnostics = onDiagnostics,
                             onEnableAutofill = {
                                 try {
@@ -968,7 +1228,6 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                 NavBar(tab) { tab = it }
             }
         }
-
         toast?.let {
             Box(
                 Modifier
@@ -991,6 +1250,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
 @Composable
 private fun NavBar(selected: Tab, onSelect: (Tab) -> Unit) {
     val c = Solina.colors
+    val str = Solina.strings
     Row(
         Modifier
             .fillMaxWidth()
@@ -1002,6 +1262,12 @@ private fun NavBar(selected: Tab, onSelect: (Tab) -> Unit) {
     ) {
         Tab.entries.forEach { t ->
             val active = t == selected
+            val label = when (t) {
+                Tab.Home -> str.tabHome
+                Tab.Vault -> str.tabVault
+                Tab.Codes -> str.tabCodes
+                Tab.Settings -> str.tabSettings
+            }
             Column(
                 Modifier
                     .clip(RoundedCornerShape(16.dp))
@@ -1018,7 +1284,7 @@ private fun NavBar(selected: Tab, onSelect: (Tab) -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) { SIcon(t.icon, if (active) c.onPrimaryContainer else c.muted, 22.dp) }
                 Text(
-                    t.label,
+                    label,
                     color = if (active) c.text else c.muted,
                     fontSize = 12.sp,
                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,

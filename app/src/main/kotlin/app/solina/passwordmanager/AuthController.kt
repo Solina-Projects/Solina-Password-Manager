@@ -128,6 +128,28 @@ class AuthController(
         }
     }
 
+    /** تغییر رمز اصلی پس از تأیید رمز فعلی (بدون تغییر هویت خزانه یا نیاز به رمزگذاری مجدد آیتم‌ها). */
+    suspend fun verifyAndChangePassword(currentPassword: CharArray, newPassword: CharArray): Boolean =
+        withContext(Dispatchers.Default) {
+            val header = try {
+                files.readHeader()
+            } catch (e: CorruptVaultException) {
+                return@withContext false
+            }
+            val vk = try {
+                VaultCrypto.unlockWithPassword(header, currentPassword)
+            } catch (e: AuthenticationFailedException) {
+                return@withContext false
+            }
+            try {
+                val updated = VaultCrypto.changePassword(header, vk, newPassword, KdfCalibrator.pickOnDevice())
+                files.writeHeader(updated)
+                true
+            } finally {
+                vk.wipe()
+            }
+        }
+
     // ───── بیومتریک ─────
 
     fun biometricAvailable(activity: FragmentActivity): Boolean =

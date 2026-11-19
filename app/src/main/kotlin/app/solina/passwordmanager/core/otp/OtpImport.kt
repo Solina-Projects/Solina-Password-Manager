@@ -1,16 +1,16 @@
 package app.solina.passwordmanager.core.otp
 
 import app.solina.passwordmanager.core.Base32
+import app.solina.passwordmanager.core.OtpType
 import app.solina.passwordmanager.core.storage.ItemKind
 import app.solina.passwordmanager.core.storage.ItemPayload
 import java.io.ByteArrayOutputStream
 import java.util.Base64
 
 /**
- * تبدیل متن QR یا فایل به ورودی‌های TOTP. پشتیبانی:
- * - `otpauth://totp/...` (قالب استاندارد، یک یا چند خط)
- * - `otpauth-migration://offline?data=...` (خروجی Google Authenticator)
- * HOTP و رازهای نامعتبر نادیده گرفته می‌شوند.
+ * تبدیل متن QR یا فایل به ورودی‌های احراز هویت (TOTP و HOTP). پشتیبانی:
+ * - `otpauth://totp/...` و `otpauth://hotp/...` (قالب استاندارد، یک یا چند خط)
+ * - `otpauth-migration://offline?data=...` (خروجی Google Authenticator شامل TOTP و HOTP)
  */
 object OtpImport {
     /** null یعنی هیچ ورودی معتبری پیدا نشد. */
@@ -47,14 +47,18 @@ object OtpImport {
 
     fun parseUri(uri: String): ItemPayload? {
         val rest = uri.substring("otpauth://".length)
-        val type = rest.substringBefore('/').lowercase()
-        if (type != "totp") return null
+        val typeStr = rest.substringBefore('/').lowercase()
+        val otpType = when (typeStr) {
+            "totp" -> OtpType.TOTP
+            "hotp" -> OtpType.HOTP
+            else -> return null
+        }
         val afterType = rest.substringAfter('/', "")
         val label = percentDecode(afterType.substringBefore('?'), false).trim()
         val q = queryParams(afterType.substringAfter('?', ""))
-
         val secret = q["secret"]?.replace(" ", "")?.uppercase() ?: return null
         if (Base32.decode(secret) == null) return null
+
         val labelIssuer = if (':' in label) label.substringBefore(':').trim() else ""
         val account = label.substringAfter(':').trim()
         val issuer = q["issuer"]?.trim().takeUnless { it.isNullOrEmpty() } ?: labelIssuer
@@ -66,14 +70,24 @@ object OtpImport {
         }
         val digits = (q["digits"]?.toIntOrNull() ?: 6).takeIf { it in 6..8 } ?: return null
         val period = (q["period"]?.toIntOrNull() ?: 30).takeIf { it in 1..300 } ?: return null
+        val counter = if (otpType == OtpType.HOTP) {
+            val raw = q["counter"]?.toLongOrNull() ?: 0L
+            if (raw < 0L) return null
+            raw
+        } else {
+            0L
+        }
+        val defaultTitle = if (otpType == OtpType.HOTP) "HOTP" else "TOTP"
         return ItemPayload(
             kind = ItemKind.Login,
-            title = issuer.ifEmpty { account }.ifEmpty { "TOTP" },
+            title = issuer.ifEmpty { account }.ifEmpty { defaultTitle },
             username = account,
             totpSecret = secret,
             totpDigits = digits,
             totpPeriod = period,
             totpAlgorithm = algo,
+            otpType = otpType,
+            totpCounter = counter,
         )
     }
 
@@ -108,6 +122,7 @@ object OtpImport {
         var algorithm = 1
         var digits = 1
         var type = 2
+        var counter = 0L
         val r = ProtoReader(msg)
         while (r.hasMore()) {
             val (field, wire) = r.tag()
@@ -118,19 +133,28 @@ object OtpImport {
                 field == 4 && wire == 0 -> algorithm = r.varint().toInt()
                 field == 5 && wire == 0 -> digits = r.varint().toInt()
                 field == 6 && wire == 0 -> type = r.varint().toInt()
+                field == 7 && wire == 0 -> counter = r.varint().coerceAtLeast(0L)
                 else -> r.skip(wire)
             }
         }
-        if (type != 2 || secret == null || secret.isEmpty()) return null // فقط TOTP
+        if (secret == null || secret.isEmpty()) return null
+        val otpType = when (type) {
+            1 -> OtpType.HOTP
+            2 -> OtpType.TOTP
+            else -> return null
+        }
         val algo = when (algorithm) { 0, 1 -> "SHA1"; 2 -> "SHA256"; 3 -> "SHA512"; else -> return null }
         val account = if (':' in name && issuer.isNotEmpty()) name.substringAfter(':').trim() else name.trim()
+        val defaultTitle = if (otpType == OtpType.HOTP) "HOTP" else "TOTP"
         return ItemPayload(
             kind = ItemKind.Login,
-            title = issuer.ifEmpty { account }.ifEmpty { "TOTP" },
+            title = issuer.ifEmpty { account }.ifEmpty { defaultTitle },
             username = account,
             totpSecret = Base32.encode(secret),
             totpDigits = if (digits == 2) 8 else 6,
             totpAlgorithm = algo,
+            otpType = otpType,
+            totpCounter = if (otpType == OtpType.HOTP) counter else 0L,
         )
     }
 
