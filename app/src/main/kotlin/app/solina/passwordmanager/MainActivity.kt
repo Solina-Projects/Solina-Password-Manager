@@ -54,7 +54,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
 import app.solina.passwordmanager.auth.OAuthLinkResult
-import app.solina.passwordmanager.core.AuthenticationFailedException
+import app.solina.passwordmanager.core.crypto.AuthenticationFailedException
+import app.solina.passwordmanager.core.crypto.CreatedVault
+import app.solina.passwordmanager.core.security.KdfCalibrator
 import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.backup.BackupFormatException
 import app.solina.passwordmanager.core.backup.BackupHeaderInfo

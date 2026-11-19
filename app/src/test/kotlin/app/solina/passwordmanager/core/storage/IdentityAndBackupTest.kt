@@ -1,6 +1,6 @@
 package app.solina.passwordmanager.core.storage
 
-import app.solina.passwordmanager.core.KdfParams
+import app.solina.passwordmanager.core.crypto.KdfParams
 import app.solina.passwordmanager.core.OtpType
 import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.backup.BackupFormatException
