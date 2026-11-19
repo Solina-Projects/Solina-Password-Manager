@@ -18,4 +18,27 @@ class AutoLockTest {
         assertFalse(s.unlocked.value)
         assertTrue(s.keyCopy() == null)
     }
+
+    @Test fun backwardClockJumpLocksImmediately() {
+        var now = 10_000L
+        val s = VaultSession { now }
+        s.unlock(ByteArray(32) { 2 })
+        s.onBackgrounded()
+        now = 5_000L
+        s.enforceTimeout(60_000)
+        assertFalse(s.unlocked.value)
+        assertTrue(s.keyCopy() == null)
+    }
+
+    @Test fun repeatedOnBackgroundedDoesNotResetDeadline() {
+        var now = 1_000L
+        val s = VaultSession { now }
+        s.unlock(ByteArray(32) { 3 })
+        s.onBackgrounded()
+        now = 50_000L
+        s.onBackgrounded()
+        now = 62_000L
+        s.onForegrounded(60_000)
+        assertFalse(s.unlocked.value)
+    }
 }

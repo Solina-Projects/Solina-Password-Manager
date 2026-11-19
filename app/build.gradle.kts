@@ -31,7 +31,7 @@ android {
     lint {
         // خطاهای lint بیلد را می‌شکنند. هشدار «نسخهٔ جدیدتر» را Dependabot پوشش می‌دهد.
         abortOnError = true
-        disable += setOf("GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable", "OldTargetApi")
+        disable += setOf("GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable")
     }
 
     compileOptions {
@@ -44,6 +44,12 @@ android {
     buildFeatures {
         compose = true
     }
+    dependenciesInfo {
+        // حذف متادیتای امضا‌شدهٔ گوگل از APK/AAB برای ساخت بازتولیدپذیر (Reproducible Builds)
+        includeInApk = false
+        includeInBundle = false
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

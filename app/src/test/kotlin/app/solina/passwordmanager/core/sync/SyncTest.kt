@@ -127,4 +127,32 @@ class SyncTest {
         val expect = listOf("one", "three", "two")
         assertEquals(expect, a.titles()); assertEquals(expect, b.titles()); assertEquals(expect, c.titles())
     }
+
+    @Test fun manifestRollbackIsDetected() = runBlocking {
+        val a = Device("a"); val b = Device("b")
+        val item = a.repo.add(p("v1")); a.sync(); b.sync()
+        val oldSnapshot = remote.files.mapValues { it.value.copyOf() }
+
+        a.repo.update(item.id, p("v2")); a.sync()
+        val r2 = b.sync()
+        assertEquals(false, r2.rollbackDetected)
+
+        // مهاجم فایل‌های پوشه (از جمله manifest.slnm) را به نسخهٔ قدیمی‌تر برمی‌گرداند
+        remote.files.clear()
+        remote.files.putAll(oldSnapshot)
+        val rRollback = b.sync()
+        assertTrue("بازگشت به مانیفست قدیمی باید تشخیص داده شود", rRollback.rollbackDetected)
+    }
+
+    @Test fun expiredTombstonesAreCompacted() = runBlocking {
+        val a = Device("a")
+        val item = a.repo.add(p("temp")); a.sync()
+        a.repo.delete(item.id); a.sync()
+        assertTrue(remote.files.keys.any { it.startsWith("i-${item.id}-") })
+
+        // گذشت بیش از ۹۰ روز
+        t += SyncEngine.TOMBSTONE_RETENTION_MILLIS + 60_000L
+        a.sync()
+        assertTrue(remote.files.keys.none { it.startsWith("i-${item.id}-") })
+    }
 }

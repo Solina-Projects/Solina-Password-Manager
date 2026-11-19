@@ -5,13 +5,13 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
+import java.nio.CharBuffer
 import java.text.Normalizer
 
 class CorruptVaultException(message: String) : IOException(message)
 
 /**
- * هدر خزانه: پارامترهای KDF، سالت و دو نسخهٔ پیچیده‌شدهٔ Vault Key
- * (یکی با رمز اصلی، یکی با عبارت بازیابی). طبق docs/ARCHITECTURE.md §۲.
+ * هدر خزانه (فایل `vault.hdr`) طبق docs/ARCHITECTURE.md §۲.
  *
  * قالب باینری: "SLNV" | version(1) | memKiB(4) | iter(4) | par(4) | salt(16)
  *              | wrappedPw(60) | wrappedRec(60)
@@ -102,9 +102,28 @@ object VaultCrypto {
     private val INFO_PW = "solina/wrap/pw/v1".toByteArray(Charsets.US_ASCII)
     private val INFO_REC = "solina/wrap/rec/v1".toByteArray(Charsets.US_ASCII)
 
-    /** NFKC تا کاراکترهای معادل (مثلاً فارسی/عربی هم‌شکل) در ورودی‌های مختلف یکسان شوند. */
-    private fun passwordBytes(password: CharArray): ByteArray =
-        Normalizer.normalize(String(password), Normalizer.Form.NFKC).toByteArray(Charsets.UTF_8)
+    /**
+     * تبدیل ایمن CharArray به UTF-8 با نرمال‌سازی NFKC بدون ساخت String اضافی در مسیر رایج.
+     * فراخواننده مسئول wipe کردن ByteArray بازگشتی است.
+     */
+    internal fun passwordBytes(password: CharArray): ByteArray {
+        val cb = CharBuffer.wrap(password)
+        val encoder = Charsets.UTF_8.newEncoder()
+        val bb = if (Normalizer.isNormalized(cb, Normalizer.Form.NFKC)) {
+            encoder.encode(cb)
+        } else {
+            val normalized = Normalizer.normalize(cb, Normalizer.Form.NFKC).toCharArray()
+            try {
+                encoder.encode(CharBuffer.wrap(normalized))
+            } finally {
+                normalized.fill('\u0000')
+            }
+        }
+        val out = ByteArray(bb.remaining())
+        bb.get(out)
+        if (bb.hasArray()) bb.array().wipe()
+        return out
+    }
 
     private fun passwordKek(password: CharArray, salt: ByteArray, kdf: KdfParams): ByteArray {
         val pw = passwordBytes(password)
@@ -176,6 +195,29 @@ object VaultCrypto {
             )
         } finally {
             kek.wipe()
+        }
+    }
+
+    /**
+     * چرخش کامل کلید خزانه (Re-Key): کلید خزانهٔ تازه و ۲۴ کلمهٔ بازیابی جدید می‌سازد
+     * تا در صورت افشای عبارت بازیابی یا هدر قبلی، دسترسی مهاجم به کلید جدید قطع شود.
+     */
+    fun rotateVaultKey(newPassword: CharArray, kdf: KdfParams = KdfParams.DEFAULT): CreatedVault =
+        create(newPassword, kdf)
+
+    /** بازبسته‌بندی کلید یک ورودی از کلید خزانهٔ قدیم به جدید (بدون نیاز به رمزگشایی متن ورودی). */
+    fun rewrapItemKey(
+        oldVaultKey: ByteArray,
+        newVaultKey: ByteArray,
+        itemId: String,
+        oldWrappedItemKey: ByteArray,
+    ): ByteArray {
+        val aad = itemKeyAad(itemId)
+        val itemKey = Aead.open(oldVaultKey, oldWrappedItemKey, aad)
+        try {
+            return Aead.seal(newVaultKey, itemKey, aad)
+        } finally {
+            itemKey.wipe()
         }
     }
 

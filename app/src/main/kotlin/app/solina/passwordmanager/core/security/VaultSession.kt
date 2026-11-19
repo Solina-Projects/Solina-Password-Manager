@@ -7,9 +7,10 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * نشست باز بودن خزانه. Vault Key فقط در حافظه نگه داشته می‌شود و با قفل شدن صفر می‌شود.
- * (JVM تضمین نمی‌کند هیچ نسخه‌ای در حافظه نماند؛ این کاهش ریسک است، نه حذف مطلق.)
+ * ساعت پیش‌فرض یکنواخت است (در اندروید SystemClock.elapsedRealtime تزریق می‌شود) تا
+ * تغییر ساعت دیواری دستگاه نتواند مهلت قفل خودکار را دور بزند.
  */
-class VaultSession(private val clock: () -> Long = System::currentTimeMillis) {
+class VaultSession(private val clock: () -> Long = { System.nanoTime() / 1_000_000L }) {
     private var vaultKey: ByteArray? = null
     private var backgroundedAt: Long? = null
 
@@ -37,25 +38,27 @@ class VaultSession(private val clock: () -> Long = System::currentTimeMillis) {
     @Synchronized
     fun keyCopy(): ByteArray? = vaultKey?.copyOf()
 
-    /** وقتی اپ به پس‌زمینه رفت. */
+    /** وقتی اپ به پس‌زمینه رفت. اگر قبلاً ثبت شده باشد، زمان اولیه حفظ می‌شود. */
     @Synchronized
     fun onBackgrounded() {
-        if (_unlocked.value) backgroundedAt = clock()
+        if (_unlocked.value && backgroundedAt == null) backgroundedAt = clock()
     }
 
-    /** وقتی اپ برگشت: اگر بیش از مهلت در پس‌زمینه بوده، قفل می‌شود. */
+    /** وقتی اپ برگشت: اگر بیش از مهلت در پس‌زمینه بوده یا ساعت به عقب پریده، قفل می‌شود. */
     @Synchronized
     fun onForegrounded(timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS) {
         val since = backgroundedAt ?: return
         backgroundedAt = null
-        if (timeoutMillis == 0L || clock() - since >= timeoutMillis) lock()
+        val elapsed = clock() - since
+        if (timeoutMillis == 0L || elapsed < 0L || elapsed >= timeoutMillis) lock()
     }
 
     /** بررسی مهلت بدون تغییر وضعیت پس‌زمینه؛ برای سرویس Autofill و تایمر قفل خودکار. */
     @Synchronized
     fun enforceTimeout(timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS) {
         val since = backgroundedAt ?: return
-        if (_unlocked.value && clock() - since >= timeoutMillis) lock()
+        val elapsed = clock() - since
+        if (_unlocked.value && (timeoutMillis == 0L || elapsed < 0L || elapsed >= timeoutMillis)) lock()
     }
 
     companion object {

@@ -59,9 +59,27 @@ class AutofillLogicTest {
         assertTrue(AutofillMatcher.match(items, "unknown.net", "com.github.android").isEmpty())
     }
 
-    @Test fun nativeAppMatchesByPackageThenFallsBackToAll() {
+    @Test fun nativeAppMatchesByPackageWithoutDumpingAllEntries() {
         val items = listOf(item("1", "Snapp", "snapp.ir"), item("2", "Digikala", "digikala.com"))
         assertEquals(listOf("1"), AutofillMatcher.match(items, null, "cab.snapp.passenger").map { it.id })
-        assertEquals(2, AutofillMatcher.match(items, null, "com.unknown.thing").size)
+        assertTrue(AutofillMatcher.match(items, null, "com.unknown.thing").isEmpty())
+    }
+
+    @Test fun publicSuffixesAndCleartextHttpAreRejected() {
+        assertFalse(DomainMatcher.hostMatches("co.uk", "bank.co.uk"))
+        assertFalse(DomainMatcher.hostMatches("com.ir", "bank.com.ir"))
+        assertFalse(DomainMatcher.hostMatches("com.au", "mail.com.au"))
+        assertTrue(DomainMatcher.isSafeWebOrigin("https", "github.com"))
+        assertTrue(DomainMatcher.isSafeWebOrigin(null, "github.com"))
+        assertFalse(DomainMatcher.isSafeWebOrigin("http", "github.com"))
+        assertTrue(DomainMatcher.isSafeWebOrigin("http", "localhost"))
+        assertTrue(DomainMatcher.isSafeWebOrigin("http", "127.0.0.1"))
+    }
+
+    @Test fun trustedBrowserAllowlistBlocksSpoofingApps() {
+        assertTrue(TrustedBrowsers.isTrusted("com.android.chrome"))
+        assertTrue(TrustedBrowsers.isTrusted("org.mozilla.firefox"))
+        assertFalse(TrustedBrowsers.isTrusted("com.evil.phishing"))
+        assertFalse(TrustedBrowsers.isTrusted(null))
     }
 }

@@ -1,5 +1,6 @@
 package app.solina.passwordmanager
 
+import android.os.SystemClock
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -26,25 +27,44 @@ sealed interface UnlockResult {
 }
 
 /** منطق ساخت، باز کردن و بازیابی خزانه؛ رابط فقط این کلاس را صدا می‌زند. */
-class AuthController(private val container: AppContainer) {
+class AuthController(
+    private val container: AppContainer,
+    private val wallClock: () -> Long = System::currentTimeMillis,
+    private val elapsedClock: () -> Long = SystemClock::elapsedRealtime,
+) {
     private val files get() = container.files
     private val session get() = container.session
 
     fun hasVault() = files.hasVault()
     fun hasBiometric() = files.hasBiometric() && BiometricKeystore.hasKey()
 
-    fun remainingWaitMillis(now: Long = System.currentTimeMillis()): Long {
+    fun remainingWaitMillis(
+        now: Long = wallClock(),
+        elapsedNow: Long = elapsedClock(),
+    ): Long {
         val state = files.readUnlockState()
         val delay = UnlockBackoff.delayMillis(state.failedAttempts)
-        return (state.lastFailureAt + delay - now).coerceAtLeast(0)
+        if (delay <= 0L) return 0L
+
+        // اولویت با ساعت یکنواخت (elapsedRealtime) تا جلو بردن ساعت دیواری Backoff را دور نزند.
+        if (state.lastFailureElapsed > 0L) {
+            val monoPassed = elapsedNow - state.lastFailureElapsed
+            if (monoPassed >= 0L) {
+                return (delay - monoPassed).coerceAtLeast(0L)
+            }
+            // دستگاه ریستارت شده: fallback محافظه‌کارانه به ساعت دیواری (با سقف delay)
+        }
+        val wallPassed = now - state.lastFailureAt
+        if (wallPassed < 0L) return delay
+        return (delay - wallPassed).coerceAtLeast(0L)
     }
 
     private fun recordFailure() {
         val s = files.readUnlockState()
-        files.writeUnlockState(UnlockState(s.failedAttempts + 1, System.currentTimeMillis()))
+        files.writeUnlockState(UnlockState(s.failedAttempts + 1, wallClock(), elapsedClock()))
     }
 
-    private fun recordSuccess() = files.writeUnlockState(UnlockState(0, 0))
+    private fun recordSuccess() = files.writeUnlockState(UnlockState(0, 0, 0L))
 
     /** ساخت خزانه در حافظه. روی دیسک نوشته نمی‌شود تا کاربر عبارت بازیابی را تأیید کند ([commit]). */
     suspend fun create(password: CharArray): CreatedVault = withContext(Dispatchers.Default) {

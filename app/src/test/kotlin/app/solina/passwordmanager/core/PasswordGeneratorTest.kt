@@ -35,4 +35,20 @@ class PasswordGeneratorTest {
         val p = PasswordGenerator.generate(10, upper = false, lower = false, digits = false, symbols = false)
         assertTrue(p.all { it in 'a'..'z' })
     }
+
+    @Test
+    fun passphraseGeneratesWordsFromBip39List() {
+        val phrase = PasswordGenerator.generatePassphrase(wordCount = 6, separator = "-")
+        val parts = phrase.split("-")
+        assertEquals(6, parts.size)
+        assertTrue(parts.all { it.isNotEmpty() && it.all { ch -> ch in 'a'..'z' } })
+    }
+
+    @Test
+    fun effectiveBitsPenalizesPredictablePasswords() {
+        assertTrue(PasswordGenerator.effectiveBits("Password123!") < 50.0)
+        assertTrue(PasswordGenerator.effectiveBits("qwerty2024!") < 50.0)
+        assertTrue(PasswordGenerator.effectiveBits("aaaaaaaaaaaa") < 30.0)
+        assertTrue(PasswordGenerator.effectiveBits(PasswordGenerator.generate(16)) >= 70.0)
+    }
 }

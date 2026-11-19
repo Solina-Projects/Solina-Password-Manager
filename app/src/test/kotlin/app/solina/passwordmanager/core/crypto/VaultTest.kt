@@ -153,4 +153,27 @@ class VaultTest {
         val sealed = VaultCrypto.sealItem(vk, "x", 1, 1, marker.toByteArray())
         assertFalse(String(sealed.blob, Charsets.ISO_8859_1).contains(marker))
     }
+
+    @Test
+    fun rotateVaultKeyRewrapsItemsAndInvalidatesOldKey() {
+        val oldVault = VaultCrypto.create(pw, fast)
+        val plaintext = "secret-after-rotation".toByteArray()
+        val sealed = VaultCrypto.sealItem(oldVault.vaultKey, "item-rot", 1, 1, plaintext)
+
+        val newPw = "rotated-master-password".toCharArray()
+        val rotated = VaultCrypto.rotateVaultKey(newPw, fast)
+        assertFalse(oldVault.vaultKey.contentEquals(rotated.vaultKey))
+
+        val rewrappedKey = VaultCrypto.rewrapItemKey(
+            oldVault.vaultKey,
+            rotated.vaultKey,
+            "item-rot",
+            sealed.wrappedItemKey,
+        )
+        val rewrapped = SealedItem(rewrappedKey, sealed.blob)
+        assertArrayEquals(plaintext, VaultCrypto.openItem(rotated.vaultKey, "item-rot", 1, 1, rewrapped))
+        assertThrows(AuthenticationFailedException::class.java) {
+            VaultCrypto.openItem(oldVault.vaultKey, "item-rot", 1, 1, rewrapped)
+        }
+    }
 }

@@ -183,4 +183,21 @@ class RepositoryTest {
         assertArrayEquals("foob".toByteArray(), Base32.decode("mzxw 6yq-"))
         assertNull(Base32.decode("")); assertNull(Base32.decode("1!"))
     }
+
+    @Test fun analyzerFlagsInsecureHttpAndPredictablePasswords() {
+        val strong = "kPq7vM#xR42wL!z9Hd"
+        val items = listOf(
+            VaultItem("http1", 1, ItemPayload(title = "Bank", password = strong, website = "http://bank.example.com/login")),
+            VaultItem("https1", 1, ItemPayload(title = "Safe", password = "Zx9!qLm2#Wp8Rt5vB", website = "https://safe.example.com")),
+            VaultItem("local1", 1, ItemPayload(title = "Local", password = "Mn4@pQr7#Tv2Wx8yZ", website = "http://localhost:3000")),
+            VaultItem("weak1", 1, ItemPayload(title = "Weak", password = "Password123!", website = "https://weak.example.com")),
+        )
+        val rep = SecurityAnalyzer.analyze(items)
+        assertTrue(Flag.InsecureHttp in rep.flags["http1"].orEmpty())
+        assertFalse(Flag.InsecureHttp in rep.flags["https1"].orEmpty())
+        assertFalse(Flag.InsecureHttp in rep.flags["local1"].orEmpty())
+        assertTrue(Flag.Weak in rep.flags["weak1"].orEmpty())
+        assertEquals(1, rep.insecureHttp)
+        assertEquals(1, rep.weak)
+    }
 }

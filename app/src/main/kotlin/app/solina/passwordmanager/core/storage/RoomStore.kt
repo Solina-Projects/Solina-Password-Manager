@@ -12,6 +12,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
 import androidx.room.withTransaction
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(tableName = "items")
 class ItemRow(
@@ -72,7 +73,14 @@ abstract class SolinaDatabase : RoomDatabase() {
 
     companion object {
         fun open(context: Context): SolinaDatabase =
-            Room.databaseBuilder(context.applicationContext, SolinaDatabase::class.java, "solina.db").build()
+            Room.databaseBuilder(context.applicationContext, SolinaDatabase::class.java, "solina.db")
+                .addCallback(object : Callback() {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        // بازنویسی صفحات حذف‌شده با صفر برای کاهش باقی‌ماندهٔ متادیتا/بلاب در دیسک
+                        db.execSQL("PRAGMA secure_delete = ON")
+                    }
+                })
+                .build()
     }
 }
 
@@ -107,6 +115,13 @@ class RoomItemStore(private val db: SolinaDatabase) : ItemStore {
 
     override suspend fun wipeAll() {
         db.withTransaction { dao.wipeItems(); dao.wipeHistory() }
+        // پاکسازی کامل WAL و صفحات آزاد فایل دیتابیس
+        runCatching {
+            db.openHelper.writableDatabase.apply {
+                execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
+                execSQL("VACUUM")
+            }
+        }
     }
 
     private fun ItemRow.toStored() = StoredItem(id, rev, updatedAt, deletedAt, wrappedItemKey, blob)

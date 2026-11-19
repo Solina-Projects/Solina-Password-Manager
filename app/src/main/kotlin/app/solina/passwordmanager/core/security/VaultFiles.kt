@@ -6,7 +6,11 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
-data class UnlockState(val failedAttempts: Int, val lastFailureAt: Long)
+data class UnlockState(
+    val failedAttempts: Int,
+    val lastFailureAt: Long,
+    val lastFailureElapsed: Long = 0L,
+)
 
 /**
  * ذخیرهٔ فایل‌های خزانه در پوشهٔ خصوصی اپ. نوشتن اتمی است: اول فایل موقت، fsync، بعد rename،
@@ -38,14 +42,23 @@ class VaultFiles(private val dir: File) {
         biometric.delete()
     }
 
-    /** شمارندهٔ تلاش ناموفق و زمان آخرین شکست (میلی‌ثانیهٔ ساعت دیواری)؛ برای تأخیر فزاینده. */
+    /** شمارندهٔ تلاش ناموفق و زمان آخرین شکست (ساعت دیواری + ساعت یکنواخت برای جلوگیری از دور زدن). */
     fun readUnlockState(): UnlockState = runCatching {
         val parts = unlockState.readText().trim().split(",")
-        UnlockState(parts[0].toInt().coerceIn(0, 1000), parts[1].toLong().coerceAtLeast(0))
-    }.getOrDefault(UnlockState(0, 0))
+        val attempts = parts[0].toInt().coerceIn(0, 1000)
+        val wall = parts[1].toLong().coerceAtLeast(0)
+        val elapsed = if (parts.size >= 3) parts[2].toLong().coerceAtLeast(0) else 0L
+        UnlockState(attempts, wall, elapsed)
+    }.getOrDefault(UnlockState(0, 0, 0L))
 
-    fun writeUnlockState(state: UnlockState) =
-        atomicWrite(unlockState, "${state.failedAttempts},${state.lastFailureAt}".toByteArray())
+    fun writeUnlockState(state: UnlockState) {
+        val payload = if (state.lastFailureElapsed > 0L) {
+            "${state.failedAttempts},${state.lastFailureAt},${state.lastFailureElapsed}"
+        } else {
+            "${state.failedAttempts},${state.lastFailureAt}"
+        }
+        atomicWrite(unlockState, payload.toByteArray())
+    }
 
     /** حذف کامل خزانه (فقط با تأیید صریح کاربر). */
     fun deleteAll() {

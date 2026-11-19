@@ -4,6 +4,7 @@ import app.solina.passwordmanager.core.crypto.Aead
 import app.solina.passwordmanager.core.crypto.Argon2id
 import app.solina.passwordmanager.core.crypto.Hkdf
 import app.solina.passwordmanager.core.crypto.KdfParams
+import app.solina.passwordmanager.core.crypto.VaultCrypto
 import app.solina.passwordmanager.core.crypto.randomBytes
 import app.solina.passwordmanager.core.crypto.wipe
 import app.solina.passwordmanager.core.storage.ItemPayload
@@ -11,7 +12,6 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.nio.ByteBuffer
-import java.text.Normalizer
 
 class BackupFormatException(message: String) : Exception(message)
 
@@ -29,7 +29,7 @@ object Backup {
     private val INFO = "solina/backup/v1".toByteArray(Charsets.US_ASCII)
 
     private fun key(password: CharArray, salt: ByteArray, params: KdfParams): ByteArray {
-        val pw = Normalizer.normalize(String(password), Normalizer.Form.NFKC).toByteArray(Charsets.UTF_8)
+        val pw = VaultCrypto.passwordBytes(password)
         try {
             val master = Argon2id.derive(pw, salt, params)
             try {

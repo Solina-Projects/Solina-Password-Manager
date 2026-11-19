@@ -70,8 +70,11 @@ class SecurityTest {
         val dir = File(tmp.root, "v")
         val files = VaultFiles(dir)
         assertEquals(UnlockState(0, 0), files.readUnlockState())
-        files.writeUnlockState(UnlockState(5, 123_456L))
-        assertEquals(UnlockState(5, 123_456L), files.readUnlockState())
+        files.writeUnlockState(UnlockState(5, 123_456L, 78_900L))
+        assertEquals(UnlockState(5, 123_456L, 78_900L), files.readUnlockState())
+        // سازگاری با فرمت قدیمی دو‌ستونه
+        File(dir, "unlock.state").writeText("4,99999")
+        assertEquals(UnlockState(4, 99_999L, 0L), files.readUnlockState())
         File(dir, "unlock.state").writeText("not a number")
         assertEquals(UnlockState(0, 0), files.readUnlockState())
     }

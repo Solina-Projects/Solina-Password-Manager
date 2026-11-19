@@ -56,6 +56,8 @@ import app.solina.passwordmanager.core.Totp
 import app.solina.passwordmanager.core.fa
 import app.solina.passwordmanager.core.Base32
 import app.solina.passwordmanager.core.formatJalali
+import app.solina.passwordmanager.core.security.AutoLockOption
+import app.solina.passwordmanager.core.security.ClipboardClearOption
 import app.solina.passwordmanager.core.storage.Flag
 import app.solina.passwordmanager.core.storage.HistoryEntry
 import app.solina.passwordmanager.core.storage.ItemKind
@@ -72,6 +74,7 @@ import app.solina.passwordmanager.ui.components.RollingTotpCode
 import app.solina.passwordmanager.ui.components.SIcon
 import app.solina.passwordmanager.ui.components.StrengthBar
 import app.solina.passwordmanager.ui.components.TotpRing
+import app.solina.passwordmanager.ui.components.CLIPBOARD_CLEAR_MILLIS
 import app.solina.passwordmanager.ui.components.copySensitive
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
@@ -103,7 +106,7 @@ private fun faSecondsLeft(now: Long, period: Int = 30): String {
 }
 
 private fun strengthLevel(pw: String): Int {
-    val bits = PasswordGenerator.estimateBits(pw)
+    val bits = PasswordGenerator.effectiveBits(pw)
     return when {
         bits >= 90 -> 4
         bits >= 60 -> 3
@@ -209,14 +212,18 @@ fun HomeScreen(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("سلامت خزانه", color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 13.sp)
                         Text(
-                            if (report.weak == 0 && report.reused == 0) "رمز ضعیف یا تکراری ندارید."
-                            else "${report.reused.fa()} رمز تکراری و ${report.weak.fa()} رمز ضعیف دارید.",
+                            if (report.weak == 0 && report.reused == 0 && report.insecureHttp == 0) "رمز ضعیف، تکراری یا نشانی ناامن ندارید."
+                            else buildString {
+                                append("${report.reused.fa()} رمز تکراری و ${report.weak.fa()} رمز ضعیف")
+                                if (report.insecureHttp > 0) append(" و ${report.insecureHttp.fa()} نشانی HTTP ناامن")
+                                append(" دارید.")
+                            },
                             color = c.onPrimaryContainer,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
                             lineHeight = 24.sp,
                         )
-                        if (report.weak > 0 || report.reused > 0) {
+                        if (report.weak > 0 || report.reused > 0 || report.insecureHttp > 0) {
                             Box(
                                 Modifier
                                     .height(40.dp)
@@ -326,6 +333,7 @@ private fun ItemRow(item: VaultItem, flags: Set<Flag>, onClick: () -> Unit) {
         when {
             Flag.Weak in flags -> Pill("ضعیف", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
             Flag.Reused in flags -> Pill("تکراری", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Copy)
+            Flag.InsecureHttp in flags -> Pill("HTTP", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
             p.totpSecret.isNotBlank() -> Pill("۲FA", c.primaryContainer, c.onPrimaryContainer)
         }
     }
@@ -351,7 +359,7 @@ fun VaultScreen(
             1 -> p.kind == ItemKind.Login
             2 -> p.kind == ItemKind.Card
             3 -> p.kind == ItemKind.Note
-            4 -> Flag.Weak in flags || Flag.Reused in flags
+            4 -> Flag.Weak in flags || Flag.Reused in flags || Flag.InsecureHttp in flags
             else -> true
         }
         val q = query.trim()
@@ -442,6 +450,7 @@ fun DetailScreen(
     onDelete: () -> Unit,
     onRestore: (HistoryEntry) -> Unit,
     onToast: (String) -> Unit,
+    clipboardClearMillis: Long = CLIPBOARD_CLEAR_MILLIS,
 ) {
     val c = Solina.colors
     val ctx = LocalContext.current
@@ -481,7 +490,7 @@ fun DetailScreen(
                     Column {
                         if (p.username.isNotEmpty()) {
                             CopyRow("نام کاربری", p.username, copyLabel = "کپی نام کاربری") {
-                                copySensitive(ctx, "username", p.username)
+                                copySensitive(ctx, "username", p.username, clipboardClearMillis)
                                 onToast("نام کاربری کپی شد")
                             }
                             Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
@@ -504,8 +513,8 @@ fun DetailScreen(
                             }
                             IconAction(if (shown) SolinaIcons.EyeOff else SolinaIcons.Eye, if (shown) "پنهان کردن رمز" else "نمایش رمز") { shown = !shown }
                             IconAction(SolinaIcons.Copy, "کپی رمز عبور") {
-                                copySensitive(ctx, "password", p.password)
-                                onToast("رمز کپی شد. ۳۰ ثانیهٔ دیگر پاک می‌شود.")
+                                copySensitive(ctx, "password", p.password, clipboardClearMillis)
+                                onToast("رمز کپی شد. ${(clipboardClearMillis / 1000L).toInt().fa()} ثانیهٔ دیگر پاک می‌شود.")
                             }
                         }
                     }
@@ -515,16 +524,16 @@ fun DetailScreen(
                 Card(padding = 6.dp) {
                     Column {
                         if (p.cardHolder.isNotEmpty()) {
-                            CopyRow("نام دارندهٔ کارت", p.cardHolder, mono = false, copyLabel = "کپی نام دارنده") { copySensitive(ctx, "holder", p.cardHolder); onToast("کپی شد") }
+                            CopyRow("نام دارندهٔ کارت", p.cardHolder, mono = false, copyLabel = "کپی نام دارنده") { copySensitive(ctx, "holder", p.cardHolder, clipboardClearMillis); onToast("کپی شد") }
                             Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                         }
                         CopyRow("شمارهٔ کارت", if (shown) p.cardNumber else "•••• " + p.cardNumber.takeLast(4), copyLabel = "کپی شمارهٔ کارت") {
-                            copySensitive(ctx, "card", p.cardNumber); onToast("شمارهٔ کارت کپی شد. ۳۰ ثانیهٔ دیگر پاک می‌شود.")
+                            copySensitive(ctx, "card", p.cardNumber, clipboardClearMillis); onToast("شمارهٔ کارت کپی شد. ${(clipboardClearMillis / 1000L).toInt().fa()} ثانیهٔ دیگر پاک می‌شود.")
                         }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
-                        CopyRow("تاریخ انقضا", p.cardExpiry, copyLabel = "کپی تاریخ انقضا") { copySensitive(ctx, "expiry", p.cardExpiry); onToast("کپی شد") }
+                        CopyRow("تاریخ انقضا", p.cardExpiry, copyLabel = "کپی تاریخ انقضا") { copySensitive(ctx, "expiry", p.cardExpiry, clipboardClearMillis); onToast("کپی شد") }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
-                        CopyRow("CVV2", if (shown) p.cardCvv else "•••", copyLabel = "کپی CVV2") { copySensitive(ctx, "cvv", p.cardCvv); onToast("CVV2 کپی شد. ۳۰ ثانیهٔ دیگر پاک می‌شود.") }
+                        CopyRow("CVV2", if (shown) p.cardCvv else "•••", copyLabel = "کپی CVV2") { copySensitive(ctx, "cvv", p.cardCvv, clipboardClearMillis); onToast("CVV2 کپی شد. ${(clipboardClearMillis / 1000L).toInt().fa()} ثانیهٔ دیگر پاک می‌شود.") }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
                         Row(
                             Modifier.fillMaxWidth().height(52.dp).clickable(role = Role.Button) { shown = !shown }.padding(horizontal = 12.dp),
@@ -548,7 +557,7 @@ fun DetailScreen(
                     }
                     TotpRing(left, p.totpPeriod, 44.dp, faSecondsLeft(now, p.totpPeriod), if (left <= 5000) c.secondary else c.primary, c.primary.copy(alpha = 0.2f), c.onPrimaryContainer)
                     IconAction(SolinaIcons.Copy, "کپی کد", tint = c.onPrimaryContainer) {
-                        copySensitive(ctx, "totp", code)
+                        copySensitive(ctx, "totp", code, clipboardClearMillis)
                         onToast("کد کپی شد")
                     }
                 }
@@ -633,7 +642,14 @@ fun DetailScreen(
 // ───────────────────────── کدها ─────────────────────────
 
 @Composable
-fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (String) -> Unit, onScan: () -> Unit, onAdd: () -> Unit) {
+fun CodesScreen(
+    items: List<VaultItem>,
+    onToast: (String) -> Unit,
+    onOpenItem: (String) -> Unit,
+    onScan: () -> Unit,
+    onAdd: () -> Unit,
+    clipboardClearMillis: Long = CLIPBOARD_CLEAR_MILLIS,
+) {
     val c = Solina.colors
     val ctx = LocalContext.current
     val now = rememberNow()
@@ -666,7 +682,7 @@ fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (
                         .clip(RoundedCornerShape(22.dp))
                         .background(if (urgent) c.secondaryContainer else c.surface)
                         .clickable(role = Role.Button, onClickLabel = "کپی کد ${p.title}") {
-                            copySensitive(ctx, "totp", code)
+                            copySensitive(ctx, "totp", code, clipboardClearMillis)
                             onToast("کد ${p.title} کپی شد")
                         }
                         .padding(16.dp),
@@ -698,9 +714,15 @@ fun CodesScreen(items: List<VaultItem>, onToast: (String) -> Unit, onOpenItem: (
 // ───────────────────────── مولد رمز ─────────────────────────
 
 @Composable
-fun GeneratorScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
+fun GeneratorScreen(
+    onBack: () -> Unit,
+    onToast: (String) -> Unit,
+    clipboardClearMillis: Long = CLIPBOARD_CLEAR_MILLIS,
+) {
     val c = Solina.colors
     val ctx = LocalContext.current
+    var passphraseMode by remember { mutableStateOf(false) }
+    var wordCount by remember { mutableStateOf(5f) }
     var length by remember { mutableStateOf(16f) }
     var upper by remember { mutableStateOf(true) }
     var lower by remember { mutableStateOf(true) }
@@ -709,10 +731,11 @@ fun GeneratorScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
     var avoid by remember { mutableStateOf(false) }
     var seed by remember { mutableStateOf(0) }
 
-    val password = remember(length.toInt(), upper, lower, digits, symbols, avoid, seed) {
-        PasswordGenerator.generate(length.toInt(), upper, lower, digits, symbols, avoid)
+    val password = remember(passphraseMode, wordCount.toInt(), length.toInt(), upper, lower, digits, symbols, avoid, seed) {
+        if (passphraseMode) PasswordGenerator.generatePassphrase(wordCount.toInt())
+        else PasswordGenerator.generate(length.toInt(), upper, lower, digits, symbols, avoid)
     }
-    val bits = PasswordGenerator.estimateBits(password)
+    val bits = if (passphraseMode) wordCount.toInt() * 11.0 else PasswordGenerator.effectiveBits(password)
     val level = when {
         bits >= 90 -> 4
         bits >= 60 -> 3
@@ -747,8 +770,8 @@ fun GeneratorScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlineButton("رمز تازه", SolinaIcons.Refresh, Modifier.weight(1f)) { seed++ }
                     OutlineButton("کپی", SolinaIcons.Copy, Modifier.weight(1f)) {
-                        copySensitive(ctx, "generated", password)
-                        onToast("رمز کپی شد. ۳۰ ثانیهٔ دیگر پاک می‌شود.")
+                        copySensitive(ctx, "generated", password, clipboardClearMillis)
+                        onToast("رمز کپی شد. ${(clipboardClearMillis / 1000L).toInt().fa()} ثانیهٔ دیگر پاک می‌شود.")
                     }
                 }
             }
@@ -756,21 +779,36 @@ fun GeneratorScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
 
         Card(background = c.surface, padding = 18.dp) {
             Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("طول رمز", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                    Text(length.toInt().toString(), color = c.primary, fontFamily = Mono, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                ToggleRow("حالت عبارت عبور (کلمات BIP-39)", passphraseMode) { passphraseMode = it }
+                if (passphraseMode) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("تعداد کلمات", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Text(wordCount.toInt().fa(), color = c.primary, fontFamily = Mono, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = wordCount,
+                        onValueChange = { wordCount = it },
+                        valueRange = 4f..8f,
+                        steps = 3,
+                        colors = SliderDefaults.colors(thumbColor = c.primary, activeTrackColor = c.primary, inactiveTrackColor = c.divider),
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("طول رمز", color = c.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Text(length.toInt().toString(), color = c.primary, fontFamily = Mono, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = length,
+                        onValueChange = { length = it },
+                        valueRange = 8f..64f,
+                        colors = SliderDefaults.colors(thumbColor = c.primary, activeTrackColor = c.primary, inactiveTrackColor = c.divider),
+                    )
+                    ToggleRow("حروف بزرگ (A-Z)", upper) { upper = it }
+                    ToggleRow("حروف کوچک (a-z)", lower) { lower = it }
+                    ToggleRow("اعداد (0-9)", digits) { digits = it }
+                    ToggleRow("نمادها (!@#)", symbols) { symbols = it }
+                    ToggleRow("حذف کاراکترهای مبهم (O, 0, l, 1)", avoid) { avoid = it }
                 }
-                Slider(
-                    value = length,
-                    onValueChange = { length = it },
-                    valueRange = 8f..64f,
-                    colors = SliderDefaults.colors(thumbColor = c.primary, activeTrackColor = c.primary, inactiveTrackColor = c.divider),
-                )
-                ToggleRow("حروف بزرگ (A-Z)", upper) { upper = it }
-                ToggleRow("حروف کوچک (a-z)", lower) { lower = it }
-                ToggleRow("اعداد (0-9)", digits) { digits = it }
-                ToggleRow("نمادها (!@#)", symbols) { symbols = it }
-                ToggleRow("حذف کاراکترهای مبهم (O, 0, l, 1)", avoid) { avoid = it }
             }
         }
 
@@ -781,8 +819,8 @@ fun GeneratorScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
                 .clip(RoundedCornerShape(28.dp))
                 .background(c.primary)
                 .clickable(role = Role.Button) {
-                    copySensitive(ctx, "generated", password)
-                    onToast("رمز کپی شد. ۳۰ ثانیهٔ دیگر پاک می‌شود.")
+                    copySensitive(ctx, "generated", password, clipboardClearMillis)
+                    onToast("رمز کپی شد. ${(clipboardClearMillis / 1000L).toInt().fa()} ثانیهٔ دیگر پاک می‌شود.")
                     onBack()
                 },
             contentAlignment = Alignment.Center,
@@ -858,6 +896,10 @@ fun SettingsScreen(
     onSyncNow: () -> Unit,
     onSyncDisconnect: () -> Unit,
     onSetSchedule: (app.solina.passwordmanager.core.sync.BackupSchedule) -> Unit,
+    autoLock: AutoLockOption,
+    onSetAutoLock: (AutoLockOption) -> Unit,
+    clipboardClear: ClipboardClearOption,
+    onSetClipboardClear: (ClipboardClearOption) -> Unit,
     onDiagnostics: () -> Unit,
     onLock: () -> Unit,
 ) {
@@ -993,14 +1035,34 @@ fun SettingsScreen(
                     SIcon(SolinaIcons.Lock, c.muted, 20.dp)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
-                Text("قفل خودکار: یک دقیقه پس از رفتن اپ به پس‌زمینه", color = c.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                Text("زمان قفل خودکار پس از رفتن اپ به پس‌زمینه", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                for (option in AutoLockOption.entries) {
+                    Row(
+                        Modifier.fillMaxWidth().height(44.dp).clickable(role = Role.RadioButton) { onSetAutoLock(option) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(option.label, color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        if (autoLock == option) Text("●", color = c.primary, fontSize = 14.sp)
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Text("پاک‌سازی خودکار کلیپ‌بورد", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                for (option in ClipboardClearOption.entries) {
+                    Row(
+                        Modifier.fillMaxWidth().height(44.dp).clickable(role = Role.RadioButton) { onSetClipboardClear(option) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(option.label, color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        if (clipboardClear == option) Text("●", color = c.primary, fontSize = 14.sp)
+                    }
+                }
             }
         }
         Card(background = c.secondaryContainer) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("نسخهٔ پیش‌نمایش", color = c.onSecondaryContainer, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "ورودی‌ها اکنون واقعی و رمزشده روی همین دستگاه ذخیره می‌شوند، ولی این نسخه هنوز بازبینی امنیتی مستقل نشده است. Autofill فقط پر کردن را پشتیبانی می‌کند (ذخیرهٔ رمز جدید از Autofill هنوز نیست). همگام‌سازی فقط پوشه‌ای است (WebDAV و Drive هنوز نیستند). فعلاً رمزهای حیاتی خود را در آن نگه ندارید و حتماً کلمات بازیابی را جدا یادداشت کنید.",
+                    "ورودی‌ها اکنون واقعی و رمزشده روی همین دستگاه ذخیره می‌شوند، ولی این نسخه هنوز بازبینی امنیتی مستقل نشده است. Autofill پر کردن و ذخیرهٔ رمز جدید (هنگام باز بودن خزانه) را پشتیبانی می‌کند. همگام‌سازی فقط پوشه‌ای است (WebDAV و Drive هنوز نیستند). فعلاً رمزهای حیاتی خود را در آن نگه ندارید و حتماً کلمات بازیابی را جدا یادداشت کنید.",
                     color = c.onSecondaryContainer,
                     fontSize = 14.sp,
                     lineHeight = 24.sp,

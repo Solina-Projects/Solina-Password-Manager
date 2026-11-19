@@ -31,17 +31,15 @@ class GuardTest {
     }
 
     @Test fun onlyExpectedComponentsAreExported() {
-        val exported = Regex("""<(activity|service|receiver|provider)\b[^>]*?android:name="([^"]+)"[^>]*?android:exported="true"""", RegexOption.DOT_MATCHES_ALL)
         // هر تگ را جدا بررسی می‌کنیم تا regex از یک تگ به تگ بعدی نپرد.
         val tags = Regex("""<(activity|service|receiver|provider)\b[^>]*>""").findAll(manifest).map { it.value }.toList()
         val names = tags.filter { it.contains("""android:exported="true"""") }
             .map { Regex("""android:name="([^"]+)"""").find(it)!!.groupValues[1] }.toSet()
         assertEquals(setOf(".MainActivity", ".autofill.SolinaAutofillService"), names)
-        assertTrue(exported.pattern.isNotEmpty())
     }
 
     @Test fun noLoggingOrStackTracesInMainSources() {
-        val bad = Regex("""\b(Log\.[a-z]\(|println\(|printStackTrace\(|Timber\.)""")
+        val bad = Regex("""\b(Log\.[a-z]\(|android\.util\.Log|println\(|print\(|printStackTrace\(|Timber\.|System\.(out|err)\.)""")
         val offenders = File(moduleDir(), "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }
             .filter { f -> f.readLines().any { l -> !l.trim().startsWith("//") && !l.trim().startsWith("*") && bad.containsMatchIn(l) } }
             .map { it.name }.toList()

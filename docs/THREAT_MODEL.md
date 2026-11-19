@@ -26,14 +26,14 @@
 | حدس رمز اصلی از روی فایل‌ها | Argon2id (۶۴–۱۹ MiB بسته به دستگاه) + کلید تصادفی خزانه که با دو KEK بسته می‌شود | `PrimitivesTest` (RFC 9106), `VaultTest` |
 | دستکاری/جابه‌جایی ورودی‌ها در دیتابیس | AES-256-GCM با AAD = شناسه+ویرایش+schema؛ کلید جدا برای هر ورودی | `RepositoryTest` (tamper, swap, rollback) |
 | خواندن دیتابیس | فقط شناسه، شمارهٔ ویرایش و زمان‌ها آشکارند؛ بقیه رمز است | `nothingPlaintextInStore` |
-| حدس مکرر رمز روی خود اپ | تأخیر فزایندهٔ پایدار پس از شکست | `SecurityTest` |
+| حدس مکرر رمز روی خود اپ | تأخیر فزایندهٔ پایدار با ساعت یکنواخت (`SystemClock.elapsedRealtime`) مقاوم در برابر دستکاری ساعت سیستم | `SecurityTest` |
 | نشت از اسکرین‌شات/اپ‌های اخیر | `FLAG_SECURE` در همهٔ Activityها | بازبینی کد |
 | نشت از کلیپ‌بورد | علامت حساس + پاک‌سازی خودکار ۳۰ ثانیه | بازبینی کد (محدودیت‌ها در §۴) |
-| کلید در حافظه پس از قفل | قفل پس از ۶۰ ثانیه پس‌زمینه با تایمر مستقل از UI؛ فهرست رمزگشایی‌شده با قفل پاک می‌شود | `AutoLockTest` |
-| Autofill فیشینگ | تطبیق سخت‌گیرانهٔ دامنه (برابر یا زیردامنه)، دامنه از خود فیلد، رمز جدید پر نمی‌شود | `AutofillLogicTest` |
+| کلید در حافظه پس از قفل | قفل خودکار قابل تنظیم با ساعت یکنواخت مستقل از UI؛ `PRAGMA secure_delete = ON` و پاک‌سازی حافظه | `AutoLockTest` |
+| Autofill فیشینگ | فهرست مرورگرهای معتبر (`TrustedBrowsers`)، مسدودسازی `http://` ناامن و پسوندهای عمومی چندبخشی، حذف fallback نمایش همهٔ ورودی‌ها | `AutofillLogicTest` |
 | بکاپ دزدیده‌شده | رمز جداگانه + Argon2id + AES-GCM؛ هدر در AAD | `BackupTest` |
 | فایل ورودی مخرب (JSON/CSV/QR/protobuf) | حد اندازه، حد عمق JSON، پارسرهای بدون استثنای ناشناخته | `FuzzTest` (یک باگ واقعی را پیدا کرد: `JSONException` نشتی) |
-| دستکاری/جعل/حذف رکورد در پوشهٔ همگام‌سازی | هر رکورد با HMAC-SHA256 (کلید مشتق از VK) احراز می‌شود؛ نام فایل شامل هش محتواست؛ شناسه‌ها اعتبارسنجی می‌شوند | `SyncTest.forgedAndForeignRecordsAreRejected`, `hostileNamesAreIgnored`, `SyncRecordFuzzTest` |
+| دستکاری/جعل/بازگشت نسخه در پوشهٔ همگام‌سازی | HMAC-SHA256 برای رکوردها + مانیفست امضاشده (`manifest.slnm`) با `epoch` یکنواخت برای تشخیص rollback + پیوستن دومرحله‌ای (`StagedJoin`) + پاک‌سازی tombstone پس از ۹۰ روز | `SyncTest` |
 | از دست رفتن داده در ویرایش هم‌زمان | فایل تغییرناپذیر به‌ازای هر نسخه؛ برندهٔ قطعی؛ بازنده در تاریخچه | `SyncTest.concurrentEditsConvergeWithoutLosingData`, `threeDevicesConverge` |
 | افزایش مجوز و سطح حمله | فقط `CAMERA`؛ بدون اینترنت؛ فقط دو مؤلفهٔ export‌شده؛ بدون لاگ؛ بدون رمز ثابت در CI | `GuardTest` |
 | وابستگی آسیب‌پذیر | Dependabot هفتگی برای Gradle و Actions | `.github/dependabot.yml` |
@@ -61,8 +61,8 @@
 - [x] نگهبان‌های رگرسیون برای مجوز، export و لاگ
 - [x] ساخت release با R8 در CI
 - [x] lint بدون خطا و مسدودکننده در CI
-- [ ] اسکن وابستگی (Dependabot فعال است؛ نیاز به فعال‌سازی «Dependabot alerts» در تنظیمات مخزن)
-- [ ] CodeQL
+- [x] اسکن وابستگی (Dependabot + `actions/dependency-review-action` در PRها)
+- [x] CodeQL (`.github/workflows/security.yml`)
 - [ ] تست روی چند دستگاه واقعی (Keystore، بایومتریک، Autofill در مرورگرهای مختلف)
 - [ ] امضای release و ساخت بازتولیدپذیر
 - [ ] بازبینی مستقل و انتشار گزارش

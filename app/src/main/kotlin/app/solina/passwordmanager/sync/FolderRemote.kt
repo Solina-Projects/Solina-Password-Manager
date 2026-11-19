@@ -6,6 +6,7 @@ import androidx.documentfile.provider.DocumentFile
 import app.solina.passwordmanager.core.sync.SyncRemote
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.IOException
 
 /**
  * پوشهٔ همگام‌سازی روی هر ارائه‌دهندهٔ فایل اندروید (حافظهٔ داخلی، Syncthing، برنامهٔ Drive، Nextcloud ...)
@@ -49,12 +50,36 @@ class FolderRemote(private val context: Context, private val tree: Uri) : SyncRe
         }
     }
 
+    /**
+     * نوشتن امن (تا حد امکان اتمی در SAF): ابتدا در فایل موقت می‌نویسد، flush می‌کند،
+     * سپس جایگزین فایل هدف می‌کند تا قطع وسط نوشتن باعث فایل ۰ بایتی یا ناقص نشود.
+     */
     override suspend fun write(name: String, bytes: ByteArray) = withContext(Dispatchers.IO) {
-        val d = dir(true) ?: throw java.io.IOException("پوشه در دسترس نیست")
+        val d = dir(true) ?: throw IOException("پوشه در دسترس نیست")
+        val tmpName = "$name.tmp-${System.nanoTime()}"
+        val tmp = d.createFile(MIME, tmpName)
+        if (tmp != null) {
+            try {
+                context.contentResolver.openOutputStream(tmp.uri, "w")?.use { out ->
+                    out.write(bytes)
+                    out.flush()
+                } ?: throw IOException("نوشتن فایل ممکن نشد")
+                val existing = d.findFile(name)
+                existing?.delete()
+                if (tmp.renameTo(name)) return@withContext
+                // اگر ارائه‌دهنده SAF تغییر نام را پشتیبانی نکرد، فایل موقت را پاک و مستقیم می‌نویسیم
+                tmp.delete()
+            } catch (e: Exception) {
+                tmp.delete()
+                throw e
+            }
+        }
         val existing = d.findFile(name)
-        val target = existing ?: d.createFile(MIME, name) ?: throw java.io.IOException("ساخت فایل ممکن نشد")
-        context.contentResolver.openOutputStream(target.uri, "wt")?.use { it.write(bytes) }
-            ?: throw java.io.IOException("نوشتن فایل ممکن نشد")
+        val target = existing ?: d.createFile(MIME, name) ?: throw IOException("ساخت فایل ممکن نشد")
+        context.contentResolver.openOutputStream(target.uri, "wt")?.use { out ->
+            out.write(bytes)
+            out.flush()
+        } ?: throw IOException("نوشتن فایل ممکن نشد")
     }
 
     override suspend fun delete(name: String) {

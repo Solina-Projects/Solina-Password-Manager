@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,7 +67,10 @@ import app.solina.passwordmanager.core.importer.ImportException
 import app.solina.passwordmanager.core.importer.Importers
 import app.solina.passwordmanager.ui.screens.DataScreen
 import app.solina.passwordmanager.ui.screens.DiagnosticsScreen
+import app.solina.passwordmanager.core.security.KdfCalibrator
 import app.solina.passwordmanager.sync.ConnectResult
+import app.solina.passwordmanager.sync.StageJoinResult
+import app.solina.passwordmanager.sync.StagedJoin
 import app.solina.passwordmanager.sync.SyncManager
 import kotlinx.coroutines.flow.first
 import app.solina.passwordmanager.ui.screens.DataStep
@@ -205,15 +209,17 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
+        DiagLog.setForeground(false)
         DiagLog.log("ACT", "onStop")
         container.scheduleAutoLock()
     }
 
     override fun onStart() {
         super.onStart()
+        DiagLog.setForeground(true)
         DiagLog.log("ACT", "onStart")
         container.cancelAutoLock()
-        container.session.onForegrounded()
+        container.session.onForegrounded(container.securityPrefs.autoLockMillis())
     }
 }
 
@@ -329,6 +335,7 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
     var mustReset by remember { mutableStateOf(false) }
     var joinMessage by remember { mutableStateOf<String?>(null) }
     var showJoinCloud by remember { mutableStateOf(false) }
+    var stagedJoin by remember { mutableStateOf<StagedJoin?>(null) }
     fun launchJoinFolder(kind: String) {
         if (!hasFolderPicker(activity)) {
             DiagLog.log("PICKER", "no handler for ACTION_OPEN_DOCUMENT_TREE")
@@ -342,11 +349,13 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
                 val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
                 DiagLog.log("JOIN", "picker returned: ${if (uri == null) "cancelled" else "uri"}")
                 if (uri != null) scope.launch {
-                    when (val r = container.sync.joinFromFolder(uri, kind)) {
-                        ConnectResult.Ok -> hasVault = true
-                        ConnectResult.NoVaultInFolder -> joinMessage = "در این پوشه خزانه‌ای پیدا نشد. پوشه‌ای را انتخاب کنید که شامل «Solina-Sync» است (یعنی همان پوشه‌ای که در دستگاه اول انتخاب شد)."
-                        ConnectResult.DifferentVault -> joinMessage = "پوشه خزانهٔ دیگری دارد."
-                        is ConnectResult.Failed -> joinMessage = r.reason
+                    when (val r = container.sync.stageJoinFromFolder(uri, kind)) {
+                        is StageJoinResult.Ready -> {
+                            message = null
+                            stagedJoin = r.staged
+                        }
+                        StageJoinResult.NoVaultInFolder -> joinMessage = "در این پوشه خزانه‌ای پیدا نشد. پوشه‌ای را انتخاب کنید که شامل «Solina-Sync» است (یعنی همان پوشه‌ای که در دستگاه اول انتخاب شد)."
+                        is StageJoinResult.Failed -> joinMessage = r.reason
                     }
                 }
             },
@@ -359,6 +368,37 @@ private fun Root(activity: MainActivity, container: AppContainer, auth: AuthCont
             onEnable = { auth.enableBiometric(activity) { offerBiometric = false } },
             onSkip = { offerBiometric = false },
         )
+
+        !hasVault && stagedJoin != null -> {
+            val staged = stagedJoin!!
+            VaultUnlockScreen(
+                biometricReady = false,
+                message = message,
+                busy = busy,
+                subtitle = "برای پیوستن به خزانهٔ «${staged.folderName}» رمز اصلی را وارد کنید",
+                onPassword = { password ->
+                    busy = true
+                    message = null
+                    scope.launch {
+                        val ok = container.sync.commitStagedJoin(staged, password)
+                        password.fill(' ')
+                        busy = false
+                        if (ok) {
+                            stagedJoin = null
+                            hasVault = true
+                        } else {
+                            message = "رمز اصلی با خزانهٔ این پوشه مطابقت ندارد."
+                        }
+                    }
+                },
+                onBiometric = {},
+                onForgot = {},
+                onCancel = {
+                    stagedJoin = null
+                    message = null
+                },
+            )
+        }
 
         !hasVault -> when (stage) {
             Stage.Welcome -> {
@@ -486,8 +526,10 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
     val unreadable by repo.unreadable.collectAsState()
     val report = remember(items) { SecurityAnalyzer.analyze(items) }
 
-    var tab by remember { mutableStateOf(Tab.Home) }
-    var detailId by remember { mutableStateOf<String?>(null) }
+    var tab by rememberSaveable { mutableStateOf(Tab.Home) }
+    var detailId by rememberSaveable { mutableStateOf<String?>(null) }
+    val autoLock by container.securityPrefs.autoLock.collectAsState()
+    val clipboardClear by container.securityPrefs.clipboardClear.collectAsState()
     var editing by remember { mutableStateOf(false) } // با detailId == null یعنی ورودی جدید
     var generator by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
@@ -738,7 +780,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             scope.launch {
                                 try {
                                     val payloads = items.map { it.payload }
-                                    val bytes = withContext(Dispatchers.Default) { Backup.encode(payloads, pw, System.currentTimeMillis()) }
+                                    val bytes = withContext(Dispatchers.Default) { Backup.encode(payloads, pw, System.currentTimeMillis(), KdfCalibrator.pickOnDevice()) }
                                     pw.fill('\u0000')
                                     pendingExport = bytes
                                     val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
@@ -814,7 +856,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             }
                         },
                     )
-                    generator -> GeneratorScreen(onBack = { generator = false }, onToast = { toast = it })
+                    generator -> GeneratorScreen(onBack = { generator = false }, onToast = { toast = it }, clipboardClearMillis = clipboardClear.millis)
                     detailId != null -> DetailScreen(
                         item = detailItem,
                         history = history,
@@ -835,6 +877,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             }
                         },
                         onToast = { toast = it },
+                        clipboardClearMillis = clipboardClear.millis,
                     )
                     else -> when (tab) {
                         Tab.Home -> HomeScreen(
@@ -855,7 +898,7 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             onOpenItem = { detailId = it },
                             onAdd = { detailId = null; prefill = null; editing = true },
                         )
-                        Tab.Codes -> CodesScreen(items = items, onToast = { toast = it }, onOpenItem = { detailId = it }, onScan = { scanning = true }, onAdd = { detailId = null; prefill = null; editing = true })
+                        Tab.Codes -> CodesScreen(items = items, onToast = { toast = it }, onOpenItem = { detailId = it }, onScan = { scanning = true }, onAdd = { detailId = null; prefill = null; editing = true }, clipboardClearMillis = clipboardClear.millis)
                         Tab.Settings -> SettingsScreen(
                             biometricAvailable = auth.biometricAvailable(activity),
                             biometricEnabled = biometricEnabled,
@@ -902,6 +945,10 @@ private fun MainApp(activity: MainActivity, container: AppContainer, auth: AuthC
                             },
                             onSyncDisconnect = { container.sync.disconnect(); toast = "اتصال قطع شد" },
                             onSetSchedule = { container.sync.setSchedule(it) },
+                            autoLock = autoLock,
+                            onSetAutoLock = { container.securityPrefs.setAutoLock(it) },
+                            clipboardClear = clipboardClear,
+                            onSetClipboardClear = { container.securityPrefs.setClipboardClear(it) },
                             onDiagnostics = onDiagnostics,
                             onEnableAutofill = {
                                 try {

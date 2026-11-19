@@ -2,6 +2,8 @@ package app.solina.passwordmanager.core.sync
 
 import app.solina.passwordmanager.core.crypto.Hkdf
 import app.solina.passwordmanager.core.storage.StoredItem
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import javax.crypto.Mac
@@ -93,5 +95,77 @@ object SyncRecord {
         val id = parts.dropLast(2).joinToString("-")
         if (!isValidId(id) || rev < 1 || !Regex("[0-9a-f]{8}").matches(hash8)) return null
         return Name(id, rev, hash8)
+    }
+}
+
+/**
+ * مانیفست امضاشدهٔ پوشهٔ همگام‌سازی (`manifest.slnm`) برای کشف بازگشت به نسخهٔ قدیمی (Rollback)
+ * و حذف انتخابی رکوردها در پوشهٔ ابری نامطمئن.
+ *
+ * چیدمان: "SLNM" | v(1) | epoch(8) | count(4) | [idLen(2) id | rev(8)]* | hmac(32)
+ */
+data class SyncManifestData(val epoch: Long, val revisions: Map<String, Long>)
+
+object SyncManifest {
+    const val FILE_NAME = "manifest.slnm"
+    private val MAGIC = "SLNM".toByteArray(Charsets.US_ASCII)
+    private const val VERSION: Byte = 1
+    private const val MAX_ENTRIES = 50_000
+    private val MAC_INFO = "solina/sync/manifest/v1".toByteArray(Charsets.US_ASCII)
+
+    fun macKey(vaultKey: ByteArray): ByteArray = Hkdf.derive(vaultKey, null, MAC_INFO)
+
+    private fun mac(key: ByteArray, data: ByteArray): ByteArray =
+        Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec(key, "HmacSHA256")) }.doFinal(data)
+
+    fun encode(data: SyncManifestData, macKey: ByteArray): ByteArray {
+        val sorted = data.revisions.entries.sortedBy { it.key }
+        val baos = ByteArrayOutputStream()
+        DataOutputStream(baos).use { out ->
+            out.write(MAGIC)
+            out.writeByte(VERSION.toInt())
+            out.writeLong(data.epoch)
+            out.writeInt(sorted.size)
+            for ((id, rev) in sorted) {
+                val idBytes = id.toByteArray(Charsets.UTF_8)
+                out.writeShort(idBytes.size)
+                out.write(idBytes)
+                out.writeLong(rev)
+            }
+        }
+        val body = baos.toByteArray()
+        return body + mac(macKey, body)
+    }
+
+    /** null اگر فایل نامعتبر یا HMAC نادرست باشد. */
+    fun decode(bytes: ByteArray, macKey: ByteArray): SyncManifestData? {
+        if (bytes.size < 4 + 1 + 8 + 4 + 32) return null
+        val body = bytes.copyOfRange(0, bytes.size - 32)
+        val tag = bytes.copyOfRange(bytes.size - 32, bytes.size)
+        if (!MessageDigest.isEqual(tag, mac(macKey, body))) return null
+        return try {
+            val bb = ByteBuffer.wrap(body)
+            val magic = ByteArray(4).also { bb.get(it) }
+            if (!magic.contentEquals(MAGIC) || bb.get() != VERSION) return null
+            val epoch = bb.long
+            if (epoch < 1L) return null
+            val count = bb.int
+            if (count < 0 || count > MAX_ENTRIES) return null
+            val map = LinkedHashMap<String, Long>(count)
+            repeat(count) {
+                if (bb.remaining() < 2) return null
+                val idLen = bb.short.toInt() and 0xffff
+                if (idLen !in 1..64 || bb.remaining() < idLen + 8) return null
+                val id = String(ByteArray(idLen).also { bb.get(it) }, Charsets.UTF_8)
+                if (!SyncRecord.isValidId(id)) return null
+                val rev = bb.long
+                if (rev < 1L) return null
+                map[id] = rev
+            }
+            if (bb.hasRemaining()) return null
+            SyncManifestData(epoch, map)
+        } catch (e: RuntimeException) {
+            null
+        }
     }
 }

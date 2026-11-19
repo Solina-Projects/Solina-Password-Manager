@@ -14,7 +14,28 @@ interface SyncRemote {
     suspend fun delete(name: String)
 }
 
-class SyncReport(val pulled: Int, val pushed: Int, val conflicts: Int, val rejected: Int, val removed: Int) {
+/** نگهداری آخرین شمارهٔ Epoch دیده‌شده در حافظهٔ محلی برای تشخیص بازگشت به نسخهٔ قدیمی (Rollback). */
+interface SyncEpochStore {
+    fun lastSeenEpoch(): Long
+    fun saveLastSeenEpoch(epoch: Long)
+}
+
+class InMemorySyncEpochStore : SyncEpochStore {
+    private var epoch = 0L
+    override fun lastSeenEpoch(): Long = epoch
+    override fun saveLastSeenEpoch(epoch: Long) {
+        if (epoch > this.epoch) this.epoch = epoch
+    }
+}
+
+class SyncReport(
+    val pulled: Int,
+    val pushed: Int,
+    val conflicts: Int,
+    val rejected: Int,
+    val removed: Int,
+    val rollbackDetected: Boolean = false,
+) {
     val changedLocal get() = pulled > 0 || conflicts > 0
 }
 
@@ -25,12 +46,20 @@ class SyncReport(val pulled: Int, val pushed: Int, val conflicts: Int, val rejec
  * Drive، ...) هرگز روی هم بازنویسی نمی‌کنند. قاعدهٔ برنده (در همهٔ دستگاه‌ها یکسان و قطعی):
  * ویرایش بالاتر ← در برابر ویرایش یکسان، «زنده» بر «حذف‌شده» ← زمان جدیدتر ← هش بزرگ‌تر.
  * نسخهٔ بازنده هرگز دور ریخته نمی‌شود؛ در تاریخچهٔ رمزشدهٔ ورودی می‌ماند.
+ * علاوه بر آن، فایل `manifest.slnm` با شمارهٔ Epoch یکنواخت و HMAC امضا می‌شود تا بازگشت
+ * پوشهٔ همگام‌سازی به حالت قدیمی (Rollback) شناسایی شود.
  */
 class SyncEngine(
     private val store: ItemStore,
     private val remote: SyncRemote,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val epochStore: SyncEpochStore = InMemorySyncEpochStore(),
 ) {
+    companion object {
+        /** نگهداری Tombstone به مدت ۹۰ روز برای انتشار حذف به دستگاه‌های آفلاین. */
+        const val TOMBSTONE_RETENTION_MILLIS = 90L * 24 * 3600_000L
+    }
+
     private class Key(val rev: Long, val live: Int, val updatedAt: Long, val hash: String) : Comparable<Key> {
         override fun compareTo(other: Key): Int {
             rev.compareTo(other.rev).let { if (it != 0) return it }
@@ -45,11 +74,36 @@ class SyncEngine(
 
     suspend fun sync(vaultKey: ByteArray): SyncReport {
         val macKey = SyncRecord.macKey(vaultKey)
+        val manifestKey = SyncManifest.macKey(vaultKey)
         try {
-            var pulled = 0; var conflicts = 0; var rejected = 0; var pushed = 0; var removed = 0
+            var pulled = 0
+            var conflicts = 0
+            var rejected = 0
+            var pushed = 0
+            var removed = 0
+            var rollbackDetected = false
+
+            // ───── ۰) بررسی مانیفست امضاشده برای کشف Rollback ─────
+            val lastEpoch = epochStore.lastSeenEpoch()
+            var remoteEpoch = 0L
+            val remoteManifestBytes = runCatching {
+                remote.read(SyncManifest.FILE_NAME) ?: remote.read("${SyncManifest.FILE_NAME}.bin")
+            }.getOrNull()
+            if (remoteManifestBytes != null) {
+                val manifest = SyncManifest.decode(remoteManifestBytes, manifestKey)
+                if (manifest == null) {
+                    rejected++
+                } else {
+                    remoteEpoch = manifest.epoch
+                    if (manifest.epoch < lastEpoch) {
+                        rollbackDetected = true
+                    }
+                }
+            }
 
             // ───── ۱) دریافت ─────
-            val remoteFiles = remote.list().mapNotNull { n -> SyncRecord.parseName(n)?.let { n to it } }
+            val rawList = remote.list()
+            val remoteFiles = rawList.mapNotNull { n -> SyncRecord.parseName(n)?.let { n to it } }
             val localAll = store.all().associateBy { it.id }
             for ((id, files) in remoteFiles.groupBy { it.second.id }) {
                 val l = localAll[id]
@@ -63,7 +117,10 @@ class SyncEngine(
                     val rec = bytes?.let { SyncRecord.decode(it, macKey) }
                     if (rec == null || rec.id != id || rec.rev != parsed.rev ||
                         SyncRecord.contentHash(bytes).take(8) != parsed.hash8
-                    ) { rejected++; continue }
+                    ) {
+                        rejected++
+                        continue
+                    }
                     when (apply(rec, macKey)) {
                         Outcome.Adopted -> pulled++
                         Outcome.Conflict -> conflicts++
@@ -75,22 +132,47 @@ class SyncEngine(
             // ───── ۲) ارسال ─────
             val present = remote.list().toSet()
             val local = store.all()
+            val now = clock()
             for (item in local) {
+                // Tombstoneهای بسیار قدیمی (> ۹۰ روز) دیگر روی پوشهٔ جدید دوباره ارسال نمی‌شوند.
+                if (item.deletedAt != null && now - item.deletedAt > TOMBSTONE_RETENTION_MILLIS) continue
                 val bytes = SyncRecord.encode(item, macKey)
                 val name = SyncRecord.fileName(item.id, item.rev, bytes)
-                if (name !in present && "$name.bin" !in present) { remote.write(name, bytes); pushed++ }
+                if (name !in present && "$name.bin" !in present) {
+                    remote.write(name, bytes)
+                    pushed++
+                }
             }
 
-            // ───── ۳) پاک‌سازی نسخه‌های قدیمی‌تر از برندهٔ محلی ─────
-            val rev = local.associate { it.id to it.rev }
+            // ───── ۳) پاک‌سازی نسخه‌های قدیمی‌تر و Tombstoneهای منقضی ─────
+            val localById = local.associateBy { it.id }
             for (name in present) {
                 val p = SyncRecord.parseName(name) ?: continue
-                val cur = rev[p.id] ?: continue
-                if (p.rev < cur) { runCatching { remote.delete(name) }.onSuccess { removed++ } }
+                val cur = localById[p.id] ?: continue
+                val expiredTombstone = cur.deletedAt != null && now - cur.deletedAt > TOMBSTONE_RETENTION_MILLIS
+                if (p.rev < cur.rev || expiredTombstone) {
+                    runCatching { remote.delete(name) }.onSuccess { removed++ }
+                }
             }
-            return SyncReport(pulled, pushed, conflicts, rejected, removed)
+
+            // ───── ۴) به‌روزرسانی مانیفست امضاشده با Epoch افزایشی ─────
+            val shouldWriteManifest = pushed > 0 || removed > 0 || remoteEpoch == 0L || rollbackDetected
+            val nextEpoch = if (shouldWriteManifest) maxOf(lastEpoch, remoteEpoch) + 1L else maxOf(lastEpoch, remoteEpoch)
+            if (shouldWriteManifest && nextEpoch > 0L) {
+                val manifestData = SyncManifestData(
+                    epoch = nextEpoch,
+                    revisions = local.associate { it.id to it.rev },
+                )
+                runCatching { remote.write(SyncManifest.FILE_NAME, SyncManifest.encode(manifestData, manifestKey)) }
+            }
+            if (nextEpoch > lastEpoch) {
+                epochStore.saveLastSeenEpoch(nextEpoch)
+            }
+
+            return SyncReport(pulled, pushed, conflicts, rejected, removed, rollbackDetected)
         } finally {
             macKey.wipe()
+            manifestKey.wipe()
         }
     }
 
@@ -98,7 +180,10 @@ class SyncEngine(
 
     private suspend fun apply(rec: StoredItem, macKey: ByteArray): Outcome {
         val cur = store.get(rec.id)
-        if (cur == null) { adopt(rec, null); return Outcome.Adopted }
+        if (cur == null) {
+            adopt(rec, null)
+            return Outcome.Adopted
+        }
 
         val remoteWins = keyOf(rec, macKey) > keyOf(cur, macKey)
         val bothLive = cur.deletedAt == null && rec.deletedAt == null

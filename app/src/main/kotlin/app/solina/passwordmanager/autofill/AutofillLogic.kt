@@ -38,7 +38,6 @@ object FieldClassifier {
             else -> false
         }
         if (isPasswordInput || f.htmlType.equals("password", ignoreCase = true)) return FieldKind.Password
-
         if (f.htmlType.equals("email", ignoreCase = true) || f.htmlType.equals("tel", ignoreCase = true)) return FieldKind.Username
         if (cls == InputType.TYPE_CLASS_TEXT && variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS) return FieldKind.Username
         if (cls == InputType.TYPE_CLASS_TEXT && variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS) return FieldKind.Username
@@ -68,6 +67,14 @@ object FieldClassifier {
 }
 
 object DomainMatcher {
+    private val MULTI_LABEL_PUBLIC_SUFFIXES = setOf(
+        "co.ir", "com.ir", "org.ir", "net.ir", "gov.ir", "ac.ir", "sch.ir", "id.ir",
+        "co.uk", "org.uk", "ac.uk", "gov.uk",
+        "com.au", "net.au", "org.au", "edu.au",
+        "co.jp", "ne.jp", "or.jp",
+        "com.br", "com.tr", "co.in", "co.nz", "com.cn", "co.kr",
+    )
+
     /** "https://www.GitHub.com:443/login" ← "github.com". */
     fun normalizeHost(input: String): String {
         var s = input.trim().lowercase()
@@ -79,11 +86,26 @@ object DomainMatcher {
         return s.removePrefix("www.")
     }
 
-    /** برابر یا زیردامنه؛ «evil-github.com» و «github.com.evil.com» با «github.com» مطابق نیستند. */
+    /**
+     * بررسی امنیت پروتکل صفحه وب در Autofill:
+     * تنها HTTPS (یا localhost / 127.0.0.1 برای توسعه) مجاز به پر کردن خودکار است تا
+     * حملهٔ تنزل به HTTP در شبکه‌های عمومی نتواند رمزها را سرقت کند.
+     */
+    fun isSafeWebOrigin(scheme: String?, host: String?): Boolean {
+        val normalized = host?.let(::normalizeHost).orEmpty()
+        if (normalized.isEmpty()) return false
+        if (normalized == "localhost" || normalized == "127.0.0.1") return true
+        // در Android 8 (API 26-27) که webScheme وجود ندارد، scheme برابر null است.
+        return scheme == null || scheme.equals("https", ignoreCase = true)
+    }
+
+    /** برابر یا زیردامنه؛ «evil-github.com»، «github.com.evil.com» و پسوندهای عمومی مانند «co.uk» یا «com.ir» رد می‌شوند. */
     fun hostMatches(itemWebsite: String, requestHost: String): Boolean {
         val item = normalizeHost(itemWebsite)
         val req = normalizeHost(requestHost)
-        if (item.isEmpty() || req.isEmpty() || !item.contains('.') && item != "localhost") return false
+        if (item.isEmpty() || req.isEmpty()) return false
+        if (item in MULTI_LABEL_PUBLIC_SUFFIXES || req in MULTI_LABEL_PUBLIC_SUFFIXES) return false
+        if (!item.contains('.') && item != "localhost") return false
         return req == item || req.endsWith(".$item")
     }
 }
@@ -92,12 +114,13 @@ object DomainMatcher {
 object AutofillMatcher {
     const val MAX_SUGGESTIONS = 8
 
-    fun logins(items: List<VaultItem>) = items.filter { it.payload.kind == ItemKind.Login && (it.payload.username.isNotEmpty() || it.payload.password.isNotEmpty()) }
+    fun logins(items: List<VaultItem>) =
+        items.filter { it.payload.kind == ItemKind.Login && (it.payload.username.isNotEmpty() || it.payload.password.isNotEmpty()) }
 
     /**
      * صفحهٔ وب: فقط ورودی‌هایی که دامنه‌شان مطابقت دارد (سخت‌گیرانه، برای جلوگیری از فیشینگ).
-     * برنامهٔ بومی (بدون دامنه): ورودی‌هایی که عنوان یا سایتشان با بخش‌های نام بسته می‌خواند؛ اگر هیچ‌کدام نبود،
-     * همهٔ ورودی‌ها پیشنهاد می‌شوند تا کاربر خودش آگاهانه انتخاب کند.
+     * برنامهٔ بومی (بدون دامنه): فقط ورودی‌هایی که عنوان یا سایتشان با بخش‌های نام بسته می‌خواند؛
+     * در نبود تطابق، فهرست خالی برمی‌گردد تا هیچ رمزی بی‌مورد به برنامه‌های ناشناس افشا نشود.
      */
     fun match(items: List<VaultItem>, webHost: String?, packageName: String?): List<VaultItem> {
         val all = logins(items)
@@ -105,11 +128,11 @@ object AutofillMatcher {
             return all.filter { DomainMatcher.hostMatches(it.payload.website, webHost) }.take(MAX_SUGGESTIONS)
         }
         val parts = packageName.orEmpty().lowercase().split('.').filter { it.length >= 4 && it !in GENERIC }
-        val byName = all.filter { i ->
+        if (parts.isEmpty()) return emptyList()
+        return all.filter { i ->
             val hay = (i.payload.title + " " + i.payload.website).lowercase()
             parts.any { hay.contains(it) }
-        }
-        return (byName.ifEmpty { all }).take(MAX_SUGGESTIONS)
+        }.take(MAX_SUGGESTIONS)
     }
 
     private val GENERIC = setOf("android", "mobile", "app", "apps", "main", "client", "google", "com", "org", "net")

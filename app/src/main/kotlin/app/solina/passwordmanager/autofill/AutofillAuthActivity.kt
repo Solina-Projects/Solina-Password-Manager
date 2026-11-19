@@ -43,6 +43,7 @@ class AutofillAuthActivity : FragmentActivity() {
         val auth = AuthController(container)
 
         container.cancelAutoLock()
+        container.session.enforceTimeout(container.securityPrefs.autoLockMillis())
         if (container.session.unlocked.value) {
             finishWithResult(req)
             return
@@ -81,7 +82,12 @@ class AutofillAuthActivity : FragmentActivity() {
     private fun finishWithResult(req: ParsedRequest) {
         lifecycleScope.launch {
             runCatching { container.repository.load() }
-            val response = AutofillResponses.datasets(this@AutofillAuthActivity, container.repository.items.value, req)
+            val response = AutofillResponses.datasets(
+                this@AutofillAuthActivity,
+                container.repository.items.value,
+                req,
+                includeSaveInfo = false,
+            )
             if (response == null) {
                 Toast.makeText(this@AutofillAuthActivity, "ورودی مطابقی برای این صفحه پیدا نشد", Toast.LENGTH_LONG).show()
                 setResult(Activity.RESULT_CANCELED)
