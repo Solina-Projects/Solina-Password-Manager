@@ -430,7 +430,10 @@ object Importers {
             val issuer = e.optString("issuer")
             val name = e.optString("name")
             val firstGroup = e.optJSONArray("groups")?.let { ga ->
-                if (ga.length() > 0) groupNames[ga.optString(0)] ?: "" else ""
+                if (ga.length() > 0) {
+                    val raw = ga.optString(0)
+                    groupNames[raw] ?: if (groupNames.isEmpty()) raw else ""
+                } else ""
             }.orEmpty()
             out += ItemPayload(
                 ItemKind.Login,
