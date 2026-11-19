@@ -6,9 +6,16 @@
 
 > گاوصندوق دیجیتال متن‌باز برای اندروید: رمزهای عبور، کدهای احراز هویت دومرحله‌ای و اطلاعات محرمانه، فقط در اختیار خودتان.
 
-**وضعیت: Pre-alpha، مرحلهٔ طراحی.** هنوز نسخهٔ قابل نصب منتشر نشده است. تا زمانی که نسخهٔ پایدار و بازبینی امنیتی منتشر نشود، از Solina برای نگهداری رمزهای واقعی استفاده نکنید.
+## ⚠️ هشدار مهم
 
----
+**نسخهٔ ۱٫۰٫۰ اولین انتشار عمومی است، ولی برنامه هنوز در مرحلهٔ پیش‌آلفاست و بازبینی امنیتی مستقل ندارد.** تا زمانی که نسخهٔ پایدار و بازبینی‌شده منتشر نشود، از Solina برای نگهداری رمزهای واقعی استفاده نکنید.
+
+## نصب
+
+آخرین نسخه را از صفحهٔ [Releases](https://github.com/Solina-Projects/Solina-Password-Manager/releases) دانلود کنید — فایل APK را نصب کنید.
+
+- نیازمند اندروید ۸٫۰ (API 26) یا بالاتر
+- بدون نیاز به حساب کاربری؛ همهٔ داده‌ها فقط روی گوشی شما می‌مانند
 
 ## چرا Solina؟
 
@@ -19,19 +26,18 @@
 - **بدون تبلیغ و ردیاب:** بدون Analytics، بدون SDK تبلیغاتی، و بدون ارتباط شبکه‌ای پنهان.
 - **متن‌باز و قابل بررسی:** کد، مستندات امنیتی و تصمیم‌های معماری همه عمومی هستند.
 
-## قابلیت‌های هدف (نسخهٔ ۱٫۰)
+## قابلیت‌ها
 
 | حوزه | شرح |
 |---|---|
 | خزانه | ورودی‌های Login، کارت بانکی، هویت، یادداشت امن، جست‌وجوی سریع، پوشه و برچسب، تاریخچهٔ تغییرات |
+| Authenticator | TOTP و HOTP، اسکن QR، کدهای چرخان با حلقهٔ شمارش نرم |
 | Autofill | Android Autofill با تأیید دامنه و اپ برای جلوگیری از فیشینگ، پیشنهاد ذخیرهٔ رمز جدید |
-| Authenticator | TOTP و HOTP، اسکن QR، ورود از Aegis و Google Authenticator |
 | امنیت | Argon2id، AES-256-GCM، Android Keystore، بیومتریک، قفل خودکار، محافظت از اسکرین‌شات و کلیپ‌بورد |
-| بکاپ | فایل رمزگذاری‌شده، عبارت بازیابی ۲۴ کلمه‌ای، بازیابی روی گوشی جدید بدون هیچ حساب خارجی |
+| بکاپ و ایمپورت | فایل رمزگذاری‌شده، عبارت بازیابی ۲۴ کلمه‌ای، ایمپورت از Aegis و 2FAS و Bitwarden و Proton Pass و andOTP و Raivo و CSV |
 | همگام‌سازی | اختیاری و رمزگذاری‌شده، با انتخاب محل ذخیره (Google Drive، WebDAV، پوشهٔ محلی) |
 | مرکز امنیت | تشخیص رمز ضعیف، تکراری و قدیمی، و بررسی اختیاری افشا با روش k-anonymity |
-
-بعد از ۱٫۰: ورود با GitHub و سرور شخصی، پشتیبانی Passkey و اسناد رمزگذاری‌شده.
+| رابط کاربری | Jetpack Compose و Material 3، انیمیشن‌های نرم (فیلتر لغزنده، کد چرخان، نوار قدرت پلکانی) |
 
 ## مستندات
 
@@ -44,9 +50,19 @@
 
 ## نقشهٔ راه
 
-`M0` تحقیق و مستندات ← `M1` زیرساخت ← `M2` هستهٔ امنیتی ← `M3` خزانه ← `M4` Autofill ← `M5` Authenticator ← `M6` بکاپ و ایمپورت (**آلفا**) ← `M7` سخت‌سازی و بتا ← `M8` همگام‌سازی (**۱٫۰**)
+`M0` تحقیق و مستندات ← `M1` زیرساخت ← `M2` هستهٔ امنیتی ← `M3` خزانه ← `M4` Autofill ← `M5` Authenticator ← `M6` بکاپ و ایمپورت ← `M7` سخت‌سازی و بتا ← `M8` همگام‌سازی
 
-جزئیات و معیار پذیرش هر مرحله در `docs/MASTER_PROMPT.md` است.
+مرحله‌های M0 تا M8 انجام شده‌اند و نسخهٔ ۱٫۰٫۰ منتشر شده است. جزئیات و معیار پذیرش هر مرحله در `docs/MASTER_PROMPT.md` است.
+
+بعد از ۱٫۰: ورود با GitHub و سرور شخصی، پشتیبانی Passkey و اسناد رمزگذاری‌شده.
+
+## ساخت از روی کد
+
+```sh
+gradle :app:assembleDebug
+```
+
+نیازمند Gradle 8.10.2 و Java 17. خروجی: `app/build/outputs/apk/debug/app-debug.apk`
 
 ## مشارکت
 
@@ -64,6 +80,6 @@
 
 ## English summary
 
-**Solina** is a planned open-source, native Android password manager with a built-in TOTP/HOTP authenticator, built on a zero-knowledge, client-side-encrypted design (Argon2id + AES-256-GCM, Android Keystore, 24-word recovery phrase). It works fully offline and without any account; Google/GitHub sign-in is optional and never replaces the master password. UI: Jetpack Compose + Material 3, Persian (RTL) and English.
+**Solina** is an open-source, native Android password manager with a built-in TOTP/HOTP authenticator, built on a zero-knowledge, client-side-encrypted design (Argon2id + AES-256-GCM, Android Keystore, 24-word recovery phrase). It works fully offline and without any account; Google/GitHub sign-in is optional and never replaces the master password. UI: Jetpack Compose + Material 3, Persian (RTL) and English.
 
-**Status:** pre-alpha, design phase. Do not store real secrets in any build yet. See `docs/` for architecture, design and roadmap.
+**Status:** version 1.0.0 is the first public release, but the app is still pre-alpha quality with no independent security audit yet. Do not store real secrets in any build yet. See `docs/` for architecture, design and roadmap.
