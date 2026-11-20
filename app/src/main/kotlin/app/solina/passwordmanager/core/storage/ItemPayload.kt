@@ -8,10 +8,33 @@ enum class ItemKind(val code: String) {
     Login("login"),
     Card("card"),
     Identity("identity"),
-    Note("note");
+    Note("note"),
+    /** یادداشت سریع بخش «یادداشت و کارها» (فاز ۳) — با Note خزانه فرق دارد و در تب خزانه نشان داده نمی‌شود. */
+    QuickNote("quicknote"),
+    /** کار بخش «یادداشت و کارها» (فاز ۳) — در تب خزانه نشان داده نمی‌شود. */
+    Task("task");
 
     companion object {
         fun fromCode(code: String): ItemKind = entries.firstOrNull { it.code == code } ?: Login
+    }
+}
+
+/** یک ردیف چک‌لیست داخل یادداشت (متن و وضعیت تیک، هر دو داخل blob رمز می‌شوند). */
+data class CheckItem(val text: String = "", val done: Boolean = false)
+
+/** اولویت کار: زیاد / متوسط / کم. */
+enum class TaskPriority(val code: String) {
+    High("high"), Medium("medium"), Low("low");
+    companion object {
+        fun fromCode(code: String): TaskPriority = entries.firstOrNull { it.code == code } ?: Medium
+    }
+}
+
+/** تکرار کار: بدون تکرار / روزانه / هفتگی / ماهانه. */
+enum class TaskRepeat(val code: String) {
+    None("none"), Daily("daily"), Weekly("weekly"), Monthly("monthly");
+    companion object {
+        fun fromCode(code: String): TaskRepeat = entries.firstOrNull { it.code == code } ?: None
     }
 }
 
@@ -62,6 +85,29 @@ data class ItemPayload(
     val company: String = "",
     // Passkeyها (فاز ۲) — داخل همین payload رمزگذاری‌شده می‌نشینند، نه در SharedPreferences.
     val passkeys: List<PasskeyRecord> = emptyList(),
+    // ── یادداشت و کارها (فاز ۳) — همهٔ این فیلدها داخل blob رمز می‌شوند؛ هیچ‌کدام
+    // در دیتابیس آشکار نیستند. تنها استثنا dueAt است که برای یادآوری در حالت قفل،
+    // به‌صورت جداگانه و فقط به‌عنوان زمان (بدون عنوان/متن) در جدول task_due نگه داشته می‌شود.
+    /** متن کامل یادداشت (بدنه)؛ عنوان از خط اول آن گرفته می‌شود. */
+    val body: String = "",
+    /** چک‌لیست داخل یادداشت. */
+    val checklist: List<CheckItem> = emptyList(),
+    /** اولویت کار. */
+    val priority: TaskPriority = TaskPriority.Medium,
+    /** موعد کار (epoch millis)؛ ۰ یعنی بدون موعد. */
+    val dueAt: Long = 0L,
+    /** تکرار کار. */
+    val repeat: TaskRepeat = TaskRepeat.None,
+    /** کار انجام شده است. */
+    val done: Boolean = false,
+    /** سنجاق‌شده (بالای فهرست و در «امروز» حتی بدون موعد). */
+    val pinned: Boolean = false,
+    /** بایگانی‌شده (از فهرست اصلی پنهان، قابل بازگردانی). */
+    val archived: Boolean = false,
+    /** شناسهٔ ورودی خزانهٔ مرتبط (برای یادداشت یا کار). */
+    val linkedItemId: String = "",
+    /** شناسهٔ یادداشت مرتبط (برای کار). */
+    val linkedNoteId: String = "",
 ) {
     fun toBytes(): ByteArray {
         val o = JSONObject()
@@ -99,6 +145,25 @@ data class ItemPayload(
         if (country.isNotEmpty()) o.put("country", country)
         if (company.isNotEmpty()) o.put("company", company)
         if (passkeys.isNotEmpty()) o.put("passkeys", PasskeyRecord.listToJson(passkeys))
+        if (body.isNotEmpty()) o.put("body", body)
+        if (checklist.isNotEmpty()) {
+            val arr = org.json.JSONArray()
+            for (c in checklist) {
+                val co = JSONObject()
+                co.put("t", c.text)
+                if (c.done) co.put("d", true)
+                arr.put(co)
+            }
+            o.put("checklist", arr)
+        }
+        if (priority != TaskPriority.Medium) o.put("priority", priority.code)
+        if (dueAt != 0L) o.put("dueAt", dueAt)
+        if (repeat != TaskRepeat.None) o.put("repeat", repeat.code)
+        if (done) o.put("done", true)
+        if (pinned) o.put("pinned", true)
+        if (archived) o.put("archived", true)
+        if (linkedItemId.isNotEmpty()) o.put("linkedItemId", linkedItemId)
+        if (linkedNoteId.isNotEmpty()) o.put("linkedNoteId", linkedNoteId)
         return o.toString().toByteArray(Charsets.UTF_8)
     }
 
@@ -144,6 +209,21 @@ data class ItemPayload(
                 country = o.optString("country"),
                 company = o.optString("company"),
                 passkeys = PasskeyRecord.listFromJson(o.optJSONArray("passkeys")),
+                body = o.optString("body"),
+                checklist = o.optJSONArray("checklist")?.let { arr ->
+                    List(arr.length()) { i ->
+                        val co = arr.optJSONObject(i) ?: return@let emptyList<CheckItem>()
+                        CheckItem(co.optString("t"), co.optBoolean("d"))
+                    }.filter { it.text.isNotBlank() }
+                } ?: emptyList(),
+                priority = TaskPriority.fromCode(o.optString("priority", "medium")),
+                dueAt = o.optLong("dueAt", 0L),
+                repeat = TaskRepeat.fromCode(o.optString("repeat", "none")),
+                done = o.optBoolean("done"),
+                pinned = o.optBoolean("pinned"),
+                archived = o.optBoolean("archived"),
+                linkedItemId = o.optString("linkedItemId"),
+                linkedNoteId = o.optString("linkedNoteId"),
             )
         }
     }

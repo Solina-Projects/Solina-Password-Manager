@@ -11,6 +11,7 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.Migration
 import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -32,6 +33,17 @@ class HistoryRow(
     val savedAt: Long,
     @ColumnInfo(typeAffinity = ColumnInfo.BLOB) val wrappedItemKey: ByteArray,
     @ColumnInfo(typeAffinity = ColumnInfo.BLOB) val blob: ByteArray,
+)
+
+/**
+ * فرادادهٔ متن‌باز موعد کار (فاز ۳). فقط شناسهٔ کار، زمان موعد و زمان آخرین یادآوری؛
+ * هیچ عنوان، متن یا محتوای دیگری اینجا ذخیره نمی‌شود — محتوا فقط داخل blob رمز خزانه است.
+ */
+@Entity(tableName = "task_due")
+class TaskDueRow(
+    @PrimaryKey val id: String,
+    val dueAt: Long,
+    val notifiedAt: Long,
 )
 
 @Dao
@@ -68,15 +80,35 @@ interface ItemDao {
 
     @Query("DELETE FROM history")
     suspend fun wipeHistory()
+
+    @Upsert
+    suspend fun upsertTaskDue(row: TaskDueRow)
+
+    @Query("DELETE FROM task_due WHERE id = :id")
+    suspend fun deleteTaskDue(id: String)
+
+    @Query("SELECT * FROM task_due")
+    suspend fun allTaskDues(): List<TaskDueRow>
+
+    @Query("DELETE FROM task_due")
+    suspend fun wipeTaskDues()
 }
 
-@Database(entities = [ItemRow::class, HistoryRow::class], version = 1, exportSchema = false)
+@Database(entities = [ItemRow::class, HistoryRow::class, TaskDueRow::class], version = 2, exportSchema = false)
 abstract class SolinaDatabase : RoomDatabase() {
     abstract fun dao(): ItemDao
 
     companion object {
+        /** مهاجرت ۱ ← ۲ (فاز ۳): فقط جدول متن‌باز موعد کارها اضافه می‌شود؛ جدول items دست نمی‌خورد. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `task_due` (`id` TEXT NOT NULL, `dueAt` INTEGER NOT NULL, `notifiedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            }
+        }
+
         fun open(context: Context): SolinaDatabase =
             Room.databaseBuilder(context.applicationContext, SolinaDatabase::class.java, "solina.db")
+                .addMigrations(MIGRATION_1_2)
                 .addCallback(object : Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {
                         // بازنویسی صفحات حذف‌شده با صفر برای کاهش باقی‌ماندهٔ متادیتا/بلاب در دیسک
@@ -130,7 +162,7 @@ class RoomItemStore(private val db: SolinaDatabase) : ItemStore {
         dao.history(itemId).map { StoredHistory(it.itemId, it.rev, it.savedAt, it.wrappedItemKey, it.blob) }
 
     override suspend fun wipeAll() {
-        db.withTransaction { dao.wipeItems(); dao.wipeHistory() }
+        db.withTransaction { dao.wipeItems(); dao.wipeHistory(); dao.wipeTaskDues() }
         // پاکسازی کامل WAL و صفحات آزاد فایل دیتابیس
         runCatching {
             db.openHelper.writableDatabase.apply {
@@ -139,6 +171,17 @@ class RoomItemStore(private val db: SolinaDatabase) : ItemStore {
             }
         }
     }
+
+    override suspend fun saveTaskDue(id: String, dueAt: Long, notifiedAt: Long) {
+        dao.upsertTaskDue(TaskDueRow(id, dueAt, notifiedAt))
+    }
+
+    override suspend fun deleteTaskDue(id: String) {
+        dao.deleteTaskDue(id)
+    }
+
+    override suspend fun allTaskDues(): List<TaskDueMeta> =
+        dao.allTaskDues().map { TaskDueMeta(it.id, it.dueAt, it.notifiedAt) }
 
     private fun ItemRow.toStored() = StoredItem(id, rev, updatedAt, deletedAt, wrappedItemKey, blob)
 }

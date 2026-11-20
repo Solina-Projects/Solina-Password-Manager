@@ -11,6 +11,13 @@ class StoredItem(
     val blob: ByteArray,
 )
 
+/**
+ * فرادادهٔ متن‌باز موعد یک کار (فاز ۳): فقط شناسه و زمان موعد، بدون هیچ عنوان یا متنی.
+ * یادآور WorkManager با همین جدول و درحالی‌که خزانه قفل است کار می‌کند؛ چون هیچ محتوایی
+ * اینجا نیست، نوتیفیکیشن هم فقط پیام کلی نشان می‌دهد.
+ */
+class TaskDueMeta(val id: String, val dueAt: Long, val notifiedAt: Long)
+
 /** نسخهٔ قدیمی یک ورودی که رمزشده نگه داشته می‌شود. */
 class StoredHistory(
     val itemId: String,
@@ -38,4 +45,13 @@ interface ItemStore {
 
     suspend fun history(itemId: String): List<StoredHistory>
     suspend fun wipeAll()
+
+    // ── فرادادهٔ موعد کارها (فاز ۳) ──
+    // پیاده‌سازی پیش‌فرض خالی است تا ذخیره‌های آزمایشی قدیمی نشکنند؛ RoomItemStore آن را بازنویسی می‌کند.
+    /** ثبت/به‌روزرسانی موعد متن‌باز یک کار؛ فقط برای کارهای ناتمامِ دارای موعد صدا زده می‌شود. */
+    suspend fun saveTaskDue(id: String, dueAt: Long, notifiedAt: Long = 0L) {}
+    /** حذف ردیف موعد (کار انجام شد، موعد برداشته شد، یا ورودی حذف شد). */
+    suspend fun deleteTaskDue(id: String) {}
+    /** همهٔ موعدهای متن‌باز (برای یادآور پس‌زمینه در حالت قفل). */
+    suspend fun allTaskDues(): List<TaskDueMeta> = emptyList()
 }
