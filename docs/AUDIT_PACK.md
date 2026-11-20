@@ -11,7 +11,7 @@
 
 | مورد | مقدار |
 |---|---|
-| نام | Solina Password Manager — «گاوصندوق شخصی» آفلاین |
+| نام | Solina Refuge — «گاوصندوق شخصی» آفلاین |
 | زبان و پشته | Kotlin + Jetpack Compose (Material 3)، Room، WorkManager، BouncyCastle |
 | minSdk / targetSdk | ۲۶ (اندروید ۸) / ۳۵ |
 | مدل | کاملاً آفلاین، دانش صفر (Zero-Knowledge)؛ بدون حساب، بدون سرور، بدون تحلیل و ردیابی |

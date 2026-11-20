@@ -1,4 +1,4 @@
-# معماری سیستم Solina Password Manager (Phase 2)
+# معماری سیستم Solina Refuge (Phase 2)
 
 Solina با معماری لایه‌ای (**Clean Architecture + MVVM**) طراحی شده است تا هستهٔ رمزنگاری و منطق دامنه کاملاً مستقل از Android Framework و UI باقی بمانند و روی JVM به‌سرعت تست شوند.
 

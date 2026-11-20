@@ -1869,7 +1869,7 @@ fun SettingsScreen(
                         Text("پر کردن خودکار (Autofill + Inline)", color = c.text, fontSize = 15.sp)
                         Text(
                             if (autofillEnabled) "فعال است (با پشتیبانی Inline روی اندروید ۱۱ به بالا). در Chrome گزینهٔ «Autofill using another service» را هم روشن کنید."
-                            else "غیرفعال؛ برای انتخاب Solina به‌عنوان سرویس بزنید",
+                            else "غیرفعال؛ برای انتخاب Solina Refuge به‌عنوان سرویس بزنید",
                             color = c.muted, fontSize = 12.sp, lineHeight = 18.sp,
                         )
                     }
@@ -2136,7 +2136,7 @@ fun SettingsScreen(
 
         Card {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("معماری امنیتی Solina", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("معماری امنیتی Solina Refuge", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Text("• رمزگذاری سرتاسری Zero-Knowledge: هر ورودی با کلید تصادفی اختصاصی (DEK) و AES-256-GCM رمز می‌شود؛ کلید اصلی با Argon2id و عبارت بازیابی ۲۴ کلمه‌ای BIP-39 محافظت می‌شود.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
                 Text("• Authenticator داخلی: پشتیبانی کامل از TOTP (RFC 6238) و HOTP (RFC 4226) با ۶/۸ رقم، SHA1/256/512، کد ۵حرفی Steam Guard، اسکن QR، ورود از Aegis/2FAS/andOTP/Google Authenticator/Steam (maFile) و بکاپ جداگانهٔ رمزشده.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
                 Text("• Autofill مدرن: پشتیبانی از Android Autofill Framework و Inline Suggestions روی اندروید ۱۱ به بالا با تطبیق دقیق دامنه و نام پکیج.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
@@ -2145,7 +2145,7 @@ fun SettingsScreen(
                 Text("• امنیت محلی: FLAG_SECURE (ضد اسکرین‌شات)، پاک‌سازی خودکار کلیپ‌بورد، قفل خودکار پس‌زمینه، و ذخیرهٔ تنظیمات حساس با Android Keystore.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
             }
         }
-        Text("Solina 2.0.0 · GPL-3.0", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("Solina Refuge 2.0.0 · GPL-3.0", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
         Spacer(Modifier.height(12.dp))
     }
 }
