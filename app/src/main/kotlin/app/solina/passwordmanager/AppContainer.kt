@@ -24,6 +24,7 @@ class AppContainer(context: Context) {
     private val appContext = context.applicationContext
     val files = VaultFiles(File(appContext.filesDir, "solina"))
     val securityPrefs = SecurityPrefs(appContext)
+    val pinUnlock = PinUnlockManager(appContext)
     val externalAccounts = ExternalAccountManager(appContext)
     val session = VaultSession(clock = SystemClock::elapsedRealtime)
     val database by lazy { SolinaDatabase.open(appContext) }
@@ -62,6 +63,7 @@ class AppContainer(context: Context) {
         repository.clear()
         runCatching { itemStore.wipeAll() }
         runCatching { BiometricKeystore.deleteKey() }
+        runCatching { pinUnlock.disablePin() }
         files.deleteAll()
         sync.disconnect()
         externalAccounts.clearAll()

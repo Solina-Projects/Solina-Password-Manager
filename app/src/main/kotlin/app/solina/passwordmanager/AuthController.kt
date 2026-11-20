@@ -13,6 +13,7 @@ import app.solina.passwordmanager.core.crypto.VaultCrypto
 import app.solina.passwordmanager.core.crypto.wipe
 import app.solina.passwordmanager.core.security.BiometricKeystore
 import app.solina.passwordmanager.core.security.KdfCalibrator
+import app.solina.passwordmanager.core.security.PinResult
 import app.solina.passwordmanager.core.security.UnlockBackoff
 import app.solina.passwordmanager.core.security.UnlockState
 import kotlinx.coroutines.Dispatchers
@@ -172,6 +173,36 @@ class AuthController(
         }
 
     // ───── بیومتریک ─────
+
+    // ───── پین (میان‌بر؛ جایگزین رمز اصلی نیست، نگاه کنید به PinUnlock.kt) ─────
+
+    fun hasPin() = container.pinUnlock.hasPin()
+
+    /** تنظیم یا تغییر پین؛ فقط وقتی خزانه باز است (Vault Key در نشست است). */
+    fun setupPin(pin: CharArray): Boolean {
+        val vk = session.keyCopy() ?: return false
+        try {
+            return container.pinUnlock.setupPin(pin, vk)
+        } finally {
+            vk.wipe()
+        }
+    }
+
+    /** بررسی پین فعلی بدون تغییر نشست؛ برای تأیید هنگام تغییر پین. */
+    fun verifyPin(pin: CharArray): Boolean = container.pinUnlock.verifyPin(pin)
+
+    fun disablePin() = container.pinUnlock.disablePin()
+
+    /** باز کردن با پین؛ در صورت موفقیت نشست باز می‌شود (مثل رمز اصلی). */
+    suspend fun unlockWithPin(pin: CharArray): PinResult = withContext(Dispatchers.Default) {
+        when (val r = container.pinUnlock.unlockWithPin(pin)) {
+            is PinResult.Success -> {
+                session.unlock(r.vaultKey)
+                r
+            }
+            else -> r
+        }
+    }
 
     fun biometricAvailable(activity: FragmentActivity): Boolean =
         BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==

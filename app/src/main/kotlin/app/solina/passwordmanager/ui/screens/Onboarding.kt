@@ -115,7 +115,7 @@ private fun TextLink(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SecretField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun SecretField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, keyboardType: KeyboardType = KeyboardType.Password) {
     val c = Solina.colors
     var visible by remember { mutableStateOf(false) }
     Row(
@@ -134,7 +134,7 @@ private fun SecretField(label: String, value: String, onChange: (String) -> Unit
                 singleLine = true,
                 textStyle = TextStyle(color = c.text, fontSize = 18.sp, fontFamily = Mono, textAlign = TextAlign.Left),
                 cursorBrush = SolidColor(c.primary),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                keyboardOptions = KeyboardOptions(keyboardType = keyboardType, autoCorrectEnabled = false),
                 visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
             )
@@ -555,9 +555,14 @@ fun VaultUnlockScreen(
     onForgot: () -> Unit,
     subtitle: String = "خزانهٔ شما قفل است",
     onCancel: (() -> Unit)? = null,
+    pinReady: Boolean = false,
+    onPin: ((CharArray) -> Unit)? = null,
 ) {
     val c = Solina.colors
+    val str = Solina.strings
     var pass by remember { mutableStateOf("") }
+    var pin by remember { mutableStateOf("") }
+    var pinMode by remember { mutableStateOf(false) }
     Page {
         Spacer(Modifier.height(32.dp))
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -577,17 +582,69 @@ fun VaultUnlockScreen(
                 ) { SIcon(SolinaIcons.Fingerprint, c.onPrimary, 40.dp, "باز کردن با اثر انگشت") }
             }
         }
-        SecretField("رمز اصلی", pass, { pass = it })
-        if (message != null) Notice(message, error = true)
-        PrimaryButton(if (busy) "در حال بررسی…" else "باز کردن", enabled = pass.isNotEmpty() && !busy) {
-            onPassword(pass.toCharArray())
-            pass = ""
+        if (pinReady && pinMode && onPin != null) {
+            SecretField("پین", pin, { pin = it.filter { ch -> ch.isDigit() }.take(6) }, keyboardType = KeyboardType.NumberPassword)
+            if (message != null) Notice(message, error = true)
+            PrimaryButton(if (busy) "در حال بررسی…" else str.pinUnlockButton, enabled = pin.length in 4..6 && !busy) {
+                onPin(pin.toCharArray())
+                pin = ""
+            }
+            TextLink(str.pinUsePassword) { pinMode = false; pin = "" }
+        } else {
+            SecretField("رمز اصلی", pass, { pass = it })
+            if (message != null) Notice(message, error = true)
+            PrimaryButton(if (busy) "در حال بررسی…" else "باز کردن", enabled = pass.isNotEmpty() && !busy) {
+                onPassword(pass.toCharArray())
+                pass = ""
+            }
+            if (pinReady && onPin != null) {
+                TextLink(str.pinUsePin) { pinMode = true; pass = "" }
+            }
         }
         if (onCancel != null) {
             TextLink("انصراف و بازگشت", onCancel)
-        } else {
+        } else if (!pinMode) {
             TextLink("رمز را فراموش کرده‌ام (بازیابی با ۲۴ کلمه)", onForgot)
         }
+    }
+}
+
+/** تعیین یا تغییر پین؛ پین فعلی فقط وقتی پرسیده می‌شود که از قبل پین فعال باشد. */
+@Composable
+fun PinSetupScreen(
+    hasCurrentPin: Boolean,
+    busy: Boolean,
+    message: String?,
+    onSubmit: (current: CharArray?, next: CharArray) -> Unit,
+    onBack: () -> Unit,
+) {
+    val c = Solina.colors
+    val str = Solina.strings
+    var current by remember { mutableStateOf("") }
+    var next by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    val digitsOk = next.length in 4..6 && next.all { it.isDigit() }
+    val ok = digitsOk && next == confirm && (!hasCurrentPin || current.length in 4..6)
+    Page {
+        Heading(str.pinSetupTitle, str.pinSetupHint)
+        if (hasCurrentPin) {
+            SecretField(str.pinCurrent, current, { current = it.filter { ch -> ch.isDigit() }.take(6) }, keyboardType = KeyboardType.NumberPassword)
+        }
+        SecretField(str.pinNew, next, { next = it.filter { ch -> ch.isDigit() }.take(6) }, keyboardType = KeyboardType.NumberPassword)
+        SecretField(str.pinConfirm, confirm, { confirm = it.filter { ch -> ch.isDigit() }.take(6) }, keyboardType = KeyboardType.NumberPassword)
+        if (next.isNotEmpty() && !digitsOk) {
+            Text(str.pinInvalid, color = c.secondary, fontSize = 13.sp)
+        } else if (confirm.isNotEmpty() && next != confirm) {
+            Text(str.pinMismatch, color = c.secondary, fontSize = 13.sp)
+        }
+        if (message != null) Notice(message, error = true)
+        PrimaryButton(if (busy) "در حال بررسی…" else str.save, enabled = ok && !busy) {
+            onSubmit(if (hasCurrentPin) current.toCharArray() else null, next.toCharArray())
+            current = ""
+            next = ""
+            confirm = ""
+        }
+        TextLink("انصراف و بازگشت", onBack)
     }
 }
 

@@ -62,6 +62,7 @@ import app.solina.passwordmanager.core.crypto.InvalidRecoveryPhraseException
 import app.solina.passwordmanager.core.crypto.VaultCrypto
 import app.solina.passwordmanager.core.crypto.VaultHeader
 import app.solina.passwordmanager.core.security.KdfCalibrator
+import app.solina.passwordmanager.core.security.PinResult
 import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.backup.BackupFormatException
 import app.solina.passwordmanager.core.backup.BackupHeaderInfo
@@ -377,6 +378,16 @@ internal fun messageFor(result: UnlockResult): String? = when (result) {
     UnlockResult.InvalidPhrase -> "عبارت بازیابی معتبر نیست. تعداد کلمات و املای آن‌ها را بررسی کنید."
     UnlockResult.Corrupt -> "فایل خزانه خراب یا دست‌کاری شده است."
     is UnlockResult.Wait -> "به‌خاطر تلاش‌های ناموفق، ${waitText(result.millis)} صبر کنید و دوباره امتحان کنید."
+}
+
+internal fun messageForPin(result: PinResult): String? = when (result) {
+    is PinResult.Success -> null
+    is PinResult.Wrong -> "پین نادرست است؛ ${result.remaining.fa()} تلاش مانده است." +
+        if (result.waitMillis > 0) " ${waitText(result.waitMillis)} صبر کنید." else ""
+    PinResult.Wiped -> "پین پس از تلاش‌های ناموفق غیرفعال شد؛ با رمز اصلی باز کنید."
+    is PinResult.Wait -> "به‌خاطر تلاش‌های ناموفق، ${waitText(result.millis)} صبر کنید و دوباره امتحان کنید."
+    PinResult.NoPin -> "پینی تنظیم نشده است."
+    PinResult.Error -> "باز کردن با پین ممکن نشد."
 }
 
 @Composable
@@ -856,6 +867,17 @@ private fun Root(
                     },
                     onBiometric = { auth.unlockWithBiometric(activity) { ok -> if (!ok) message = "با اثر انگشت باز نشد. از رمز اصلی استفاده کنید." } },
                     onForgot = { message = null; mode = UnlockMode.Recovery },
+                    pinReady = auth.hasPin(),
+                    onPin = { pin ->
+                        busy = true
+                        message = null
+                        scope.launch {
+                            val result = auth.unlockWithPin(pin)
+                            pin.fill('\u0000')
+                            busy = false
+                            message = messageForPin(result)
+                        }
+                    },
                 )
             }
 
@@ -926,6 +948,7 @@ private fun MainApp(
     val clipboardClear by container.securityPrefs.clipboardClear.collectAsState()
     val themeMode by container.securityPrefs.themeMode.collectAsState()
     val language by container.securityPrefs.language.collectAsState()
+    val pinEnabled by container.pinUnlock.pinEnabled.collectAsState()
     var editing by remember { mutableStateOf(false) }
     var generator by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
@@ -939,6 +962,9 @@ private fun MainApp(
     var showChangePassword by remember { mutableStateOf(false) }
     var changePwBusy by remember { mutableStateOf(false) }
     var changePwMessage by remember { mutableStateOf<String?>(null) }
+    var showPinSetup by remember { mutableStateOf(false) }
+    var pinSetupBusy by remember { mutableStateOf(false) }
+    var pinSetupMessage by remember { mutableStateOf<String?>(null) }
 
     val syncStatus by container.sync.status.collectAsState()
     val localRev by repo.localChanges.collectAsState()
@@ -1232,10 +1258,11 @@ private fun MainApp(
     }
 
     val inSub = generator || editing || detailId != null || scanning || dataStep != null || showTrash ||
-        showExternalAccounts || showWebDavConnect || showChangePassword
+        showExternalAccounts || showWebDavConnect || showChangePassword || showPinSetup
 
     BackHandler(enabled = inSub) {
         when {
+            showPinSetup -> { showPinSetup = false; pinSetupMessage = null }
             showChangePassword -> { showChangePassword = false; changePwMessage = null }
             showWebDavConnect -> { showWebDavConnect = false; webDavMessage = null }
             showExternalAccounts -> { showExternalAccounts = false; oauthMessage = null }
@@ -1308,6 +1335,32 @@ private fun MainApp(
                             }
                         },
                         onBack = { showChangePassword = false; changePwMessage = null },
+                    )
+                    showPinSetup -> PinSetupScreen(
+                        hasCurrentPin = auth.hasPin(),
+                        busy = pinSetupBusy,
+                        message = pinSetupMessage,
+                        onSubmit = { current, next ->
+                            pinSetupBusy = true
+                            pinSetupMessage = null
+                            scope.launch {
+                                val ok = withContext(Dispatchers.Default) {
+                                    val currentOk = current?.let { auth.verifyPin(it) } ?: true
+                                    current?.fill('\u0000')
+                                    if (!currentOk) return@withContext false
+                                    auth.setupPin(next)
+                                }
+                                next.fill('\u0000')
+                                pinSetupBusy = false
+                                if (ok) {
+                                    showPinSetup = false
+                                    toast = "پین فعال شد"
+                                } else {
+                                    pinSetupMessage = if (current != null) "پین فعلی درست نیست." else "تعیین پین ممکن نشد."
+                                }
+                            }
+                        },
+                        onBack = { showPinSetup = false; pinSetupMessage = null },
                     )
                     showWebDavConnect -> WebDavSetupScreen(
                         isJoin = false,
@@ -1624,6 +1677,9 @@ private fun MainApp(
                             },
                             onSyncDisconnect = { container.sync.disconnect(); toast = "اتصال قطع شد" },
                             onSetSchedule = { container.sync.setSchedule(it) },
+                            pinEnabled = pinEnabled,
+                            onSetupPin = { pinSetupMessage = null; showPinSetup = true },
+                            onDisablePin = { auth.disablePin(); toast = "پین غیرفعال شد" },
                             autoLock = autoLock,
                             onSetAutoLock = { container.securityPrefs.setAutoLock(it) },
                             clipboardClear = clipboardClear,

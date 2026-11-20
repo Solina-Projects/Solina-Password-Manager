@@ -21,6 +21,7 @@ import app.solina.passwordmanager.AuthController
 import app.solina.passwordmanager.SolinaApplication
 import app.solina.passwordmanager.UnlockResult
 import app.solina.passwordmanager.messageFor
+import app.solina.passwordmanager.messageForPin
 import app.solina.passwordmanager.ui.screens.VaultUnlockScreen
 import app.solina.passwordmanager.ui.theme.SolinaTheme
 import kotlinx.coroutines.launch
@@ -74,6 +75,21 @@ class AutofillAuthActivity : FragmentActivity() {
                         }
                     },
                     onForgot = { message = "برای بازیابی با کلمات امنیتی، خود برنامهٔ Solina را باز کنید." },
+                    pinReady = auth.hasPin(),
+                    onPin = { pin ->
+                        busy = true
+                        message = null
+                        scope.launch {
+                            val result = auth.unlockWithPin(pin)
+                            pin.fill('\u0000')
+                            busy = false
+                            if (result is app.solina.passwordmanager.core.security.PinResult.Success) {
+                                finishWithResult(req)
+                            } else {
+                                message = messageForPin(result)
+                            }
+                        }
+                    },
                 )
             }
         }

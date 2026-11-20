@@ -1412,6 +1412,9 @@ fun SettingsScreen(
     biometricAvailable: Boolean,
     biometricEnabled: Boolean,
     onToggleBiometric: (Boolean) -> Unit,
+    pinEnabled: Boolean = false,
+    onSetupPin: () -> Unit = {},
+    onDisablePin: () -> Unit = {},
     autofillEnabled: Boolean,
     onEnableAutofill: () -> Unit,
     notifSupported: Boolean,
@@ -1457,6 +1460,21 @@ fun SettingsScreen(
                         checked = biometricEnabled,
                         onCheckedChange = onToggleBiometric,
                         enabled = biometricAvailable || biometricEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = c.onPrimary, checkedTrackColor = c.primary,
+                            uncheckedThumbColor = c.outline, uncheckedTrackColor = c.container, uncheckedBorderColor = c.outline,
+                        ),
+                    )
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(str.pinTitle, color = c.text, fontSize = 15.sp)
+                        Text(str.pinSub, color = c.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                    }
+                    Switch(
+                        checked = pinEnabled,
+                        onCheckedChange = { if (it) onSetupPin() else onDisablePin() },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = c.onPrimary, checkedTrackColor = c.primary,
                             uncheckedThumbColor = c.outline, uncheckedTrackColor = c.container, uncheckedBorderColor = c.outline,

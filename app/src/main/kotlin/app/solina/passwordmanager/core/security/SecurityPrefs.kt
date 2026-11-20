@@ -9,7 +9,8 @@ enum class AutoLockOption(val millis: Long, val labelFa: String, val labelEn: St
     Immediate(0L, "فوری پس از خروج", "Immediately on leave"),
     ThirtySeconds(30_000L, "۳۰ ثانیه", "30 seconds"),
     OneMinute(60_000L, "۱ دقیقه", "1 minute"),
-    FiveMinutes(300_000L, "۵ دقیقه", "5 minutes");
+    FiveMinutes(300_000L, "۵ دقیقه", "5 minutes"),
+    FifteenMinutes(900_000L, "۱۵ دقیقه", "15 minutes");
 
     val label: String get() = labelFa
 

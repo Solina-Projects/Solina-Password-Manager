@@ -1,10 +1,23 @@
 package app.solina.passwordmanager.core.security
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AutoLockTest {
+    @Test fun fifteenMinutesOption() {
+        assertEquals(AutoLockOption.FifteenMinutes, AutoLockOption.parse("FifteenMinutes"))
+        assertEquals(900_000L, AutoLockOption.FifteenMinutes.millis)
+        assertEquals(900_000L, AutoLockOption.parse("FifteenMinutes").millis)
+    }
+
+    @Test fun immediateMeansLockOnBackground() {
+        // «فوری پس از خروج» همان گزینهٔ «قفل هنگام رفتن به پس‌زمینه» است (مهلت صفر).
+        assertEquals(0L, AutoLockOption.Immediate.millis)
+        assertEquals(AutoLockOption.Immediate, AutoLockOption.parse("Immediate"))
+    }
+
     @Test fun enforceTimeoutLocksOnlyAfterIdleDeadline() {
         var now = 0L
         val s = VaultSession { now }
