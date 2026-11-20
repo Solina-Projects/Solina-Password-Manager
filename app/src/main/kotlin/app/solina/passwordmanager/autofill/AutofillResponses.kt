@@ -69,6 +69,10 @@ object AutofillResponses {
     /**
      * پاسخ پر کردن خودکار (با پشتیبانی از Inline Autofill در اندروید ۱۱+ و Dropdown در همهٔ نسخه‌ها)
      * به همراه SaveInfo برای ذخیرهٔ ورودی‌های جدید.
+     *
+     * @param preselected فقط برای یادآوری چندمرحله‌ای: وقتی داده شود، به‌جای تطابق معمولی
+     *   همین ورودی‌ها پیشنهاد می‌شوند. فراخواننده باید مبدأ را خودش بررسی کرده باشد
+     *   (همان دامنه یا همان بسته)؛ هرگز ورودی دلخواه اینجا ندهید.
      */
     fun datasets(
         ctx: Context,
@@ -76,8 +80,9 @@ object AutofillResponses {
         p: ParsedRequest,
         includeSaveInfo: Boolean = true,
         inlineRequest: InlineSuggestionsRequest? = null,
+        preselected: List<VaultItem>? = null,
     ): FillResponse? {
-        val matches = AutofillMatcher.match(items, p.webHost, p.packageName)
+        val matches = preselected ?: AutofillMatcher.match(items, p.webHost, p.packageName)
         val saveInfo = if (includeSaveInfo) buildSaveInfo(p) else null
         if (matches.isEmpty() && saveInfo == null) return null
 

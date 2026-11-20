@@ -91,4 +91,44 @@ class AutofillLogicTest {
         assertFalse(TrustedBrowsers.isTrusted("com.evil.phishing"))
         assertFalse(TrustedBrowsers.isTrusted(null))
     }
+
+    @Test fun multiStepRemembersUsernameStepForPasswordOnlyStep() {
+        val memory = AutofillSessionMemory()
+        val github = item("1", "GitHub", "github.com")
+        memory.remember(github, "github.com", "com.android.chrome")
+        // همان دامنه: رمز پیشنهاد می‌شود.
+        assertEquals(github, memory.recallForPasswordOnly("github.com", "com.android.chrome"))
+        // یک‌بارمصرف است.
+        assertNull(memory.recallForPasswordOnly("github.com", "com.android.chrome"))
+    }
+
+    @Test fun multiStepRecallsByPackageWhenHostIsMissing() {
+        val memory = AutofillSessionMemory()
+        val bank = item("2", "Bank", "bank.ir")
+        memory.remember(bank, null, "com.bank.app")
+        assertEquals(bank, memory.recallForPasswordOnly(null, "com.bank.app"))
+    }
+
+    @Test fun multiStepNeverRecallsForDifferentOrigin() {
+        val memory = AutofillSessionMemory()
+        val github = item("1", "GitHub", "github.com")
+        memory.remember(github, "github.com", "com.android.chrome")
+        // دامنهٔ دیگر: هیچی برنمی‌گردد و حافظه سر جایش می‌ماند.
+        assertNull(memory.recallForPasswordOnly("evil.com", "com.android.chrome"))
+        assertNull(memory.recallForPasswordOnly(null, "com.other.app"))
+        assertEquals(github, memory.recallForPasswordOnly("github.com", null))
+    }
+
+    @Test fun multiStepClearAndOverwrite() {
+        val memory = AutofillSessionMemory()
+        val a = item("1", "A", "a.com")
+        val b = item("2", "B", "b.com")
+        memory.remember(a, "a.com", null)
+        memory.remember(b, "b.com", null)
+        assertNull(memory.recallForPasswordOnly("a.com", null))
+        assertEquals(b, memory.recallForPasswordOnly("b.com", null))
+        memory.remember(a, "a.com", null)
+        memory.clear()
+        assertNull(memory.recallForPasswordOnly("a.com", null))
+    }
 }

@@ -22,6 +22,9 @@ import kotlinx.coroutines.launch
 class SolinaAutofillService : AutofillService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** حافظهٔ چندمرحله‌ای؛ فقط در حافظهٔ همین سرویس، با پایان نشست پاک می‌شود. */
+    private val multiStepMemory = AutofillSessionMemory()
+
     override fun onFillRequest(request: FillRequest, cancellationSignal: CancellationSignal, callback: FillCallback) {
         val container = (application as SolinaApplication).container
         val structure = request.fillContexts.lastOrNull()?.structure
@@ -32,11 +35,32 @@ class SolinaAutofillService : AutofillService() {
         }
         container.session.enforceTimeout(container.securityPrefs.autoLockMillis())
         val response = if (container.session.unlocked.value) {
-            AutofillResponses.datasets(this, container.repository.items.value, parsed)
+            val matches = AutofillMatcher.match(container.repository.items.value, parsed.webHost, parsed.packageName)
+            if (parsed.usernameId != null) {
+                // مرحلهٔ اول (نام کاربری): بهترین تطابق را برای مرحلهٔ رمز نگه می‌دارد.
+                matches.firstOrNull()?.let { multiStepMemory.remember(it, parsed.webHost, parsed.packageName) }
+                AutofillResponses.datasets(this, container.repository.items.value, parsed)
+            } else if (parsed.passwordId != null && matches.isEmpty()) {
+                // مرحلهٔ دوم (فقط رمز): تطابق معمولی چیزی نداد؛ ورودیِ به‌یادماندهٔ همان مبدأ را بده.
+                val remembered = multiStepMemory.recallForPasswordOnly(parsed.webHost, parsed.packageName)
+                if (remembered != null) {
+                    AutofillResponses.datasets(this, container.repository.items.value, parsed, preselected = listOf(remembered))
+                } else {
+                    AutofillResponses.datasets(this, container.repository.items.value, parsed)
+                }
+            } else {
+                AutofillResponses.datasets(this, container.repository.items.value, parsed)
+            }
         } else {
+            multiStepMemory.clear()
             AutofillResponses.locked(this, parsed)
         }
         callback.onSuccess(response)
+    }
+
+    override fun onDestroy() {
+        multiStepMemory.clear()
+        super.onDestroy()
     }
 
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {

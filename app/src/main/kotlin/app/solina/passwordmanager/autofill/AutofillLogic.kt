@@ -139,3 +139,49 @@ object AutofillMatcher {
 
     private val GENERIC = setOf("android", "mobile", "app", "apps", "main", "client", "google", "com", "org", "net")
 }
+
+/**
+ * حافظهٔ چندمرحله‌ای Autofill: صفحهٔ فقط-نام‌کاربری و بعد صفحهٔ فقط-رمز.
+ *
+ * سرویس Autofill نمی‌داند کاربر از میان چند تطابق کدام را برداشته است؛ پس بهترین
+ * (اولین) تطابق مرحلهٔ نام کاربری را نگه می‌دارد. وقتی درخواست فقط-رمز رسید و
+ * تطابق معمولی چیزی نداد، همان ورودی پیشنهاد می‌شود — فقط اگر مبدأ یکی باشد:
+ * همان دامنهٔ وب یا همان بستهٔ برنامه. این شرط جلوی افشای رمز به مبدأ دیگر را
+ * می‌گیرد (مثلاً صفحهٔ رمز یک سایت/برنامهٔ دیگر که اتفاقی بعد از مرحلهٔ اول آمده).
+ *
+ * فقط در حافظهٔ نمونهٔ سرویس می‌ماند (هرگز روی دیسک نمی‌رود)، یک‌بارمصرف است
+ * (بعد از یک recall موفق پاک می‌شود) و با قفل‌شدن خزانه یا نابودی سرویس پاک می‌شود.
+ * محدودیت صادقانه: اگر مرحلهٔ اول چند تطابق داشت، ورودیِ به‌یادمانده همان اولین
+ * تطابق است، نه لزوماً انتخاب کاربر.
+ */
+class AutofillSessionMemory {
+    private var remembered: VaultItem? = null
+    private var rememberedHost: String? = null
+    private var rememberedPackage: String? = null
+
+    /** بعد از یک درخواست که فیلد نام کاربری داشت و تطابقی پیدا شد. */
+    fun remember(item: VaultItem, webHost: String?, packageName: String?) {
+        remembered = item
+        rememberedHost = webHost
+        rememberedPackage = packageName
+    }
+
+    /**
+     * فقط برای درخواست فقط-رمز؛ فقط وقتی همان دامنه یا همان بسته باشد.
+     * موفق که شد، حافظه پاک می‌شود (یک‌بارمصرف).
+     */
+    fun recallForPasswordOnly(webHost: String?, packageName: String?): VaultItem? {
+        val item = remembered ?: return null
+        val sameHost = webHost != null && webHost == rememberedHost
+        val samePackage = packageName != null && packageName == rememberedPackage
+        if (!sameHost && !samePackage) return null
+        clear()
+        return item
+    }
+
+    fun clear() {
+        remembered = null
+        rememberedHost = null
+        rememberedPackage = null
+    }
+}
