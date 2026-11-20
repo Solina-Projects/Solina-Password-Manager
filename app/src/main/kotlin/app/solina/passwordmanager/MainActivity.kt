@@ -459,6 +459,19 @@ private fun Root(
     }
 
     var hasVault by remember { mutableStateOf(auth.hasVault()) }
+    // آنبوردینگ اولین اجرا: فقط وقتی خزانه‌ای نیست و هنوز دیده نشده است.
+    var showFirstRun by remember { mutableStateOf(!auth.hasVault() && !container.securityPrefs.onboardingDone.value) }
+    val themeMode by container.securityPrefs.themeMode.collectAsState()
+    val language by container.securityPrefs.language.collectAsState()
+    val listDensity by container.securityPrefs.listDensity.collectAsState()
+    val autoLock by container.securityPrefs.autoLock.collectAsState()
+    val notifSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    var notifGranted by remember {
+        mutableStateOf(
+            !notifSupported ||
+                ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
     var stage by remember { mutableStateOf(Stage.Welcome) }
     var created by remember { mutableStateOf<CreatedVault?>(null) }
     var offerBiometric by remember { mutableStateOf(false) }
@@ -553,6 +566,36 @@ private fun Root(
     }
 
     when {
+        showFirstRun -> FirstRunOnboarding(
+            themeMode = themeMode,
+            onSetThemeMode = { container.securityPrefs.setThemeMode(it) },
+            density = listDensity,
+            onSetDensity = { container.securityPrefs.setListDensity(it) },
+            autoLock = autoLock,
+            onSetAutoLock = { container.securityPrefs.setAutoLock(it) },
+            language = language,
+            onSetLanguage = { container.securityPrefs.setLanguage(it) },
+            notifSupported = notifSupported,
+            notifGranted = notifGranted,
+            onRequestNotifPermission = {
+                activity.requestPermissionOnce(
+                    Manifest.permission.POST_NOTIFICATIONS,
+                    MainActivity.RC_NOTIFICATION,
+                    handler = { notifGranted = it },
+                )
+            },
+            onRequestCameraPermission = {
+                activity.requestPermissionOnce(Manifest.permission.CAMERA, MainActivity.RC_CAMERA, handler = {})
+            },
+            onEnableAutofill = {
+                try {
+                    activity.startActivity(Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE, Uri.parse("package:${activity.packageName}")))
+                } catch (e: Exception) {
+                    // این دستگاه تنظیم Autofill را پشتیبانی نمی‌کند.
+                }
+            },
+            onDone = { container.securityPrefs.setOnboardingDone(true); showFirstRun = false },
+        )
         offerBiometric && unlocked -> BiometricOfferScreen(
             onEnable = { auth.enableBiometric(activity) { offerBiometric = false } },
             onSkip = { offerBiometric = false },
