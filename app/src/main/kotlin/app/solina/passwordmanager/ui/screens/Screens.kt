@@ -1594,6 +1594,8 @@ fun SettingsScreen(
     onEnableAutofill: () -> Unit,
     autosaveEnabled: Boolean = true,
     onSetAutosaveEnabled: (Boolean) -> Unit = {},
+    screenshotsAllowed: Boolean = false,
+    onSetScreenshotsAllowed: (Boolean) -> Unit = {},
     notifSupported: Boolean,
     notifGranted: Boolean,
     onRequestNotifPermission: () -> Unit,
@@ -1684,6 +1686,21 @@ fun SettingsScreen(
                     Switch(
                         checked = autosaveEnabled,
                         onCheckedChange = onSetAutosaveEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = c.onPrimary, checkedTrackColor = c.primary,
+                            uncheckedThumbColor = c.outline, uncheckedTrackColor = c.container, uncheckedBorderColor = c.outline,
+                        ),
+                    )
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("اسکرین‌شات", color = c.text, fontSize = 15.sp)
+                        Text("وقتی خاموش است، از صفحه عکس و فیلم گرفته نمی‌شود و در پیش‌نمایش اپ‌های اخیر هم محتوا دیده نمی‌شود.", color = c.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                    }
+                    Switch(
+                        checked = screenshotsAllowed,
+                        onCheckedChange = onSetScreenshotsAllowed,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = c.onPrimary, checkedTrackColor = c.primary,
                             uncheckedThumbColor = c.outline, uncheckedTrackColor = c.container, uncheckedBorderColor = c.outline,
