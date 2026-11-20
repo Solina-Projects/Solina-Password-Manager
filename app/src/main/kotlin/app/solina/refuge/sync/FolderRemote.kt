@@ -33,11 +33,11 @@ class FolderRemote(private val context: Context, private val tree: Uri) : SyncRe
 
     fun displayName(): String = root()?.name ?: "پوشه"
 
-    /** بررسی وجود فایل‌های بکاپ ‎.slnb‎ درون پوشهٔ انتخاب‌شده برای راهنمایی دقیق کاربر. */
+    /** بررسی وجود فایل‌های بکاپ ‎.rfgb‎ درون پوشهٔ انتخاب‌شده برای راهنمایی دقیق کاربر. */
     suspend fun findBackupFiles(): List<String> = withContext(Dispatchers.IO) {
         val r = root() ?: return@withContext emptyList()
         r.listFiles()
-            .filter { it.isFile && it.name?.endsWith(".slnb", ignoreCase = true) == true }
+            .filter { it.isFile && it.name?.endsWith(".rfgb", ignoreCase = true) == true }
             .mapNotNull { it.name }
     }
 

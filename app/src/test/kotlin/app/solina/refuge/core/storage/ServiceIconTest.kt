@@ -20,7 +20,7 @@ class ServiceIconTest {
     }
 
     @Test fun knownServicesResolveFromWebsite() {
-        val g = ServiceIcon.resolve("https://github.com/solina", "My repo")
+        val g = ServiceIcon.resolve("https://github.com/refuge", "My repo")
         assertNotNull(g)
         assertEquals("G", g!!.letter)
         val s = ServiceIcon.resolve("https://steamcommunity.com/id/x", "Steam")

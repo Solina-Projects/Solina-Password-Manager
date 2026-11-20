@@ -155,13 +155,13 @@ fun DataScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("بکاپ رمزشده", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            "همهٔ ورودی‌ها (${itemCount.fa()} مورد) در یک فایل .slnb با رمز جداگانه‌ای که خودتان انتخاب می‌کنید رمز می‌شود. " +
+                            "همهٔ ورودی‌ها (${itemCount.fa()} مورد) در یک فایل .rfgb با رمز جداگانه‌ای که خودتان انتخاب می‌کنید رمز می‌شود. " +
                                 "این رمز را فراموش کنید، بکاپ قابل‌بازیابی نیست. فایل را جایی امن (فضای ابری یا حافظهٔ جدا) نگه دارید.",
                             color = c.muted, fontSize = 14.sp, lineHeight = 24.sp,
                         )
                         BigButton("ساخت بکاپ کامل خزانه", enabled = itemCount > 0, onClick = onStartExport)
                         BigButton("بکاپ مستقل Authenticator (${authCount.fa()} حساب)", filled = false, enabled = authCount > 0, onClick = onStartAuthExport)
-                        BigButton("بازیابی از فایل بکاپ Refuge (.slnb)", filled = false, onClick = onPickRestore)
+                        BigButton("بازیابی از فایل بکاپ Refuge (.rfgb)", filled = false, onClick = onPickRestore)
                     }
                 }
                 Card {

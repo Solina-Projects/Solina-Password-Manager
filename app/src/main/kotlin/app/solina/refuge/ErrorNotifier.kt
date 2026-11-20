@@ -19,7 +19,7 @@ import androidx.core.content.ContextCompat
  * حداکثر هر ۵ دقیقه یک نوتیف فرستاده می‌شود؛ نوتیف جدید جای قبلی را می‌گیرد.
  */
 object ErrorNotifier {
-    private const val CHANNEL_ID = "solina-errors"
+    private const val CHANNEL_ID = "refuge-errors"
     private const val NOTIFICATION_ID = 1001
     private const val MIN_INTERVAL_MILLIS = 5 * 60 * 1000L
 

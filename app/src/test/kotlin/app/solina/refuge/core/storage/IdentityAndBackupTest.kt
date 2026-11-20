@@ -110,7 +110,7 @@ class IdentityAndBackupTest {
             )
         }
         assertThrows(BackupFormatException::class.java) {
-            Backup.inspect("not-a-solina-backup".toByteArray())
+            Backup.inspect("not-a-refuge-backup".toByteArray())
         }
     }
 

@@ -15,12 +15,12 @@ import javax.crypto.spec.GCMParameterSpec
  * برای نگهداری امن تنظیمات حساس جانبی (اعتبارنامهٔ WebDAV و فرادادهٔ حساب‌های خارجی).
  * هیچ داده‌ای به‌صورت متن خام در SharedPreferences ذخیره نمی‌شود.
  */
-class KeystoreSecretStore(context: Context, prefName: String = "solina_secure_store") {
+class KeystoreSecretStore(context: Context, prefName: String = "refuge_secure_store") {
     private val prefs = context.applicationContext.getSharedPreferences(prefName, Context.MODE_PRIVATE)
 
     companion object {
         private const val PROVIDER = "AndroidKeyStore"
-        private const val ALIAS = "solina_config_aes_gcm_v1"
+        private const val ALIAS = "refuge_config_aes_gcm_v1"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val IV_SIZE = 12
         private const val TAG_BITS = 128

@@ -254,7 +254,7 @@ fun WelcomeScreen(
                     .background(c.surface),
             ) {
                 WelcomeOptionRow(
-                    title = "بازیابی از فایل بکاپ (.slnb)",
+                    title = "بازیابی از فایل بکاپ (.rfgb)",
                     subtitle = "انتخاب مستقیم فایل بکاپ خزانه یا بکاپ Authenticator",
                     highlight = true,
                     onClick = onRestoreBackupFile,

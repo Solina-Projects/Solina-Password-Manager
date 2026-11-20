@@ -35,11 +35,11 @@ class WebDavProtocolTest {
             <d:multistatus xmlns:d="DAV:">
               <d:response><d:href>/dav/Refuge-Sync/</d:href></d:response>
               <d:response><d:href>/dav/Refuge-Sync/vault.hdr</d:href></d:response>
-              <d:response><D:href>https://cloud.example.com/dav/Refuge-Sync/item-1-r1.slns</D:href></d:response>
+              <d:response><D:href>https://cloud.example.com/dav/Refuge-Sync/item-1-r1.rfgs</D:href></d:response>
               <d:response><d:href>/dav/Refuge-Sync/..%2Fescape</d:href></d:response>
             </d:multistatus>
         """.trimIndent()
         val files = WebDavProtocol.parsePropfindFileNames(xml, "/dav/Refuge-Sync/")
-        assertEquals(listOf("vault.hdr", "item-1-r1.slns"), files)
+        assertEquals(listOf("vault.hdr", "item-1-r1.rfgs"), files)
     }
 }

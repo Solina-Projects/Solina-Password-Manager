@@ -134,13 +134,13 @@ import kotlinx.coroutines.withContext
 class MainActivity : FragmentActivity() {
     companion object {
         /** وقتی نوتیف خطا زده شد، با این extra باز می‌شود تا مستقیم گزارش عیب‌یابی نشان داده شود. */
-        const val EXTRA_SHOW_DIAGNOSTICS = "solina_show_diagnostics"
+        const val EXTRA_SHOW_DIAGNOSTICS = "refuge_show_diagnostics"
 
         /** باز کردن مستقیم تب «یادداشت و کارها» (از اعلان یادآوری یا ویجت). */
-        const val EXTRA_OPEN_NOTES = "solina_open_notes"
+        const val EXTRA_OPEN_NOTES = "refuge_open_notes"
 
         /** باز کردن مستقیم ویرایشگر یادداشت سریع جدید (از ویجت خانه). */
-        const val EXTRA_QUICK_NOTE = "solina_quick_note"
+        const val EXTRA_QUICK_NOTE = "refuge_quick_note"
 
         const val RC_JOIN_FOLDER = 1001
         const val RC_CONNECT_FOLDER = 1002
@@ -172,7 +172,7 @@ class MainActivity : FragmentActivity() {
 
     private fun captureOAuthIntent(intent: Intent?) {
         val data = intent?.data ?: return
-        if (data.scheme.equals("solina-auth", ignoreCase = true) && data.host.equals("oauth", ignoreCase = true)) {
+        if (data.scheme.equals("refuge-auth", ignoreCase = true) && data.host.equals("oauth", ignoreCase = true)) {
             _pendingOAuthCallback.value = data
         }
     }
@@ -328,7 +328,7 @@ private fun DiagScreenHost(activity: FragmentActivity, onBack: () -> Unit) {
     DiagnosticsScreen(
         text = text,
         onBack = onBack,
-        onCopy = { copySensitive(activity, "solina-diagnostics", text, 120_000L) },
+        onCopy = { copySensitive(activity, "refuge-diagnostics", text, 120_000L) },
         onShare = {
             val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }
             runCatching { activity.startActivity(Intent.createChooser(send, "ارسال گزارش")) }
@@ -350,9 +350,9 @@ private fun hasFolderPicker(activity: FragmentActivity): Boolean {
     return activity.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) != null
 }
 
-// ساخت Intent انتخاب فایل برای هر پسوند (از جمله .slnb).
+// ساخت Intent انتخاب فایل برای هر پسوند (از جمله .rfgb).
 // افزودن EXTRA_MIME_TYPES با wildcard روی برخی رام‌های اندروید (MIUI/OneUI/EMUI)
-// باعث غیرفعال شدن فایل‌های با پسوند ناشناخته مانند .slnb می‌شود؛ بنابراین فقط setType تنظیم می‌شود.
+// باعث غیرفعال شدن فایل‌های با پسوند ناشناخته مانند .rfgb می‌شود؛ بنابراین فقط setType تنظیم می‌شود.
 @Suppress("DEPRECATION")
 private fun buildOpenAnyFileIntent(activity: FragmentActivity): Intent {
     val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -525,7 +525,7 @@ private fun Root(
                                 welcomeRestoreMsg = null
                             }
                         } catch (e: BackupFormatException) {
-                            joinMessage = e.message ?: "این فایل یک بکاپ معتبر Refuge (.slnb) نیست."
+                            joinMessage = e.message ?: "این فایل یک بکاپ معتبر Refuge (.rfgb) نیست."
                         } catch (e: Exception) {
                             DiagLog.logError("RESTORE", e, "launchWelcomeRestoreFile")
                             joinMessage = "خواندن فایل بکاپ ناموفق بود."
@@ -557,8 +557,8 @@ private fun Root(
                             message = null
                             stagedJoin = r.staged
                         }
-                        is StageJoinResult.BackupFilesFound -> joinMessage = "در این پوشه فایل بکاپ (.slnb) وجود دارد، نه پوشهٔ همگام‌سازی Refuge-Sync. برای بازیابی آن، گزینهٔ «بازیابی از فایل بکاپ (.slnb)» را بزنید و مستقیم فایل را انتخاب کنید."
-                        StageJoinResult.NoVaultInFolder -> joinMessage = "در این پوشه خزانه‌ای پیدا نشد. پوشهٔ همگام‌سازی «Refuge-Sync» (یا پوشهٔ والد آن) را انتخاب کنید، یا برای فایل‌های .slnb گزینهٔ «بازیابی از فایل بکاپ (.slnb)» را بزنید."
+                        is StageJoinResult.BackupFilesFound -> joinMessage = "در این پوشه فایل بکاپ (.rfgb) وجود دارد، نه پوشهٔ همگام‌سازی Refuge-Sync. برای بازیابی آن، گزینهٔ «بازیابی از فایل بکاپ (.rfgb)» را بزنید و مستقیم فایل را انتخاب کنید."
+                        StageJoinResult.NoVaultInFolder -> joinMessage = "در این پوشه خزانه‌ای پیدا نشد. پوشهٔ همگام‌سازی «Refuge-Sync» (یا پوشهٔ والد آن) را انتخاب کنید، یا برای فایل‌های .rfgb گزینهٔ «بازیابی از فایل بکاپ (.rfgb)» را بزنید."
                         is StageJoinResult.Failed -> joinMessage = r.reason
                     }
                 }
@@ -1224,7 +1224,7 @@ private fun MainApp(
 
     suspend fun runImport(bytes: ByteArray, password: CharArray?, displayName: String? = null) {
         try {
-            // اگر کاربر به‌اشتباه فایل بکاپ ‎.slnb‎ سولینا را از بخش «ورود از برنامهٔ دیگر» انتخاب کرد، مستقیم به بازیابی بکاپ هدایت شود
+            // اگر کاربر به‌اشتباه فایل بکاپ ‎.rfgb‎ سولینا را از بخش «ورود از برنامهٔ دیگر» انتخاب کرد، مستقیم به بازیابی بکاپ هدایت شود
             if (password == null && Backup.isRefugeBackup(bytes)) {
                 val info = Backup.inspect(bytes)
                 pendingRestore = bytes
@@ -1584,7 +1584,7 @@ private fun MainApp(
                                     pw.fill('\u0000')
                                     pendingExport = bytes
                                     val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
-                                    launchExportFile("solina-backup-$stamp.slnb")
+                                    launchExportFile("refuge-backup-$stamp.rfgb")
                                 } catch (e: Exception) {
                                     dataMessage = "ساخت بکاپ ناموفق بود."
                                     dataBusy = false
@@ -1604,7 +1604,7 @@ private fun MainApp(
                                     pw.fill('\u0000')
                                     pendingExport = bytes
                                     val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
-                                    launchExportFile("solina-authenticator-$stamp.slnb")
+                                    launchExportFile("refuge-authenticator-$stamp.rfgb")
                                 } catch (e: BackupFormatException) {
                                     pw.fill('\u0000')
                                     dataMessage = e.message

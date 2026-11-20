@@ -107,7 +107,7 @@ abstract class RefugeDatabase : RoomDatabase() {
         }
 
         fun open(context: Context): RefugeDatabase =
-            Room.databaseBuilder(context.applicationContext, RefugeDatabase::class.java, "solina.db")
+            Room.databaseBuilder(context.applicationContext, RefugeDatabase::class.java, "refuge.db")
                 .addMigrations(MIGRATION_1_2)
                 .addCallback(object : Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {

@@ -14,7 +14,7 @@ object PasswordGenerator {
 
     private val COMMON_SUBSTRINGS = setOf(
         "password", "passw0rd", "qwerty", "admin", "123456", "12345678",
-        "solina", "tehran", "iran", "welcome", "iloveyou", "letmein",
+        "refuge", "tehran", "iran", "welcome", "iloveyou", "letmein",
         "dragon", "football", "monkey", "master", "secret", "login",
     )
     private val SEQUENTIAL_REGEX = Regex(

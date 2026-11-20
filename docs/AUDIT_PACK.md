@@ -19,7 +19,7 @@
 | مجوز | GPL-3.0 (فایل `LICENSE`) |
 | اندازهٔ کد | ۷۱ فایل Kotlin در یک ماژول (سبک و تک‌ماژوله، عمدی) |
 | تست | ۲۶۵ تست واحد در CI، ۰ خطا (سرشاخهٔ `10fb3ba`، ران Build شمارهٔ 44715910190) |
-| مخزن | https://github.com/Solina-Projects/Solina Solina-Refuge |
+| مخزن | https://github.com/Solina-Projects/Solina-Refuge |
 
 **ساختار محصول — سه ستون:** (۱) رمزها: ورود، کارت بانکی، هویت، یادداشت امن، فیلد سفارشی؛
 (۲) کد دومرحله‌ای: TOTP/HOTP (با QR و ایمپورت `otpauth`) + ذخیره‌سازی Passkey (فراخوانی
@@ -28,7 +28,7 @@
 به‌صورت زمانِ خالی در جدول `task_due` آشکار است تا یادآوری وقتی قفل است کار کند.
 
 **اسناد مکمل که بازبین باید اول بخواند (به ترتیب):**
-1. `docs/VAULT.md` — طراحی خزانه: سلسله‌مراتب کلید، قالب هدر `SLNV v1`، بکاپ `SLNB v1`، PIN، محدودیت‌ها
+1. `docs/VAULT.md` — طراحی خزانه: سلسله‌مراتب کلید، قالب هدر `SLNV v1`، بکاپ `RFGB v1`، PIN، محدودیت‌ها
 2. `docs/THREAT_MODEL.md` — مدل تهدید: دارایی‌ها، مهاجم‌های در دامنه و بیرون دامنه، کنترل‌ها با شاهد تست
 3. `docs/SELF_REVIEW.md` — بازبینی صادقانهٔ خود: راستی‌آزمایی فاز به فاز و ۱۰ ریسک باز
 4. `docs/MASVS.md` — خودارزیابی OWASP MASVS (خودارزیابی است، نه ممیزی)
@@ -42,7 +42,7 @@
 | مدیریت کلید | KEK، پیچش VaultKey، BIP-39 و HKDF، چرخش کلید، wipe حافظه | `core/crypto/Vault.kt`، `core/crypto/Bip39.kt` |
 | قفل | رمز اصلی + تأخیر فزاینده (ساعت یکنواخت)، PIN (KDF جدا، salt جدا، پاک‌شدن پس از ۵ تلاش)، بیومتریک و Keystore، قفل خودکار | `core/auth/`، `docs/VAULT.md` §۷ |
 | Passkey | ذخیرهٔ رکورد داخل blob رمز؛ فراخوانی زنده پشت `LIVE_ENABLED = false` است — بررسی شود که واقعاً هیچ فراخوانی زنده‌ای نمی‌شود | `core/passkey/` |
-| بکاپ و بازیابی | قالب `SLNB v1`، رمز جداگانهٔ بکاپ، بکاپ زمان‌بندی‌شده (۵ نسخه)، بازیابی BIP-39 | `core/backup/`، `docs/VAULT.md` §۸ |
+| بکاپ و بازیابی | قالب `RFGB v1`، رمز جداگانهٔ بکاپ، بکاپ زمان‌بندی‌شده (۵ نسخه)، بازیابی BIP-39 | `core/backup/`، `docs/VAULT.md` §۸ |
 | همگام‌سازی | HMAC رکوردها، مانیفست امضاشده و `epoch` ضد rollback، WebDAV با HTTPS-only و ضد Path Traversal | `core/sync/` |
 | مهاجرت داده | Room نسخهٔ ۱ ← ۲ (جدول `task_due`)، بکاپ v1 بدون تغییر خوانده می‌شود | `core/storage/RoomStore.kt` |
 | یادداشت و کارها | متن و عنوان داخل blob رمز؛ فقط `dueAt` آشکار؛ اعلان در حالت قفل فقط پیام کلی | `core/notes/`، `core/storage/ItemPayload.kt` |
@@ -137,7 +137,7 @@ app/src/main/kotlin/app/solina/refuge/
 ├── core/crypto/     Primitives.kt, Vault.kt, Bip39.kt, AttachmentCrypto.kt, MultiVaultDesign.kt
 ├── core/auth/       قفل، PIN، بیومتریک، قفل خودکار
 ├── core/storage/    RoomStore.kt, ItemPayload.kt, SecurityAnalyzer.kt, HistoryDiff
-├── core/backup/     قالب SLNB v1، بکاپ زمان‌بندی‌شده
+├── core/backup/     قالب RFGB v1، بکاپ زمان‌بندی‌شده
 ├── core/sync/       FolderRemote, WebDavRemote, HMAC + manifest
 ├── core/security/   BreachChecker (k-anonymity), CommonPasswords
 ├── core/passkey/    ذخیرهٔ رکورد (LIVE_ENABLED = false)

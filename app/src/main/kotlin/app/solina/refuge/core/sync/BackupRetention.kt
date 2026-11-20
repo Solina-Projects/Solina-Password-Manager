@@ -5,18 +5,18 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
- * نام‌گذاری و نگهداری نسخه‌های بکاپ خودکار (اسنپ‌شات‌های `solina-backup-*.slnb`).
+ * نام‌گذاری و نگهداری نسخه‌های بکاپ خودکار (اسنپ‌شات‌های `refuge-backup-*.rfgb`).
  * خالص و قابل تست (بدون اندروید). نام با زمان UTC ساخته می‌شود تا مرتب‌سازی
  * الفبایی نام‌ها برابر ترتیب زمانی باشد؛ پس «۵ نسخهٔ تازه» یعنی ۵ نام آخر.
  */
 object BackupRetention {
     const val KEEP_VERSIONS = 5
-    const val PREFIX = "solina-backup-"
-    const val SUFFIX = ".slnb"
+    const val PREFIX = "refuge-backup-"
+    const val SUFFIX = ".rfgb"
 
     private val FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC)
 
-    /** نام نسخهٔ جدید، مثل `solina-backup-20261120-123045.slnb`. */
+    /** نام نسخهٔ جدید، مثل `refuge-backup-20261120-123045.rfgb`. */
     fun snapshotName(now: Long): String = PREFIX + FORMATTER.format(Instant.ofEpochMilli(now)) + SUFFIX
 
     fun isSnapshotName(name: String): Boolean =

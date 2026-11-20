@@ -10,7 +10,7 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * رکورد همگام‌سازی یک ورودی (فایل `.slni`). محتوای حساس همان blob رمزشدهٔ ورودی است؛ فیلدهای آشکار
+ * رکورد همگام‌سازی یک ورودی (فایل `.rfgi`). محتوای حساس همان blob رمزشدهٔ ورودی است؛ فیلدهای آشکار
  * (شناسه، ویرایش، زمان‌ها) با HMAC مبتنی بر کلید خزانه احراز هویت می‌شوند تا کسی که فقط به پوشه دسترسی دارد
  * نتواند رکورد (مثلاً حذف) جعل کند.
  *
@@ -20,7 +20,7 @@ object SyncRecord {
     private val MAGIC = "SLNI".toByteArray(Charsets.US_ASCII)
     private const val VERSION: Byte = 1
     private const val MAX_BLOB = 4 * 1024 * 1024
-    private val MAC_INFO = "solina/sync/mac/v1".toByteArray(Charsets.US_ASCII)
+    private val MAC_INFO = "refuge/sync/mac/v1".toByteArray(Charsets.US_ASCII)
     private val ID_REGEX = Regex("[A-Za-z0-9_-]{1,64}")
 
     fun isValidId(id: String) = ID_REGEX.matches(id)
@@ -78,15 +78,15 @@ object SyncRecord {
 
     fun contentHash(recordBytes: ByteArray): String = hex(MessageDigest.getInstance("SHA-256").digest(recordBytes))
 
-    /** نام فایل: `i-<id>-<rev>-<hash8>.slni` */
-    fun fileName(id: String, rev: Long, recordBytes: ByteArray) = "i-$id-$rev-${contentHash(recordBytes).take(8)}.slni"
+    /** نام فایل: `i-<id>-<rev>-<hash8>.rfgi` */
+    fun fileName(id: String, rev: Long, recordBytes: ByteArray) = "i-$id-$rev-${contentHash(recordBytes).take(8)}.rfgi"
 
     class Name(val id: String, val rev: Long, val hash8: String)
 
     fun parseName(name: String): Name? {
         // بعضی ارائه‌دهندگان SAF پسوند .bin اضافه می‌کنند
         val n = name.removeSuffix(".bin")
-        if (!n.startsWith("i-") || !n.endsWith(".slni")) return null
+        if (!n.startsWith("i-") || !n.endsWith(".rfgi")) return null
         val core = n.substring(2, n.length - 5)
         val parts = core.split('-')
         if (parts.size < 3) return null
@@ -99,7 +99,7 @@ object SyncRecord {
 }
 
 /**
- * مانیفست امضاشدهٔ پوشهٔ همگام‌سازی (`manifest.slnm`) برای کشف بازگشت به نسخهٔ قدیمی (Rollback)
+ * مانیفست امضاشدهٔ پوشهٔ همگام‌سازی (`manifest.rfgm`) برای کشف بازگشت به نسخهٔ قدیمی (Rollback)
  * و حذف انتخابی رکوردها در پوشهٔ ابری نامطمئن.
  *
  * چیدمان: "SLNM" | v(1) | epoch(8) | count(4) | [idLen(2) id | rev(8)]* | hmac(32)
@@ -107,11 +107,11 @@ object SyncRecord {
 data class SyncManifestData(val epoch: Long, val revisions: Map<String, Long>)
 
 object SyncManifest {
-    const val FILE_NAME = "manifest.slnm"
+    const val FILE_NAME = "manifest.rfgm"
     private val MAGIC = "SLNM".toByteArray(Charsets.US_ASCII)
     private const val VERSION: Byte = 1
     private const val MAX_ENTRIES = 50_000
-    private val MAC_INFO = "solina/sync/manifest/v1".toByteArray(Charsets.US_ASCII)
+    private val MAC_INFO = "refuge/sync/manifest/v1".toByteArray(Charsets.US_ASCII)
 
     fun macKey(vaultKey: ByteArray): ByteArray = Hkdf.derive(vaultKey, null, MAC_INFO)
 

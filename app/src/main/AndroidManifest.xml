@@ -65,7 +65,7 @@
                 <data
                     android:host="oauth"
                     android:path="/callback"
-                    android:scheme="solina-auth" />
+                    android:scheme="refuge-auth" />
             </intent-filter>
         </activity>
 

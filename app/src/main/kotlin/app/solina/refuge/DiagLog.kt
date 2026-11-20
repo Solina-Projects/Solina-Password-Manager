@@ -25,7 +25,7 @@ object DiagLog {
     private val fmt: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss.SSS", Locale.US)
     private val ioLock = Any()
     private val ioExecutor = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "solina-diag-io").apply { isDaemon = true }
+        Thread(r, "refuge-diag-io").apply { isDaemon = true }
     }
 
     fun init(context: Context) {
@@ -107,6 +107,6 @@ object DiagLog {
                 }
                 try { Thread.sleep(2_000) } catch (e: InterruptedException) { return@Thread }
             }
-        }, "solina-watchdog").apply { isDaemon = true }.start()
+        }, "refuge-watchdog").apply { isDaemon = true }.start()
     }
 }

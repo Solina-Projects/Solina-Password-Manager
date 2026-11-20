@@ -23,7 +23,7 @@ import java.util.Base64
  *
  * ۲) راه‌اندازی پین فقط وقتی خزانه باز است انجام می‌شود (Vault Key در حافظه است):
  *    salt تصادفی ۱۶ بایتی + KEK = Argon2id(PIN, salt, KDF پیش‌فرض) ← HKDF با info جدا
- *    («solina/wrap/pin/v1») → wrapped = AES-256-GCM(KEK, VaultKey, AAD «solina/pin/v1»).
+ *    («refuge/wrap/pin/v1») → wrapped = AES-256-GCM(KEK, VaultKey, AAD «refuge/pin/v1»).
  *    رشتهٔ «saltB64.wrappedB64» با کلید AES-256-GCM داخل Android Keystore رمز می‌شود
  *    (همان سازوکار KeystoreSecretStore برای اعتبارنامهٔ WebDAV) و در SharedPreferences
  *    خصوصی می‌نشیند. پس کپیِ صرفِ فایل‌ها برای حملهٔ آفلاین به پین کافی نیست؛ مهاجم
@@ -52,8 +52,8 @@ object PinCrypto {
     /** همان پارامترهای پیش‌فرض Argon2id رمز اصلی؛ پین کوتاه با KDF ضعیف‌تر هرگز پذیرفته نمی‌شود. */
     val PIN_KDF: KdfParams = KdfParams.DEFAULT
 
-    private val PIN_INFO = "solina/wrap/pin/v1".toByteArray(Charsets.US_ASCII)
-    private val PIN_AAD = "solina/pin/v1".toByteArray(Charsets.US_ASCII)
+    private val PIN_INFO = "refuge/wrap/pin/v1".toByteArray(Charsets.US_ASCII)
+    private val PIN_AAD = "refuge/pin/v1".toByteArray(Charsets.US_ASCII)
 
     fun isValidPin(pin: CharArray): Boolean =
         pin.size in MIN_PIN_LENGTH..MAX_PIN_LENGTH && pin.all { it in '0'..'9' }

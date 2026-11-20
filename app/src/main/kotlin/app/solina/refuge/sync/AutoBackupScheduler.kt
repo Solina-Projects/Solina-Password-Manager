@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
  * کار لغو می‌شود. WorkManager خودش زمان‌بندی را بعد از ری‌استارت نگه می‌دارد.
  */
 object AutoBackupScheduler {
-    const val UNIQUE_NAME = "solina-auto-backup"
+    const val UNIQUE_NAME = "refuge-auto-backup"
 
     fun reschedule(context: Context, schedule: BackupSchedule, configured: Boolean) {
         val wm = WorkManager.getInstance(context)

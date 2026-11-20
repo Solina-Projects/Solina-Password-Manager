@@ -18,7 +18,7 @@ import app.solina.refuge.MainActivity
  * عنوان/متن فقط بعد از بازشدن قفل، داخل برنامه دیده می‌شود. این اعلان هیچ اینترنتی نمی‌خواهد.
  */
 object TaskNotifier {
-    const val CHANNEL_ID = "solina-tasks"
+    const val CHANNEL_ID = "refuge-tasks"
     private const val NOTIFICATION_ID = 1002
 
     fun createChannel(context: Context) {

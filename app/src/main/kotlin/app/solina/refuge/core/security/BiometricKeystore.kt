@@ -18,7 +18,7 @@ import javax.crypto.spec.GCMParameterSpec
  * قالب blob ذخیره‌شده: iv(12) ‖ ciphertext(+tag).
  */
 object BiometricKeystore {
-    private const val ALIAS = "solina_vault_biometric_v1"
+    private const val ALIAS = "refuge_vault_biometric_v1"
     private const val PROVIDER = "AndroidKeyStore"
     private const val IV_SIZE = 12
 

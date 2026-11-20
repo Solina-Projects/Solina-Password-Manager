@@ -352,7 +352,7 @@ class SyncManager(
         }
     }
 
-    /** اسنپ‌شات SLNB v1 با رمز مشتق از کلید خزانه + هرس نسخه‌های قدیمی (نگه‌داشتن ۵ نسخه). */
+    /** اسنپ‌شات RFGB v1 با رمز مشتق از کلید خزانه + هرس نسخه‌های قدیمی (نگه‌داشتن ۵ نسخه). */
     private suspend fun writeVersionedSnapshot(vaultKey: ByteArray): Boolean {
         val remote = activeRemote() ?: return false
         val payloads = repository().items.value.map { it.payload }

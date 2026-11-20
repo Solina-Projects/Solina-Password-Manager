@@ -35,7 +35,7 @@
 | Autofill فیشینگ | فهرست مرورگرهای معتبر (`TrustedBrowsers`)، مسدودسازی `http://` ناامن و پسوندهای عمومی چندبخشی، حذف fallback نمایش همهٔ ورودی‌ها | `AutofillLogicTest` |
 | بکاپ دزدیده‌شده | رمز جداگانه + Argon2id + AES-GCM؛ هدر در AAD | `BackupTest` |
 | فایل ورودی مخرب (JSON/CSV/QR/protobuf) | حد اندازه، حد عمق JSON، پارسرهای بدون استثنای ناشناخته | `FuzzTest` (یک باگ واقعی را پیدا کرد: `JSONException` نشتی) |
-| دستکاری/جعل/بازگشت نسخه در پوشهٔ همگام‌سازی | HMAC-SHA256 برای رکوردها + مانیفست امضاشده (`manifest.slnm`) با `epoch` یکنواخت برای تشخیص rollback + پیوستن دومرحله‌ای (`StagedJoin`) + پاک‌سازی tombstone پس از ۹۰ روز | `SyncTest` |
+| دستکاری/جعل/بازگشت نسخه در پوشهٔ همگام‌سازی | HMAC-SHA256 برای رکوردها + مانیفست امضاشده (`manifest.rfgm`) با `epoch` یکنواخت برای تشخیص rollback + پیوستن دومرحله‌ای (`StagedJoin`) + پاک‌سازی tombstone پس از ۹۰ روز | `SyncTest` |
 | از دست رفتن داده در ویرایش هم‌زمان | فایل تغییرناپذیر به‌ازای هر نسخه؛ برندهٔ قطعی؛ بازنده در تاریخچه | `SyncTest.concurrentEditsConvergeWithoutLosingData`, `threeDevicesConverge` |
 | افزایش مجوز و سطح حمله | حداقل مجوز (`CAMERA`, `POST_NOTIFICATIONS`, `INTERNET` کاملاً اختیاری و TLS-only با `usesCleartextTraffic="false"` و `network_security_config`)؛ فقط دو مؤلفهٔ export‌شده؛ بدون لاگ؛ بدون رمز ثابت در CI | `GuardTest` |
 | Authenticator (TOTP + HOTP) و بکاپ مستقل | RFC 6238 (TOTP) و RFC 4226 (HOTP)، ۶/۸ رقم، SHA1/256/512، اعتبارسنجی هدر پیش از بازیابی (`Backup.inspect`) و بکاپ جداگانهٔ رمزشده | `TotpTest`, `HotpTest`, `IdentityAndBackupTest` |

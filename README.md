@@ -112,7 +112,7 @@ gradle :app:assembleDebug
 - **Authenticator داخلی کامل (TOTP + HOTP):**
   - پشتیبانی از **TOTP (RFC 6238)** و **HOTP (RFC 4226)** با کدهای ۶ و ۸ رقمی (SHA1/SHA256/SHA512)، شمارش معکوس زنده، افزایش شمارندهٔ HOTP، اسکن QR (دوربین و گالری)، ورود دستی، دسته‌بندی و جست‌وجو.
   - ورود از **Google Authenticator (Migration QR — TOTP & HOTP)**، **Aegis (با گروه‌ها و HOTP)**، **2FAS**، **andOTP**، **Bitwarden**، **Proton Pass**، **KeePass**، **LastPass**، **Chrome/Firefox CSV**.
-  - **بکاپ جداگانهٔ رمزشدهٔ Authenticator** (`solina-authenticator-*.slnb`) + اعتبارسنجی هدر بکاپ پیش از بازیابی (`Backup.inspect`).
+  - **بکاپ جداگانهٔ رمزشدهٔ Authenticator** (`refuge-authenticator-*.rfgb`) + اعتبارسنجی هدر بکاپ پیش از بازیابی (`Backup.inspect`).
 - **همگام‌سازی E2EE و حساب‌های خارجی اختیاری:**
   - همگام‌سازی فایل‌های تغییرناپذیر احرازشده (HMAC-SHA256 + مانیفست امضاشده ضد Rollback) از طریق **SAF Folder** (فضای ابری یا حافظهٔ محلی) و **HTTPS-only WebDAV** (Nextcloud / OwnCloud).
   - اتصال اختیاری چندحسابی **Google (OIDC)** و **GitHub** با **OAuth 2.0 + PKCE (RFC 7636)**، کاملاً ایزوله از کلیدهای خزانه و با امکان قطع اتصال امن.

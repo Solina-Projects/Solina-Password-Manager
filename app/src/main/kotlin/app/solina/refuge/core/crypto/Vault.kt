@@ -51,7 +51,7 @@ class VaultHeader(
         internal fun aadForPassword(version: Int, kdf: KdfParams, salt: ByteArray): ByteArray {
             val bytes = ByteArrayOutputStream()
             DataOutputStream(bytes).use { out ->
-                out.write("solina/vk/pw".toByteArray(Charsets.US_ASCII))
+                out.write("refuge/vk/pw".toByteArray(Charsets.US_ASCII))
                 out.writeByte(version)
                 out.writeInt(kdf.memoryKiB)
                 out.writeInt(kdf.iterations)
@@ -62,7 +62,7 @@ class VaultHeader(
         }
 
         internal fun aadForRecovery(version: Int): ByteArray =
-            "solina/vk/rec".toByteArray(Charsets.US_ASCII) + byteArrayOf(version.toByte())
+            "refuge/vk/rec".toByteArray(Charsets.US_ASCII) + byteArrayOf(version.toByte())
 
         fun decode(data: ByteArray): VaultHeader {
             val expected = MAGIC.size + 1 + 12 + SALT_SIZE + 2 * WRAPPED_SIZE
@@ -99,8 +99,8 @@ class SealedItem(val wrappedItemKey: ByteArray, val blob: ByteArray)
 class CreatedVault(val header: VaultHeader, val vaultKey: ByteArray, val recoveryWords: List<String>)
 
 object VaultCrypto {
-    private val INFO_PW = "solina/wrap/pw/v1".toByteArray(Charsets.US_ASCII)
-    private val INFO_REC = "solina/wrap/rec/v1".toByteArray(Charsets.US_ASCII)
+    private val INFO_PW = "refuge/wrap/pw/v1".toByteArray(Charsets.US_ASCII)
+    private val INFO_REC = "refuge/wrap/rec/v1".toByteArray(Charsets.US_ASCII)
 
     /**
      * تبدیل ایمن CharArray به UTF-8 با نرمال‌سازی NFKC بدون ساخت String اضافی در مسیر رایج.
@@ -252,9 +252,9 @@ object VaultCrypto {
 
     // ───── ورودی‌ها: هر ورودی کلید تصادفی خودش را دارد ─────
 
-    private fun itemKeyAad(itemId: String) = "solina/itemkey|$itemId".toByteArray(Charsets.UTF_8)
+    private fun itemKeyAad(itemId: String) = "refuge/itemkey|$itemId".toByteArray(Charsets.UTF_8)
     private fun blobAad(itemId: String, rev: Long, schema: Int) =
-        "solina/item|$itemId|$rev|$schema".toByteArray(Charsets.UTF_8)
+        "refuge/item|$itemId|$rev|$schema".toByteArray(Charsets.UTF_8)
 
     fun sealItem(vaultKey: ByteArray, itemId: String, rev: Long, schema: Int, plaintext: ByteArray): SealedItem {
         val itemKey = randomBytes(Aead.KEY_SIZE)

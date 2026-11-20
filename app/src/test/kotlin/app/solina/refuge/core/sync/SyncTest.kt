@@ -105,8 +105,8 @@ class SyncTest {
         // تمام فایل‌های evil را هم دست‌کاری می‌کنیم: یک بایت خراب‌شده از فایل واقعی
         val real = remote.files.keys.first { it.startsWith("i-${item.id}-") }
         val corrupted = remote.files[real]!!.copyOf().also { it[10] = (it[10].toInt() xor 1).toByte() }
-        remote.files["i-victim-5-00000000.slni"] = corrupted
-        remote.files["i-junk-1-deadbeef.slni"] = ByteArray(5)
+        remote.files["i-victim-5-00000000.rfgi"] = corrupted
+        remote.files["i-junk-1-deadbeef.rfgi"] = ByteArray(5)
         val rb = b.sync()
         assertEquals(listOf("real"), b.titles())
         assertTrue(rb.rejected >= 3)
@@ -115,7 +115,7 @@ class SyncTest {
     @Test fun hostileNamesAreIgnored() = runBlocking {
         val b = Device("b")
         remote.files["../../etc/passwd"] = ByteArray(10)
-        remote.files["i-..%2f-1-aaaaaaaa.slni"] = ByteArray(10)
+        remote.files["i-..%2f-1-aaaaaaaa.rfgi"] = ByteArray(10)
         val r = b.sync()
         assertEquals(0, r.pulled); assertTrue(b.titles().isEmpty())
     }
@@ -137,7 +137,7 @@ class SyncTest {
         val r2 = b.sync()
         assertEquals(false, r2.rollbackDetected)
 
-        // مهاجم فایل‌های پوشه (از جمله manifest.slnm) را به نسخهٔ قدیمی‌تر برمی‌گرداند
+        // مهاجم فایل‌های پوشه (از جمله manifest.rfgm) را به نسخهٔ قدیمی‌تر برمی‌گرداند
         remote.files.clear()
         remote.files.putAll(oldSnapshot)
         val rRollback = b.sync()

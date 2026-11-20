@@ -24,7 +24,7 @@ import java.io.File
 /** ظرف وابستگی‌های سراسری Refuge با جداسازی لایه‌های امنیتی، داده و همگام‌سازی. */
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
-    val files = VaultFiles(File(appContext.filesDir, "solina"))
+    val files = VaultFiles(File(appContext.filesDir, "refuge"))
     val securityPrefs = SecurityPrefs(appContext)
     val pinUnlock = PinUnlockManager(appContext)
     val passkeys = PasskeyManager(appContext)

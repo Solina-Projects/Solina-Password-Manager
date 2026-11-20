@@ -76,7 +76,7 @@
 |---|---|---|---|
 | P1 | حداقل مجوزها | ✅ | فقط `CAMERA` (اسکن QR، غیراجباری)، `POST_NOTIFICATIONS` (اعلان محلی)، `INTERNET` (اختیاری)؛ `GuardTest` |
 | P2 | مؤلفه‌های exportشده حداقلی و محافظت‌شده | ✅ | فقط `MainActivity` و `RefugeAutofillService` (با مجوز `BIND_AUTOFILL_SERVICE`) export شده‌اند؛ ویجت export نیست (`AndroidManifest.xml`) |
-| P3 | Deep Link و بازگشت OAuth امن | ✅ | تنها intent فیلتر مرورگری، بازگشت OAuth با scheme اختصاصی `solina-auth` است؛ OAuth 2.0 + PKCE (`S256`) با `state`/`nonce` ضد CSRF؛ `OAuthPkceTest` |
+| P3 | Deep Link و بازگشت OAuth امن | ✅ | تنها intent فیلتر مرورگری، بازگشت OAuth با scheme اختصاصی `refuge-auth` است؛ OAuth 2.0 + PKCE (`S256`) با `state`/`nonce` ضد CSRF؛ `OAuthPkceTest` |
 | P4 | WebView امن | — | نامربوط: در اپ WebView نیست (فقط یک کامنت در `ui/components/Motion.kt` می‌گوید هیچ WebViewای اضافه نشده) |
 | P5 | پرچم‌های دیباگ در نسخهٔ release خاموش‌اند | ◐ | بیلد release با R8 و حذف منابع است و در کد استفاده‌ای از `BuildConfig.DEBUG` پیدا نشد؛ ولی `debuggable=false` صریح در `buildTypes` نوشته نشده (پیش‌فرض release همین است، ولی صریح نیست) |
 | P6 | تشخیص روت/دست‌کاری دستگاه | ❌ | هیچ تشخیص روتی در کد پیدا نشد؛ دستگاه روت‌شده در `docs/THREAT_MODEL.md` §۲ صریح بیرون از دامنه اعلام شده است — پس این «انجام نشده» آگاهانه است، نه فراموش‌شده |
