@@ -61,6 +61,9 @@ import app.solina.passwordmanager.core.crypto.CreatedVault
 import app.solina.passwordmanager.core.crypto.InvalidRecoveryPhraseException
 import app.solina.passwordmanager.core.crypto.VaultCrypto
 import app.solina.passwordmanager.core.crypto.VaultHeader
+import app.solina.passwordmanager.autofill.DomainMatcher
+import app.solina.passwordmanager.core.passkey.PasskeyGate
+import app.solina.passwordmanager.core.passkey.PasskeyResult
 import app.solina.passwordmanager.core.security.KdfCalibrator
 import app.solina.passwordmanager.core.security.PinResult
 import app.solina.passwordmanager.core.backup.Backup
@@ -1589,6 +1592,50 @@ private fun MainApp(
                         },
                         onToast = { toast = it },
                         clipboardClearMillis = clipboardClear.millis,
+                        passkeySupported = PasskeyGate.isSupported(),
+                        onCreatePasskey = {
+                            val currentItem = detailItem ?: return@DetailScreen
+                            val rpId = DomainMatcher.normalizeHost(currentItem.payload.website)
+                            if (rpId.isEmpty()) {
+                                toast = "اول نشانی سایت را در این ورودی ثبت کنید"
+                                return@DetailScreen
+                            }
+                            scope.launch {
+                                when (val r = container.passkeys.createPasskey(
+                                    activity,
+                                    rpId,
+                                    currentItem.payload.username.ifBlank { currentItem.payload.title },
+                                    currentItem.payload.title,
+                                )) {
+                                    is PasskeyResult.Created -> {
+                                        runCatching {
+                                            repo.update(
+                                                currentItem.id,
+                                                currentItem.payload.copy(passkeys = currentItem.payload.passkeys + r.record),
+                                            )
+                                        }
+                                        toast = "Passkey ساخته شد"
+                                    }
+                                    PasskeyResult.UnsupportedDevice -> toast = "این گوشی Passkey را پشتیبانی نمی‌کند؛ اندروید ۱۴ به بالا لازم است"
+                                    PasskeyResult.Deferred -> toast = "ساخت Passkey در این نسخه هنوز فعال نیست؛ نیاز به سرویس ارائه‌دهندهٔ Passkey دارد"
+                                    PasskeyResult.Cancelled -> toast = "ساخت Passkey لغو شد"
+                                    is PasskeyResult.Failed -> toast = "ساخت Passkey ناموفق بود"
+                                    is PasskeyResult.Asserted -> toast = "ورود با Passkey انجام شد"
+                                }
+                            }
+                        },
+                        onSignInWithPasskey = { record ->
+                            scope.launch {
+                                when (container.passkeys.signInWithPasskey(activity, record)) {
+                                    is PasskeyResult.Asserted -> toast = "ورود با Passkey انجام شد"
+                                    PasskeyResult.UnsupportedDevice -> toast = "این گوشی Passkey را پشتیبانی نمی‌کند؛ اندروید ۱۴ به بالا لازم است"
+                                    PasskeyResult.Deferred -> toast = "ورود با Passkey در این نسخه هنوز فعال نیست"
+                                    PasskeyResult.Cancelled -> toast = "ورود با Passkey لغو شد"
+                                    is PasskeyResult.Failed -> toast = "ورود با Passkey ناموفق بود"
+                                    is PasskeyResult.Created -> Unit
+                                }
+                            }
+                        },
                     )
                     else -> when (tab) {
                         Tab.Home -> HomeScreen(

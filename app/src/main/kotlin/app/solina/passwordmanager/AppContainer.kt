@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import app.solina.passwordmanager.auth.ExternalAccountManager
+import app.solina.passwordmanager.core.passkey.PasskeyManager
 import app.solina.passwordmanager.core.security.BiometricKeystore
 import app.solina.passwordmanager.core.security.PinUnlockManager
 import app.solina.passwordmanager.core.security.SecurityPrefs
@@ -26,6 +27,7 @@ class AppContainer(context: Context) {
     val files = VaultFiles(File(appContext.filesDir, "solina"))
     val securityPrefs = SecurityPrefs(appContext)
     val pinUnlock = PinUnlockManager(appContext)
+    val passkeys = PasskeyManager(appContext)
     val externalAccounts = ExternalAccountManager(appContext)
     val session = VaultSession(clock = SystemClock::elapsedRealtime)
     val database by lazy { SolinaDatabase.open(appContext) }

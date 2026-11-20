@@ -739,6 +739,9 @@ fun DetailScreen(
     onIncrementHotp: () -> Unit = {},
     onToast: (String) -> Unit,
     clipboardClearMillis: Long = CLIPBOARD_CLEAR_MILLIS,
+    passkeySupported: Boolean = false,
+    onCreatePasskey: () -> Unit = {},
+    onSignInWithPasskey: (app.solina.passwordmanager.core.passkey.PasskeyRecord) -> Unit = {},
 ) {
     val c = Solina.colors
     val str = Solina.strings
@@ -898,6 +901,40 @@ fun DetailScreen(
                 }
             }
             ItemKind.Note -> Unit
+        }
+
+        if (p.kind == ItemKind.Login) {
+            Card {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(str.passkeyTitle, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    if (p.passkeys.isEmpty()) {
+                        Text(str.passkeyEmpty, color = c.muted, fontSize = 13.sp)
+                    } else {
+                        p.passkeys.forEach { pk ->
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(pk.rpId, color = c.text, fontSize = 14.sp, fontFamily = Mono)
+                                Text(
+                                    listOfNotNull(
+                                        pk.userName.takeIf { it.isNotEmpty() },
+                                        "ساخته‌شده: ${formatJalali(pk.createdAt)}",
+                                    ).joinToString(" · "),
+                                    color = c.muted, fontSize = 12.sp,
+                                )
+                            }
+                        }
+                    }
+                    if (!passkeySupported) {
+                        Text(str.passkeyUnsupported, color = c.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlineButton(str.passkeyCreate, SolinaIcons.Key, Modifier.weight(1f), onCreatePasskey)
+                            if (p.passkeys.isNotEmpty()) {
+                                OutlineButton(str.passkeySignIn, SolinaIcons.Fingerprint, Modifier.weight(1f)) { onSignInWithPasskey(p.passkeys.first()) }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if (code != null) {

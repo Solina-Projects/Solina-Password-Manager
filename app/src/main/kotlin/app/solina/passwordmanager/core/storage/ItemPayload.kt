@@ -1,6 +1,7 @@
 package app.solina.passwordmanager.core.storage
 
 import app.solina.passwordmanager.core.OtpType
+import app.solina.passwordmanager.core.passkey.PasskeyRecord
 import org.json.JSONObject
 
 enum class ItemKind(val code: String) {
@@ -59,6 +60,8 @@ data class ItemPayload(
     val postalCode: String = "",
     val country: String = "",
     val company: String = "",
+    // Passkeyها (فاز ۲) — داخل همین payload رمزگذاری‌شده می‌نشینند، نه در SharedPreferences.
+    val passkeys: List<PasskeyRecord> = emptyList(),
 ) {
     fun toBytes(): ByteArray {
         val o = JSONObject()
@@ -95,6 +98,7 @@ data class ItemPayload(
         if (postalCode.isNotEmpty()) o.put("postalCode", postalCode)
         if (country.isNotEmpty()) o.put("country", country)
         if (company.isNotEmpty()) o.put("company", company)
+        if (passkeys.isNotEmpty()) o.put("passkeys", PasskeyRecord.listToJson(passkeys))
         return o.toString().toByteArray(Charsets.UTF_8)
     }
 
@@ -139,6 +143,7 @@ data class ItemPayload(
                 postalCode = o.optString("postalCode"),
                 country = o.optString("country"),
                 company = o.optString("company"),
+                passkeys = PasskeyRecord.listFromJson(o.optJSONArray("passkeys")),
             )
         }
     }

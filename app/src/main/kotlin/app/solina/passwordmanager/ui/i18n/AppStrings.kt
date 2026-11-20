@@ -70,6 +70,16 @@ data class AppStrings(
     val pinUnlockButton: String,
     val pinUsePassword: String,
     val pinUsePin: String,
+    val passkeyTitle: String,
+    val passkeyEmpty: String,
+    val passkeyCreate: String,
+    val passkeySignIn: String,
+    val passkeyUnsupported: String,
+    val passkeyDeferred: String,
+    val passkeyCreated: String,
+    val passkeyNeedWebsite: String,
+    val passkeyCancelled: String,
+    val passkeyFailed: String,
 )
 
 val PersianStrings = AppStrings(
@@ -137,6 +147,16 @@ val PersianStrings = AppStrings(
     pinUnlockButton = "باز کردن با پین",
     pinUsePassword = "ورود با رمز اصلی",
     pinUsePin = "ورود با پین",
+    passkeyTitle = "Passkey",
+    passkeyEmpty = "هنوز Passkey ثبت نشده است",
+    passkeyCreate = "ساخت Passkey",
+    passkeySignIn = "ورود با Passkey",
+    passkeyUnsupported = "این گوشی Passkey را پشتیبانی نمی‌کند؛ اندروید ۱۴ به بالا لازم است",
+    passkeyDeferred = "ساخت Passkey در این نسخه هنوز فعال نیست؛ نیاز به سرویس ارائه‌دهندهٔ Passkey دارد",
+    passkeyCreated = "Passkey ساخته شد",
+    passkeyNeedWebsite = "اول نشانی سایت را در این ورودی ثبت کنید",
+    passkeyCancelled = "ساخت Passkey لغو شد",
+    passkeyFailed = "ساخت Passkey ناموفق بود",
 )
 
 val EnglishStrings = AppStrings(
@@ -204,6 +224,16 @@ val EnglishStrings = AppStrings(
     pinUnlockButton = "Unlock with PIN",
     pinUsePassword = "Use master password",
     pinUsePin = "Use PIN",
+    passkeyTitle = "Passkey",
+    passkeyEmpty = "No passkey registered yet",
+    passkeyCreate = "Create passkey",
+    passkeySignIn = "Sign in with passkey",
+    passkeyUnsupported = "This device does not support passkeys; Android 14+ is required",
+    passkeyDeferred = "Passkey creation is not enabled in this version; it needs a passkey provider service",
+    passkeyCreated = "Passkey created",
+    passkeyNeedWebsite = "Add the website to this item first",
+    passkeyCancelled = "Passkey creation cancelled",
+    passkeyFailed = "Passkey creation failed",
 )
 
 fun stringsFor(lang: AppLanguage): AppStrings = when (lang) {
