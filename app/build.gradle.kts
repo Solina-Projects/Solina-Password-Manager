@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "app.solina.passwordmanager"
+    namespace = "app.solina.refuge"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "app.solina.passwordmanager"
+        applicationId = "app.solina.refuge"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -31,7 +31,7 @@ android {
     lint {
         // خطاهای lint بیلد را می‌شکنند. هشدار «نسخهٔ جدیدتر» را Dependabot پوشش می‌دهد.
         abortOnError = true
-        disable += setOf("GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable", "OldTargetApi")
+        disable += setOf("GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable")
     }
 
     compileOptions {
@@ -44,6 +44,12 @@ android {
     buildFeatures {
         compose = true
     }
+    dependenciesInfo {
+        // حذف متادیتای امضا‌شدهٔ گوگل از APK/AAB برای ساخت بازتولیدپذیر (Reproducible Builds)
+        includeInApk = false
+        includeInBundle = false
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -76,6 +82,10 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     implementation(libs.androidx.documentfile)
+    implementation(libs.androidx.autofill)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

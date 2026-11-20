@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Solina"
+rootProject.name = "Solina Refuge"
 include(":app")
