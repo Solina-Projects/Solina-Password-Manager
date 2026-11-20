@@ -29,8 +29,9 @@ class TagsTest {
     @Test fun addAndRemoveTag() {
         val tags = TagHelper.addTag(listOf("a"), "  B ")
         assertEquals(listOf("a", "B"), tags)
-        assertEquals(listOf("a"), TagHelper.addTag(tags, "b"))
-        assertEquals(listOf("a"), TagHelper.addTag(tags, ""))
+        // تکراری (بی‌توجه به بزرگی/کوچکی) و خالی، فهرست را بدون تغییر برمی‌گردانند.
+        assertEquals(listOf("a", "B"), TagHelper.addTag(tags, "b"))
+        assertEquals(listOf("a", "B"), TagHelper.addTag(tags, ""))
         assertEquals(listOf("B"), TagHelper.removeTag(tags, "A"))
     }
 

@@ -206,14 +206,15 @@ class RepositoryTest {
     @Test fun analyzerFlagsOldPasswordByEditedAt() {
         val now = 1_800_000_000_000L
         val year = SecurityAnalyzer.OLD_PASSWORD_MILLIS
-        fun vi(id: String, editedAt: Long) =
-            VaultItem(id, 1, ItemPayload(title = id, password = "kPq7vM#xR42wL!z9Hd", totpSecret = "JBSWY3DP", editedAt = editedAt))
+        // رمزهای متفاوت برای هر ورودی تا پرچم «تکراری» در آزمون دخالت نکند.
+        fun vi(id: String, pw: String, editedAt: Long) =
+            VaultItem(id, 1, ItemPayload(title = id, password = pw, totpSecret = "JBSWY3DP", editedAt = editedAt))
         val rep = SecurityAnalyzer.analyze(
             listOf(
-                vi("old", now - year - 1),
-                vi("almost-old", now - year + 60_000L),
-                vi("fresh", now - 1_000L),
-                vi("unknown-age", 0L),
+                vi("old", "kPq7vM#xR42wL!z9Hd", now - year - 1),
+                vi("almost-old", "Zx9!qLm2#Wp8Rt5vB", now - year + 60_000L),
+                vi("fresh", "Mn4@pQr7#Tv2Wx8yZ", now - 1_000L),
+                vi("unknown-age", "Qw3!eR8\$tY2uI9oP5", 0L),
             ),
             now = now,
         )
