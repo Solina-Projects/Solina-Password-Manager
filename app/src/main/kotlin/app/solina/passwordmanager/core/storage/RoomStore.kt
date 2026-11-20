@@ -112,7 +112,8 @@ abstract class SolinaDatabase : RoomDatabase() {
                 .addCallback(object : Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {
                         // بازنویسی صفحات حذف‌شده با صفر برای کاهش باقی‌ماندهٔ متادیتا/بلاب در دیسک
-                        db.execSQL("PRAGMA secure_delete = ON")
+                        // نکته: PRAGMA حتی موقع مقداردهی یک ردیف برمی‌گرداند، پس execSQL روی اندروید واقعی SQLiteException می‌اندازد؛ با query ردیف مصرف می‌شود.
+                        db.query("PRAGMA secure_delete = ON").close()
                     }
                 })
                 .build()
@@ -166,7 +167,7 @@ class RoomItemStore(private val db: SolinaDatabase) : ItemStore {
         // پاکسازی کامل WAL و صفحات آزاد فایل دیتابیس
         runCatching {
             db.openHelper.writableDatabase.apply {
-                execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
+                query("PRAGMA wal_checkpoint(TRUNCATE)").close()
                 execSQL("VACUUM")
             }
         }
