@@ -418,7 +418,7 @@ fun HomeScreen(
 
 /** نوار شمارش معکوس اعتبار کد؛ کسر باقی‌مانده از ساعت دیواری حساب می‌شود، پس با بازسازی UI از اول شروع نمی‌شود. */
 @Composable
-private fun CountdownBar(modifier: Modifier, remainingMillis: Long, periodSeconds: Int, accent: Color, track: Color) {
+private fun CountdownBar(modifier: Modifier, remainingMillis: Long, periodSeconds: Int, accent: androidx.compose.ui.graphics.Color, track: androidx.compose.ui.graphics.Color) {
     val fraction = (remainingMillis.toFloat() / (periodSeconds * 1000f)).coerceIn(0f, 1f)
     Box(modifier.height(6.dp).clip(RoundedCornerShape(3.dp)).background(track)) {
         Box(Modifier.fillMaxWidth(fraction).height(6.dp).clip(RoundedCornerShape(3.dp)).background(accent))
