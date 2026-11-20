@@ -103,6 +103,7 @@ import app.solina.passwordmanager.ui.screens.TrashScreen
 import app.solina.passwordmanager.ui.screens.DiagnosticsScreen
 import app.solina.passwordmanager.ui.screens.EditScreen
 import app.solina.passwordmanager.ui.screens.ExternalAccountsScreen
+import app.solina.passwordmanager.ui.screens.FirstRunOnboarding
 import app.solina.passwordmanager.ui.screens.GeneratorScreen
 import app.solina.passwordmanager.ui.screens.HomeScreen
 import app.solina.passwordmanager.ui.screens.PinSetupScreen
