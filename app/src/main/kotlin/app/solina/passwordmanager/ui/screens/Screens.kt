@@ -734,6 +734,7 @@ fun DetailScreen(
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onDuplicate: () -> Unit = {},
     onRestore: (HistoryEntry) -> Unit,
     onIncrementHotp: () -> Unit = {},
     onToast: (String) -> Unit,
@@ -1009,6 +1010,14 @@ fun DetailScreen(
                 }
             }
         } else {
+            Text(
+                "تکثیر ورودی (کپی)",
+                color = c.primary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onDuplicate).padding(vertical = 14.dp),
+                textAlign = TextAlign.Center,
+            )
             Text(
                 "حذف ورودی",
                 color = c.secondary,

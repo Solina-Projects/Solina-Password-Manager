@@ -128,6 +128,22 @@ class VaultRepository(
         ImportStats(created.size, skipped)
     }
 
+    /** تکثیر ورودی: کپی بار (payload) با شناسه و ویرایش تازه؛ عنوان « (کپی)» می‌گیرد. */
+    suspend fun duplicate(id: String): VaultItem? = lock.withLock {
+        val current = _items.value.firstOrNull { it.id == id } ?: return@withLock null
+        val now = clock()
+        val p = current.payload.copy(
+            title = "${current.payload.title} (کپی)",
+            createdAt = now,
+            editedAt = now,
+        )
+        val item = VaultItem(newId(), 1, p)
+        withKey { key -> store.save(seal(key, item, now), null, MAX_HISTORY) }
+        publish(item)
+        _localChanges.value++
+        item
+    }
+
     suspend fun delete(id: String) = lock.withLock {
         val current = _items.value.firstOrNull { it.id == id } ?: return@withLock
         val now = clock()

@@ -141,6 +141,19 @@ class RepositoryTest {
         assertEquals(17L, restored.rev)
     }
 
+    @Test fun duplicateCopiesPayloadWithNewId() = runBlocking {
+        val store = FakeStore(); val r = repo(store)
+        val item = r.add(login("GitHub"))
+        val copy = r.duplicate(item.id)!!
+        assertTrue(copy.id != item.id)
+        assertEquals(1L, copy.rev)
+        assertEquals("GitHub (کپی)", copy.payload.title)
+        assertEquals(item.payload.password, copy.payload.password)
+        assertEquals(item.payload.username, copy.payload.username)
+        assertEquals(2, r.items.value.size)
+        assertNull(r.duplicate("no-such-id"))
+    }
+
     @Test fun deleteLeavesTombstoneWithoutDataButKeepsLastVersionForTrash() = runBlocking {
         val store = FakeStore(); val session = unlockedSession(); val r = repo(store, session)
         val item = r.add(login("a")); r.update(item.id, login("b"))

@@ -1508,6 +1508,16 @@ private fun MainApp(
                                 refreshTrash()
                             }
                         },
+                        onDuplicate = {
+                            val id = detailId!!
+                            scope.launch {
+                                val copy = runCatching { repo.duplicate(id) }.getOrNull()
+                                if (copy != null) {
+                                    detailId = copy.id
+                                    toast = "کپی ساخته شد"
+                                } else toast = "تکثیر انجام نشد"
+                            }
+                        },
                         onRestore = { entry ->
                             scope.launch {
                                 runCatching { repo.restore(detailId!!, entry) }
