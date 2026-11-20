@@ -1,4 +1,4 @@
-name: Build Solina APK
+name: Build Solina Refuge APK
 
 on:
   push:
@@ -46,7 +46,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Solina-preview-debug-apk
+          name: Solina-Refuge-preview-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -57,7 +57,7 @@ jobs:
           f=app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
           if [ -f "$f" ]; then
             echo "== lint findings =="
-            grep -E "(Error|Warning): " "$f" | sed 's#.*/passwordmanager/##' | head -80
+            grep -E "(Error|Warning): " "$f" | sed 's#.*/refuge/##' | head -80
           fi
 
       - name: Upload lint report
