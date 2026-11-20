@@ -10,7 +10,7 @@ package app.solina.refuge.core.crypto
  *    vault-default/ (فعلی، دست‌نخورده) و vault-<id>/ برای خزانه‌های بعدی.
  *    کلید خزانه (VK) هر خزانه جداگانه با رمز اصلی بسته می‌شود؛ salt متفاوت یعنی
  *    KEK متفاوت، و AAD/info بسته‌بندی باید شناسهٔ خزانه را هم داشته باشد
- *    (جداسازی دامنه: "solina/wrap/pw/v1" + vaultId) تا دو خزانه با رمز و salt
+ *    (جداسازی دامنه: "refuge/wrap/pw/v1" + vaultId) تا دو خزانه با رمز و salt
  *    یکسان هم قابل اشتباه نباشند.
  *
  * ۲) بازیابی: BIP-39 جداگانه برای هر خزانه (۲۴ کلمهٔ مخصوص همان خزانه).
@@ -49,5 +49,5 @@ object MultiVaultDesign {
     const val DEFAULT_VAULT_ID = "default"
 
     /** پیشوند info برای جداسازی دامنهٔ بسته‌بندی کلید هر خزانه (به VaultCrypto اضافه شود). */
-    const val WRAP_INFO_PREFIX = "solina/wrap/pw/v1/vault:"
+    const val WRAP_INFO_PREFIX = "refuge/wrap/pw/v1/vault:"
 }

@@ -103,7 +103,7 @@ sealed interface OAuthCallbackResult {
  * پیاده‌سازی استاندارد OAuth 2.0 + PKCE (RFC 7636) و OIDC برای اتصال اختیاری Google و GitHub.
  */
 object OAuthPkce {
-    const val REDIRECT_URI = "solina-auth://oauth/callback"
+    const val REDIRECT_URI = "refuge-auth://oauth/callback"
 
     private fun base64UrlNoPad(bytes: ByteArray): String =
         Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)

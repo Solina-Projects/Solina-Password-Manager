@@ -11,9 +11,9 @@ package app.solina.refuge.core.crypto
  *    - کلید خزانه (vaultKey، همان ۳۲ بایت AES که VaultCrypto می‌سازد) عوض نمی‌شود.
  *    - هر پیوست یک DEK تصادفی ۳۲ بایتیِ خودش دارد (per-file DEK).
  *    - DEK با کلید خزانه و AES-256-GCM بسته می‌شود (wrappedDek)؛ AAD آن
- *      "solina/attachment/dek/v1" + شناسهٔ فایل است، پس DEK یک فایل با فایل دیگر عوض نمی‌شود.
+ *      "refuge/attachment/dek/v1" + شناسهٔ فایل است، پس DEK یک فایل با فایل دیگر عوض نمی‌شود.
  *    - محتوای فایل با DEK و AES-256-GCM بسته می‌شود (sealedData)؛ AAD آن
- *      "solina/attachment/data/v1" + شناسهٔ فایل است.
+ *      "refuge/attachment/data/v1" + شناسهٔ فایل است.
  *    - نتیجه: اگر یک DEK لو برود فقط همان یک فایل لو می‌رود؛ اگر کلید خزانه عوض شود
  *      (تغییر رمز اصلی) فقط wrappedDekها باید دوباره بسته شوند، نه کل داده‌ها.
  *
@@ -23,7 +23,7 @@ package app.solina.refuge.core.crypto
  * ۳) محدودیت اندازه: حداکثر ۱۰ مگابایت برای هر فایل (MAX_ATTACHMENT_BYTES).
  *    بیشتر از آن رد می‌شود تا حافظهٔ گوشی پر نشود و بکاپ غول‌پیکر نسازد.
  *
- * ۴) بکاپ (تصمیم امنیتی مهم): پیوست‌ها در بکاپ SLNB v1 نیستند و Backup.encode دست
+ * ۴) بکاپ (تصمیم امنیتی مهم): پیوست‌ها در بکاپ RFGB v1 نیستند و Backup.encode دست
  *    نخورده است — پس بکاپ‌های v1 دقیقاً مثل قبل خوانده می‌شوند (سازگاری عقب‌رو کامل).
  *    دلیل: گنجاندن پیوست در بکاپ یعنی تغییر قالب به v2 (هدر/نسخه/JSON جدید)؛
  *    آن تغییر در این فاز بدون بازبینی مستقل قالب، امن شمرده نشد. تا وقتی پیوست به
@@ -45,8 +45,8 @@ object AttachmentCrypto {
 
     const val FORMAT_VERSION = 1
 
-    private val AAD_DEK_PREFIX = "solina/attachment/dek/v1/".toByteArray(Charsets.US_ASCII)
-    private val AAD_DATA_PREFIX = "solina/attachment/data/v1/".toByteArray(Charsets.US_ASCII)
+    private val AAD_DEK_PREFIX = "refuge/attachment/dek/v1/".toByteArray(Charsets.US_ASCII)
+    private val AAD_DATA_PREFIX = "refuge/attachment/data/v1/".toByteArray(Charsets.US_ASCII)
 
     /** پیوست بسته‌شده: DEKِ بسته‌شده با کلید خزانه + دادهٔ بسته‌شده با DEK. */
     data class SealedAttachment(

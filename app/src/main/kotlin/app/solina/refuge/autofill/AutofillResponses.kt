@@ -22,10 +22,10 @@ import java.util.concurrent.atomic.AtomicInteger
 
 @Suppress("DEPRECATION")
 object AutofillResponses {
-    const val EXTRA_USERNAME_ID = "solina.autofill.username"
-    const val EXTRA_PASSWORD_ID = "solina.autofill.password"
-    const val EXTRA_HOST = "solina.autofill.host"
-    const val EXTRA_PACKAGE = "solina.autofill.package"
+    const val EXTRA_USERNAME_ID = "refuge.autofill.username"
+    const val EXTRA_PASSWORD_ID = "refuge.autofill.password"
+    const val EXTRA_HOST = "refuge.autofill.host"
+    const val EXTRA_PACKAGE = "refuge.autofill.package"
 
     private val requestCodeCounter = AtomicInteger(10_000)
 

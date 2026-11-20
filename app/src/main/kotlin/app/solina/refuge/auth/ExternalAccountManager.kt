@@ -35,7 +35,7 @@ sealed interface OAuthLinkResult {
  * - هیچ رمز عبور، کلید خزانه یا عبارت بازیابی به سرویس‌های خارجی ارسال نمی‌شود.
  */
 class ExternalAccountManager(context: Context) {
-    private val store = KeystoreSecretStore(context, "solina_external_accounts")
+    private val store = KeystoreSecretStore(context, "refuge_external_accounts")
     private val _accounts = MutableStateFlow(loadAccounts())
     val accounts: StateFlow<List<LinkedExternalAccount>> = _accounts.asStateFlow()
 
@@ -71,7 +71,7 @@ class ExternalAccountManager(context: Context) {
         return OAuthPkce.buildAuthorizationUrl(req)
     }
 
-    /** پردازش بازگشت مرورگر (`solina-auth://oauth/callback?code=...&state=...`). */
+    /** پردازش بازگشت مرورگر (`refuge-auth://oauth/callback?code=...&state=...`). */
     suspend fun completeCallback(callbackUri: Uri): OAuthLinkResult = withContext(Dispatchers.IO) {
         val req = pending ?: return@withContext OAuthLinkResult.Failed("درخواست ورود فعالی وجود ندارد.")
         pending = null

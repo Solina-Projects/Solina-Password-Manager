@@ -30,17 +30,17 @@ data class DecodedBackup(
 )
 
 /**
- * بکاپ رمزشده (SLNB v1). با «رمز بکاپ» جداگانه محافظت می‌شود (Argon2id ← HKDF ← AES-256-GCM)،
+ * بکاپ رمزشده (RFGB v1). با «رمز بکاپ» جداگانه محافظت می‌شود (Argon2id ← HKDF ← AES-256-GCM)،
  * نه با کلید خزانه، تا بتوان آن را روی دستگاه دیگر هم باز کرد. هدر در AAD است و دست‌کاری آن شناسایی می‌شود.
  *
- * چیدمان: "SLNB"(4) | نسخه(1) | حافظه KiB(4) | تکرار(4) | موازی(4) | salt(16) | AES-GCM(JSON)
+ * چیدمان: "RFGB"(4) | نسخه(1) | حافظه KiB(4) | تکرار(4) | موازی(4) | salt(16) | AES-GCM(JSON)
  */
 object Backup {
-    private val MAGIC = "SLNB".toByteArray(Charsets.US_ASCII)
+    private val MAGIC = "RFGB".toByteArray(Charsets.US_ASCII)
     private const val VERSION: Byte = 1
     private const val SALT_SIZE = 16
     private const val HEADER_SIZE = 4 + 1 + 12 + SALT_SIZE
-    private val INFO = "solina/backup/v1".toByteArray(Charsets.US_ASCII)
+    private val INFO = "refuge/backup/v1".toByteArray(Charsets.US_ASCII)
 
     private fun key(password: CharArray, salt: ByteArray, params: KdfParams): ByteArray {
         val pw = VaultCrypto.passwordBytes(password)
@@ -56,7 +56,7 @@ object Backup {
         }
     }
 
-    /** آیا بایت‌ها با سرآیند رسمی بکاپ Refuge («SLNB») شروع می‌شوند؟ */
+    /** آیا بایت‌ها با سرآیند رسمی بکاپ Refuge («RFGB») شروع می‌شوند؟ */
     fun isRefugeBackup(bytes: ByteArray): Boolean =
         bytes.size >= MAGIC.size && bytes.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)
 
@@ -90,7 +90,7 @@ object Backup {
         vaultHeader: ByteArray? = null,
     ): ByteArray {
         val json = JSONObject().apply {
-            put("format", "solina-backup")
+            put("format", "refuge-backup")
             put("version", 1)
             put("exportedAt", now)
             if (vaultHeader != null && vaultHeader.isNotEmpty()) {
@@ -139,7 +139,7 @@ object Backup {
         }
         try {
             val root = JSONObject(String(plain, Charsets.UTF_8))
-            if (root.optString("format") != "solina-backup") throw BackupFormatException("محتوای بکاپ ناشناخته است.")
+            if (root.optString("format") != "refuge-backup") throw BackupFormatException("محتوای بکاپ ناشناخته است.")
             val arr = root.getJSONArray("items")
             val items = (0 until arr.length()).map {
                 ItemPayload.fromBytes(arr.getJSONObject(it).toString().toByteArray(Charsets.UTF_8))
