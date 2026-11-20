@@ -12,6 +12,7 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.nio.ByteBuffer
+import java.util.Base64
 
 class BackupFormatException(message: String) : Exception(message)
 
@@ -20,6 +21,12 @@ data class BackupHeaderInfo(
     val version: Int,
     val kdf: KdfParams,
     val totalBytes: Int,
+)
+
+/** نتیجهٔ کامل رمزگشایی بکاپ شامل ورودی‌ها و در صورت وجود، هدر اصلی خزانه (رمز اصلی و ۲۴ کلمهٔ قبلی). */
+data class DecodedBackup(
+    val items: List<ItemPayload>,
+    val vaultHeader: ByteArray?,
 )
 
 /**
@@ -75,11 +82,20 @@ object Backup {
         return BackupHeaderInfo(version = bytes[4].toInt() and 0xff, kdf = params, totalBytes = bytes.size)
     }
 
-    fun encode(items: List<ItemPayload>, password: CharArray, now: Long, params: KdfParams = KdfParams.DEFAULT): ByteArray {
+    fun encode(
+        items: List<ItemPayload>,
+        password: CharArray,
+        now: Long,
+        params: KdfParams = KdfParams.DEFAULT,
+        vaultHeader: ByteArray? = null,
+    ): ByteArray {
         val json = JSONObject().apply {
             put("format", "solina-backup")
             put("version", 1)
             put("exportedAt", now)
+            if (vaultHeader != null && vaultHeader.isNotEmpty()) {
+                put("vaultHeader", Base64.getEncoder().encodeToString(vaultHeader))
+            }
             put("items", JSONArray().also { arr -> items.forEach { arr.put(JSONObject(String(it.toBytes(), Charsets.UTF_8))) } })
         }.toString().toByteArray(Charsets.UTF_8)
         val salt = randomBytes(SALT_SIZE)
@@ -101,16 +117,17 @@ object Backup {
         password: CharArray,
         now: Long,
         params: KdfParams = KdfParams.DEFAULT,
+        vaultHeader: ByteArray? = null,
     ): ByteArray {
         val otpItems = items.filter { it.totpSecret.isNotBlank() }
         if (otpItems.isEmpty()) {
             throw BackupFormatException("هیچ حساب Authenticator (کد TOTP/HOTP) برای بکاپ وجود ندارد.")
         }
-        return encode(otpItems, password, now, params)
+        return encode(otpItems, password, now, params, vaultHeader)
     }
 
-    /** @throws BackupFormatException فایل بکاپ سولینا نیست یا ناقص است؛ @throws AuthenticationFailedException رمز اشتباه یا فایل دست‌کاری‌شده. */
-    fun decode(bytes: ByteArray, password: CharArray): List<ItemPayload> {
+    /** رمزگشایی کامل بکاپ (ورودی‌ها + هدر اصلی خزانه در صورت وجود). */
+    fun decodeFull(bytes: ByteArray, password: CharArray): DecodedBackup {
         val info = inspect(bytes)
         val header = bytes.copyOfRange(0, HEADER_SIZE)
         val salt = bytes.copyOfRange(HEADER_SIZE - SALT_SIZE, HEADER_SIZE)
@@ -124,11 +141,19 @@ object Backup {
             val root = JSONObject(String(plain, Charsets.UTF_8))
             if (root.optString("format") != "solina-backup") throw BackupFormatException("محتوای بکاپ ناشناخته است.")
             val arr = root.getJSONArray("items")
-            return (0 until arr.length()).map { ItemPayload.fromBytes(arr.getJSONObject(it).toString().toByteArray(Charsets.UTF_8)) }
+            val items = (0 until arr.length()).map {
+                ItemPayload.fromBytes(arr.getJSONObject(it).toString().toByteArray(Charsets.UTF_8))
+            }
+            val vhB64 = root.optString("vaultHeader", "")
+            val vh = if (vhB64.isNotEmpty()) runCatching { Base64.getDecoder().decode(vhB64) }.getOrNull() else null
+            return DecodedBackup(items = items, vaultHeader = vh)
         } catch (e: JSONException) {
             throw BackupFormatException("محتوای بکاپ خراب است.")
         } finally {
             plain.wipe()
         }
     }
+
+    /** @throws BackupFormatException فایل بکاپ سولینا نیست یا ناقص است؛ @throws AuthenticationFailedException رمز اشتباه یا فایل دست‌کاری‌شده. */
+    fun decode(bytes: ByteArray, password: CharArray): List<ItemPayload> = decodeFull(bytes, password).items
 }

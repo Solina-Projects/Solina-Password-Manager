@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +47,7 @@ import app.solina.passwordmanager.core.fa
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.Mono
 import app.solina.passwordmanager.ui.components.SIcon
+import app.solina.passwordmanager.ui.components.copySensitive
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 
@@ -364,10 +366,12 @@ fun CreatePasswordScreen(busy: Boolean, restoreCount: Int = 0, onSubmit: (CharAr
 @Composable
 fun RecoveryWordsScreen(words: List<String>, onNext: () -> Unit) {
     val c = Solina.colors
+    val ctx = LocalContext.current
+    var copied by remember { mutableStateOf(false) }
     Page {
         Heading(
-            "عبارت بازیابی شما",
-            "این ۲۴ کلمه را به ترتیب روی کاغذ بنویسید و در جای امن نگه دارید. برای جلوگیری از نشت در تاریخچهٔ کلیپ‌بورد و کیبوردها، امکان کپی و اسکرین‌شات در این صفحه غیرفعال است.",
+            "عبارت بازیابی ۲۴ کلمه‌ای شما",
+            "این ۲۴ کلمه را با دکمهٔ زیر کپی کنید و در جای امن ذخیره نمایید یا روی کاغذ بنویسید. این عبارت تنها راه بازیابی خزانه در صورت فراموشی رمز اصلی است.",
         )
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(c.container).padding(14.dp),
@@ -384,11 +388,105 @@ fun RecoveryWordsScreen(words: List<String>, onNext: () -> Unit) {
                 }
             }
         }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .clip(RoundedCornerShape(26.dp))
+                .background(c.primaryContainer)
+                .clickable(role = Role.Button) {
+                    copySensitive(ctx, "recovery-words", words.joinToString(" "), 120_000L)
+                    copied = true
+                },
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SIcon(if (copied) SolinaIcons.Check else SolinaIcons.Copy, c.onPrimaryContainer, 20.dp)
+            Text(
+                if (copied) "۲۴ کلمه کپی شد (تا ۲ دقیقه در کلیپ‌بورد می‌ماند)" else "کپی ۲۴ کلمه",
+                color = c.onPrimaryContainer,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
         Notice(
-            "هر کس این ۲۴ کلمه را داشته باشد می‌تواند خزانهٔ شما را باز کند. آن‌ها را فقط روی کاغذ یادداشت کنید و هرگز در پیام‌رسان، ایمیل، گالری یا یادداشت معمولی ذخیره نکنید.",
+            "هر کس این ۲۴ کلمه را داشته باشد می‌تواند خزانهٔ شما را باز کند؛ پس از پیست کردن در محل امن (مثل یادداشت رمزشده یا حافظهٔ آفلاین)، مراقب امنیت آن باشید.",
             error = true,
         )
         PrimaryButton("ذخیره کردم، ادامه", onClick = onNext)
+    }
+}
+
+@Composable
+fun LegacyBackupRestoreScreen(
+    itemCount: Int,
+    busy: Boolean,
+    message: String?,
+    onRestoreWithExistingWords: (phrase: String, customPassword: CharArray?) -> Unit,
+    onQuickRestoreWithBackupPassword: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val c = Solina.colors
+    var phrase by remember { mutableStateOf("") }
+    var useSamePassword by remember { mutableStateOf(true) }
+    var customPass by remember { mutableStateOf("") }
+    val canUseWords = phrase.trim().isNotEmpty() && (useSamePassword || customPass.length >= MIN_MASTER_LENGTH)
+
+    Page {
+        Heading(
+            "تکمیل بازیابی بکاپ (${itemCount.fa()} ورودی)",
+            "این فایل بکاپ مربوط به نسخهٔ قبلی است و هدر ۲۴ کلمه را داخل خود ندارد. اگر ۲۴ کلمهٔ قبلی خود را دارید وارد کنید تا دقیقاً همان ۲۴ کلمه و رمز قبلی شما حفظ شود.",
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("عبارت بازیابی ۲۴ کلمه‌ای قبلی شما", color = c.muted, fontSize = 13.sp)
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.container).padding(16.dp)) {
+                BasicTextField(
+                    value = phrase,
+                    onValueChange = { phrase = it },
+                    textStyle = TextStyle(color = c.text, fontSize = 15.sp, fontFamily = Mono, textAlign = TextAlign.Left, lineHeight = 24.sp),
+                    cursorBrush = SolidColor(c.primary),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                )
+            }
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(c.surface)
+                .clickable(role = Role.Checkbox) { useSamePassword = !useSamePassword }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                Modifier
+                    .size(22.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (useSamePassword) c.primary else c.container),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (useSamePassword) SIcon(SolinaIcons.Check, c.onPrimary, 14.dp)
+            }
+            Text("از همان رمز فایل بکاپ به‌عنوان رمز اصلی خزانه استفاده شود", color = c.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        }
+        if (!useSamePassword) {
+            SecretField("رمز اصلی قبلی شما (حداقل ۱۰ نویسه)", customPass, { customPass = it })
+        }
+        if (message != null) Notice(message, error = true)
+        PrimaryButton(
+            text = if (busy) "در حال بازیابی خزانه…" else "بازیابی با حفظ ۲۴ کلمهٔ قبلی",
+            enabled = canUseWords && !busy,
+        ) {
+            val pw = if (useSamePassword) null else customPass.toCharArray()
+            onRestoreWithExistingWords(phrase, pw)
+        }
+        SecondaryButton(
+            text = if (busy) "لطفاً صبر کنید…" else "۲۴ کلمهٔ قبلی را ندارم (ورود سریع با همین رمز بکاپ)",
+            onClick = { if (!busy) onQuickRestoreWithBackupPassword() },
+        )
+        TextLink("انصراف و بازگشت", onCancel)
     }
 }
 

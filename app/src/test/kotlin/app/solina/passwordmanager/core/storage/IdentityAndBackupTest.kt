@@ -3,7 +3,10 @@ package app.solina.passwordmanager.core.storage
 import app.solina.passwordmanager.core.OtpType
 import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.backup.BackupFormatException
+import app.solina.passwordmanager.core.crypto.InvalidRecoveryPhraseException
 import app.solina.passwordmanager.core.crypto.KdfParams
+import app.solina.passwordmanager.core.crypto.VaultCrypto
+import app.solina.passwordmanager.core.crypto.VaultHeader
 import app.solina.passwordmanager.core.crypto.randomBytes
 import app.solina.passwordmanager.core.security.VaultSession
 import kotlinx.coroutines.runBlocking
@@ -108,6 +111,44 @@ class IdentityAndBackupTest {
         }
         assertThrows(BackupFormatException::class.java) {
             Backup.inspect("not-a-solina-backup".toByteArray())
+        }
+    }
+
+    @Test fun backupPreservesOriginalVaultHeaderMasterPasswordAnd24Words() {
+        val originalPw = "MyOriginalMaster#2026".toCharArray()
+        val created = VaultCrypto.create(originalPw, fastKdf)
+        val originalPhrase = created.recoveryWords.joinToString(" ")
+        val items = listOf(ItemPayload(kind = ItemKind.Login, title = "Mail", username = "a@b.c", password = "p1"))
+
+        val blob = Backup.encode(
+            items = items,
+            password = "DifferentBackupPw#99".toCharArray(),
+            now = 1700000000L,
+            params = fastKdf,
+            vaultHeader = created.header.encode(),
+        )
+        val decoded = Backup.decodeFull(blob, "DifferentBackupPw#99".toCharArray())
+        assertEquals(1, decoded.items.size)
+        val restoredHeader = VaultHeader.decode(decoded.vaultHeader!!)
+
+        // Exact original master password AND exact original 24 words unlock the restored header!
+        val vkByPw = VaultCrypto.unlockWithPassword(restoredHeader, "MyOriginalMaster#2026".toCharArray())
+        val vkByWords = VaultCrypto.unlockWithRecovery(restoredHeader, originalPhrase)
+        assertTrue(vkByPw.contentEquals(created.vaultKey))
+        assertTrue(vkByWords.contentEquals(created.vaultKey))
+    }
+
+    @Test fun createWithExistingRecoveryPreservesExact24Words() {
+        val original = VaultCrypto.create("InitialPass#1234".toCharArray(), fastKdf)
+        val phrase = original.recoveryWords.joinToString(" ")
+
+        val recreated = VaultCrypto.createWithExistingRecovery("InitialPass#1234".toCharArray(), phrase, fastKdf)
+        assertEquals(original.recoveryWords, recreated.recoveryWords)
+        val vkByWords = VaultCrypto.unlockWithRecovery(recreated.header, phrase)
+        assertTrue(vkByWords.contentEquals(recreated.vaultKey))
+
+        assertThrows(InvalidRecoveryPhraseException::class.java) {
+            VaultCrypto.createWithExistingRecovery("InitialPass#1234".toCharArray(), "invalid words here", fastKdf)
         }
     }
 }

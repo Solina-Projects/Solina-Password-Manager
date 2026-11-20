@@ -56,7 +56,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
 import app.solina.passwordmanager.auth.OAuthLinkResult
 import app.solina.passwordmanager.core.crypto.AuthenticationFailedException
+import app.solina.passwordmanager.core.crypto.CorruptVaultException
 import app.solina.passwordmanager.core.crypto.CreatedVault
+import app.solina.passwordmanager.core.crypto.InvalidRecoveryPhraseException
+import app.solina.passwordmanager.core.crypto.VaultCrypto
+import app.solina.passwordmanager.core.crypto.VaultHeader
 import app.solina.passwordmanager.core.security.KdfCalibrator
 import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.backup.BackupFormatException
@@ -95,6 +99,7 @@ import app.solina.passwordmanager.ui.screens.SettingsScreen
 import app.solina.passwordmanager.ui.screens.VaultScreen
 import app.solina.passwordmanager.ui.screens.VaultUnlockScreen
 import app.solina.passwordmanager.ui.screens.WebDavSetupScreen
+import app.solina.passwordmanager.ui.screens.LegacyBackupRestoreScreen
 import app.solina.passwordmanager.ui.screens.WelcomeRestoreBackupScreen
 import app.solina.passwordmanager.ui.screens.WelcomeScreen
 import app.solina.passwordmanager.ui.theme.Solina
@@ -409,6 +414,11 @@ private fun Root(
     var welcomeRestoreBusy by remember { mutableStateOf(false) }
     var welcomeRestoreMsg by remember { mutableStateOf<String?>(null) }
     var pendingRestoredPayloads by remember { mutableStateOf<List<ItemPayload>>(emptyList()) }
+    var stagedBackupHeader by remember { mutableStateOf<VaultHeader?>(null) }
+    var stagedBackupRecoveryMode by remember { mutableStateOf(false) }
+    var legacyBackupPw by remember { mutableStateOf<CharArray?>(null) }
+    var legacyBackupBusy by remember { mutableStateOf(false) }
+    var legacyBackupMsg by remember { mutableStateOf<String?>(null) }
 
     fun launchWelcomeRestoreFile() {
         joinMessage = null
@@ -514,6 +524,142 @@ private fun Root(
             )
         }
 
+        !hasVault && stagedBackupHeader != null -> {
+            val header = stagedBackupHeader!!
+            if (!stagedBackupRecoveryMode) {
+                VaultUnlockScreen(
+                    biometricReady = false,
+                    message = message,
+                    busy = busy,
+                    subtitle = "فایل بکاپ باز شد (${pendingRestoredPayloads.size.fa()} ورودی). برای حفظ رمز و ۲۴ کلمهٔ قبلی، رمز اصلی خزانهٔ قبلی را وارد کنید.",
+                    onPassword = { masterPw ->
+                        busy = true
+                        message = null
+                        scope.launch {
+                            val vk = withContext(Dispatchers.Default) {
+                                runCatching { VaultCrypto.unlockWithPassword(header, masterPw) }.getOrNull()
+                            }
+                            masterPw.fill('\u0000')
+                            if (vk != null) {
+                                val toImport = pendingRestoredPayloads
+                                auth.restoreExistingVault(header, vk)
+                                stagedBackupHeader = null
+                                pendingRestoredPayloads = emptyList()
+                                hasVault = true
+                                runCatching { container.repository.importItems(toImport) }
+                                busy = false
+                            } else {
+                                busy = false
+                                message = "رمز اصلی با خزانهٔ قبلی مطابقت ندارد. می‌توانید با ۲۴ کلمهٔ قبلی نیز باز کنید."
+                            }
+                        }
+                    },
+                    onBiometric = {},
+                    onForgot = { message = null; stagedBackupRecoveryMode = true },
+                    onCancel = {
+                        stagedBackupHeader = null
+                        stagedBackupRecoveryMode = false
+                        pendingRestoredPayloads = emptyList()
+                        message = null
+                    },
+                )
+            } else {
+                RecoveryEntryScreen(
+                    message = message,
+                    busy = busy,
+                    onSubmit = { phrase ->
+                        busy = true
+                        message = null
+                        scope.launch {
+                            val res = withContext(Dispatchers.Default) {
+                                try {
+                                    Result.success(VaultCrypto.unlockWithRecovery(header, phrase))
+                                } catch (e: InvalidRecoveryPhraseException) {
+                                    Result.failure(e)
+                                } catch (e: AuthenticationFailedException) {
+                                    Result.failure(e)
+                                }
+                            }
+                            val vk = res.getOrNull()
+                            if (vk != null) {
+                                val toImport = pendingRestoredPayloads
+                                auth.restoreExistingVault(header, vk)
+                                stagedBackupHeader = null
+                                stagedBackupRecoveryMode = false
+                                pendingRestoredPayloads = emptyList()
+                                mustReset = true
+                                hasVault = true
+                                runCatching { container.repository.importItems(toImport) }
+                                busy = false
+                            } else {
+                                busy = false
+                                message = if (res.exceptionOrNull() is InvalidRecoveryPhraseException) {
+                                    "عبارت بازیابی معتبر نیست. تعداد کلمات و املای آن‌ها را بررسی کنید."
+                                } else {
+                                    "این ۲۴ کلمه با خزانهٔ این بکاپ مطابقت ندارد."
+                                }
+                            }
+                        }
+                    },
+                    onBack = { message = null; stagedBackupRecoveryMode = false },
+                )
+            }
+        }
+
+        !hasVault && legacyBackupPw != null -> {
+            BackHandler {
+                legacyBackupPw?.fill('\u0000')
+                legacyBackupPw = null
+                pendingRestoredPayloads = emptyList()
+                legacyBackupMsg = null
+            }
+            LegacyBackupRestoreScreen(
+                itemCount = pendingRestoredPayloads.size,
+                busy = legacyBackupBusy,
+                message = legacyBackupMsg,
+                onRestoreWithExistingWords = { phrase, customPw ->
+                    val usePw = customPw ?: legacyBackupPw?.copyOf() ?: return@LegacyBackupRestoreScreen
+                    legacyBackupBusy = true
+                    legacyBackupMsg = null
+                    scope.launch {
+                        val res = auth.createWithExistingRecovery(usePw, phrase)
+                        usePw.fill('\u0000')
+                        if (res == UnlockResult.Success) {
+                            val toImport = pendingRestoredPayloads
+                            legacyBackupPw?.fill('\u0000')
+                            legacyBackupPw = null
+                            pendingRestoredPayloads = emptyList()
+                            hasVault = true
+                            runCatching { container.repository.importItems(toImport) }
+                            legacyBackupBusy = false
+                        } else {
+                            legacyBackupBusy = false
+                            legacyBackupMsg = "عبارت بازیابی ۲۴ کلمه‌ای معتبر نیست. املای کلمات انگلیسی و ترتیب آن‌ها را بررسی کنید."
+                        }
+                    }
+                },
+                onQuickRestoreWithBackupPassword = {
+                    val usePw = legacyBackupPw?.copyOf() ?: return@LegacyBackupRestoreScreen
+                    legacyBackupBusy = true
+                    legacyBackupMsg = null
+                    scope.launch {
+                        created = auth.create(usePw)
+                        usePw.fill('\u0000')
+                        legacyBackupPw?.fill('\u0000')
+                        legacyBackupPw = null
+                        legacyBackupBusy = false
+                        stage = Stage.ShowWords
+                    }
+                },
+                onCancel = {
+                    legacyBackupPw?.fill('\u0000')
+                    legacyBackupPw = null
+                    pendingRestoredPayloads = emptyList()
+                    legacyBackupMsg = null
+                },
+            )
+        }
+
         !hasVault && welcomeRestoreBytes != null && welcomeRestoreInfo != null -> {
             BackHandler {
                 welcomeRestoreBytes?.fill(0)
@@ -532,16 +678,41 @@ private fun Root(
                     welcomeRestoreMsg = null
                     scope.launch {
                         try {
-                            val payloads = withContext(Dispatchers.Default) { Backup.decode(bytes, pw) }
+                            val decoded = withContext(Dispatchers.Default) { Backup.decodeFull(bytes, pw) }
                             bytes.fill(0)
                             welcomeRestoreBytes = null
                             welcomeRestoreInfo = null
-                            pendingRestoredPayloads = payloads
-                            stage = Stage.CreatePassword
+                            val embeddedHeader = decoded.vaultHeader?.let { vhBytes ->
+                                runCatching { VaultHeader.decode(vhBytes) }.getOrNull()
+                            }
+                            if (embeddedHeader != null) {
+                                // ابتدا با همان رمز فایل بکاپ امتحان می‌کنیم: اگر برابر رمز اصلی باشد، مستقیم و در یک مرحله بازیابی می‌شود!
+                                val directVk = withContext(Dispatchers.Default) {
+                                    runCatching { VaultCrypto.unlockWithPassword(embeddedHeader, pw) }.getOrNull()
+                                }
+                                if (directVk != null) {
+                                    auth.restoreExistingVault(embeddedHeader, directVk)
+                                    hasVault = true
+                                    runCatching { container.repository.importItems(decoded.items) }
+                                } else {
+                                    // رمز بکاپ با رمز اصلی فرق داشته: فقط رمز اصلی قبلی (یا ۲۴ کلمهٔ قبلی) را می‌پرسیم، بدون ساخت رمز/کلمات جدید!
+                                    pendingRestoredPayloads = decoded.items
+                                    stagedBackupHeader = embeddedHeader
+                                    stagedBackupRecoveryMode = false
+                                    message = null
+                                }
+                            } else {
+                                // فایل بکاپ قدیمی بدون هدر خزانه: اجازه می‌دهیم ۲۴ کلمهٔ قبلی و همان رمز را حفظ کند (بدون اجبار به ساخت جدید)
+                                pendingRestoredPayloads = decoded.items
+                                legacyBackupPw = pw.copyOf()
+                                legacyBackupMsg = null
+                            }
                         } catch (e: AuthenticationFailedException) {
                             welcomeRestoreMsg = "رمز فایل بکاپ درست نیست یا فایل دست‌کاری شده است."
                         } catch (e: BackupFormatException) {
                             welcomeRestoreMsg = e.message ?: "ساختار بکاپ معتبر نیست."
+                        } catch (e: CorruptVaultException) {
+                            welcomeRestoreMsg = "هدر خزانه درون فایل بکاپ آسیب دیده است."
                         } catch (e: Exception) {
                             DiagLog.logError("RESTORE", e, "welcomeRestoreDecode")
                             welcomeRestoreMsg = "بازگشایی فایل بکاپ ناموفق بود."
@@ -1150,7 +1321,8 @@ private fun MainApp(
                             scope.launch {
                                 try {
                                     val payloads = items.map { it.payload }
-                                    val bytes = withContext(Dispatchers.Default) { Backup.encode(payloads, pw, System.currentTimeMillis(), KdfCalibrator.pickOnDevice()) }
+                                    val vh = runCatching { container.files.readHeader().encode() }.getOrNull()
+                                    val bytes = withContext(Dispatchers.Default) { Backup.encode(payloads, pw, System.currentTimeMillis(), KdfCalibrator.pickOnDevice(), vh) }
                                     pw.fill('\u0000')
                                     pendingExport = bytes
                                     val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
@@ -1169,7 +1341,7 @@ private fun MainApp(
                                 try {
                                     val payloads = items.map { it.payload }
                                     val bytes = withContext(Dispatchers.Default) {
-                                        Backup.encodeAuthenticatorOnly(payloads, pw, System.currentTimeMillis(), KdfCalibrator.pickOnDevice())
+                                        Backup.encodeAuthenticatorOnly(payloads, pw, System.currentTimeMillis(), KdfCalibrator.pickOnDevice(), runCatching { container.files.readHeader().encode() }.getOrNull())
                                     }
                                     pw.fill('\u0000')
                                     pendingExport = bytes

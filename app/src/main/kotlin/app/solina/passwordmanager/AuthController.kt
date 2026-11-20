@@ -78,6 +78,27 @@ class AuthController(
         session.unlock(created.vaultKey)
     }
 
+    /** بازیابی مستقیم هدر و کلید خزانهٔ قبلی (با حفظ دقیق رمز اصلی و ۲۴ کلمهٔ قبلی کاربر). */
+    fun restoreExistingVault(header: app.solina.passwordmanager.core.crypto.VaultHeader, vaultKey: ByteArray) {
+        files.writeHeader(header)
+        recordSuccess()
+        session.unlock(vaultKey)
+    }
+
+    /** بازیابی بکاپ قدیمی با حفظ عبارت بازیابی ۲۴ کلمه‌ای قبلی و رمز اصلی کاربر. */
+    suspend fun createWithExistingRecovery(password: CharArray, phrase: String): UnlockResult =
+        withContext(Dispatchers.Default) {
+            try {
+                val created = VaultCrypto.createWithExistingRecovery(password, phrase, KdfCalibrator.pickOnDevice())
+                files.writeHeader(created.header)
+                recordSuccess()
+                session.unlock(created.vaultKey)
+                UnlockResult.Success
+            } catch (e: InvalidRecoveryPhraseException) {
+                UnlockResult.InvalidPhrase
+            }
+        }
+
     suspend fun unlockWithPassword(password: CharArray): UnlockResult = withContext(Dispatchers.Default) {
         val wait = remainingWaitMillis()
         if (wait > 0) return@withContext UnlockResult.Wait(wait)

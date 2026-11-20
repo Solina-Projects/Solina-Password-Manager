@@ -163,6 +163,35 @@ object VaultCrypto {
         }
     }
 
+    /**
+     * ساخت هدر خزانه با حفظ دقیق عبارت بازیابی ۲۴ کلمه‌ای قبلی کاربر (برای بازیابی بکاپ‌های قدیمی بدون vaultHeader).
+     * @throws InvalidRecoveryPhraseException اگر عبارت ۲۴ کلمه‌ای معتبر نباشد.
+     */
+    fun createWithExistingRecovery(
+        password: CharArray,
+        phrase: String,
+        kdf: KdfParams = KdfParams.DEFAULT,
+    ): CreatedVault {
+        val entropy = Bip39.wordsToEntropy(phrase)
+        val vk = randomBytes(Aead.KEY_SIZE)
+        val salt = randomBytes(VaultHeader.SALT_SIZE)
+        val version = VaultHeader.CURRENT_VERSION
+        val kekPw = passwordKek(password, salt, kdf)
+        val kekRec = recoveryKek(entropy)
+        try {
+            val header = VaultHeader(
+                version, kdf, salt,
+                wrappedVkByPassword = Aead.seal(kekPw, vk, VaultHeader.aadForPassword(version, kdf, salt)),
+                wrappedVkByRecovery = Aead.seal(kekRec, vk, VaultHeader.aadForRecovery(version)),
+            )
+            return CreatedVault(header, vk, Bip39.entropyToWords(entropy))
+        } finally {
+            kekPw.wipe()
+            kekRec.wipe()
+            entropy.wipe()
+        }
+    }
+
     fun unlockWithPassword(header: VaultHeader, password: CharArray): ByteArray {
         val kek = passwordKek(password, header.salt, header.kdf)
         try {
