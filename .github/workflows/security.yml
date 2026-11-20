@@ -66,4 +66,4 @@ jobs:
         with:
           gradle-version: '8.10.2'
       - name: Run Security Guard & Fuzz Suites
-        run: gradle :app:testDebugUnitTest --tests "app.solina.passwordmanager.hardening.*" --tests "app.solina.passwordmanager.autofill.*" --tests "app.solina.passwordmanager.core.sync.*" --stacktrace
+        run: gradle :app:testDebugUnitTest --tests "app.solina.refuge.hardening.*" --tests "app.solina.refuge.autofill.*" --tests "app.solina.refuge.core.sync.*" --stacktrace
