@@ -238,7 +238,8 @@ object Importers {
         val out = ArrayList<ItemPayload>()
         var skipped = 0
         for (i in 0 until a.length()) {
-            val e = a.optJSONObject(i) ?: run { skipped++; continue }
+            val e = a.optJSONObject(i)
+            if (e == null) { skipped++; continue }
             val typeStr = e.str("type", "TOTP").uppercase()
             val otpType = when (typeStr) {
                 "TOTP" -> OtpType.TOTP
@@ -334,7 +335,8 @@ object Importers {
         val out = ArrayList<ItemPayload>()
         var skipped = 0
         for (i in 0 until a.length()) {
-            val e = a.optJSONObject(i) ?: run { skipped++; continue }
+            val e = a.optJSONObject(i)
+            if (e == null) { skipped++; continue }
             val kind = e.str("kind", "TOTP").uppercase()
             val otpType = when (kind) {
                 "TOTP" -> OtpType.TOTP
@@ -501,7 +503,8 @@ object Importers {
         val out = ArrayList<ItemPayload>()
         var skipped = 0
         for (i in 0 until arr.length()) {
-            val e = arr.optJSONObject(i) ?: run { skipped++; continue }
+            val e = arr.optJSONObject(i)
+            if (e == null) { skipped++; continue }
             val otp = e.optJSONObject("otp")
             val type = otp?.str("tokenType", "TOTP")?.ifEmpty { "TOTP" } ?: "TOTP"
             val otpType = when (type.uppercase()) {
@@ -695,7 +698,8 @@ object Importers {
         val out = ArrayList<ItemPayload>()
         var skipped = 0
         for (i in 0 until arr.length()) {
-            val it = arr.optJSONObject(i) ?: run { skipped++; continue }
+            val it = arr.optJSONObject(i)
+            if (it == null) { skipped++; continue }
             val name = it.str("name")
             val notes = it.str("notes")
             val fav = it.optBoolean("favorite")
@@ -951,7 +955,8 @@ object Importers {
         val out = ArrayList<ItemPayload>()
         var skipped = 0
         for (i in 0 until entries.length()) {
-            val e = entries.optJSONObject(i) ?: run { skipped++; continue }
+            val e = entries.optJSONObject(i)
+            if (e == null) { skipped++; continue }
             val info = e.optJSONObject("info")
             val otpType = when (e.str("type").lowercase()) {
                 "totp" -> OtpType.TOTP
