@@ -1454,6 +1454,8 @@ fun SettingsScreen(
     onDisablePin: () -> Unit = {},
     autofillEnabled: Boolean,
     onEnableAutofill: () -> Unit,
+    autosaveEnabled: Boolean = true,
+    onSetAutosaveEnabled: (Boolean) -> Unit = {},
     notifSupported: Boolean,
     notifGranted: Boolean,
     onRequestNotifPermission: () -> Unit,
@@ -1532,6 +1534,21 @@ fun SettingsScreen(
                         )
                     }
                     Pill(if (autofillEnabled) "فعال" else "فعال‌سازی", if (autofillEnabled) c.primaryContainer else c.secondaryContainer, if (autofillEnabled) c.onPrimaryContainer else c.onSecondaryContainer)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(str.autosaveTitle, color = c.text, fontSize = 15.sp)
+                        Text(str.autosaveSub, color = c.muted, fontSize = 12.sp, lineHeight = 18.sp)
+                    }
+                    Switch(
+                        checked = autosaveEnabled,
+                        onCheckedChange = onSetAutosaveEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = c.onPrimary, checkedTrackColor = c.primary,
+                            uncheckedThumbColor = c.outline, uncheckedTrackColor = c.container, uncheckedBorderColor = c.outline,
+                        ),
+                    )
                 }
                 if (notifSupported) {
                     Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))

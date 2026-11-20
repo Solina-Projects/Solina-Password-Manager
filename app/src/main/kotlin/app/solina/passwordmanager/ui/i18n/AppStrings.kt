@@ -80,6 +80,8 @@ data class AppStrings(
     val passkeyNeedWebsite: String,
     val passkeyCancelled: String,
     val passkeyFailed: String,
+    val autosaveTitle: String,
+    val autosaveSub: String,
 )
 
 val PersianStrings = AppStrings(
@@ -157,6 +159,8 @@ val PersianStrings = AppStrings(
     passkeyNeedWebsite = "اول نشانی سایت را در این ورودی ثبت کنید",
     passkeyCancelled = "ساخت Passkey لغو شد",
     passkeyFailed = "ساخت Passkey ناموفق بود",
+    autosaveTitle = "پیشنهاد ذخیرهٔ رمز جدید",
+    autosaveSub = "وقتی در برنامه یا سایتی رمز تازه وارد می‌کنید، سیستم پیشنهاد ذخیره در Solina را نشان می‌دهد. خاموش که باشد، هیچ‌وقت پیشنهاد نمی‌شود.",
 )
 
 val EnglishStrings = AppStrings(
@@ -234,6 +238,8 @@ val EnglishStrings = AppStrings(
     passkeyNeedWebsite = "Add the website to this item first",
     passkeyCancelled = "Passkey creation cancelled",
     passkeyFailed = "Passkey creation failed",
+    autosaveTitle = "Offer to save new passwords",
+    autosaveSub = "When you enter a new password in an app or site, the system offers to save it in Solina. When off, it never asks.",
 )
 
 fun stringsFor(lang: AppLanguage): AppStrings = when (lang) {

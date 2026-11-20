@@ -953,6 +953,7 @@ private fun MainApp(
     val themeMode by container.securityPrefs.themeMode.collectAsState()
     val language by container.securityPrefs.language.collectAsState()
     val pinEnabled by container.pinUnlock.pinEnabled.collectAsState()
+    val autosaveEnabled by container.securityPrefs.autosaveEnabled.collectAsState()
     var editing by remember { mutableStateOf(false) }
     var generator by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
@@ -1755,6 +1756,8 @@ private fun MainApp(
                                     toast = "این دستگاه تنظیم Autofill را پشتیبانی نمی‌کند"
                                 }
                             },
+                            autosaveEnabled = autosaveEnabled,
+                            onSetAutosaveEnabled = { container.securityPrefs.setAutosaveEnabled(it) },
                             onLock = { container.session.lock() },
                         )
                     }

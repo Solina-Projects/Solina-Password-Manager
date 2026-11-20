@@ -67,6 +67,10 @@ class SecurityPrefs(context: Context) {
     private val _language = MutableStateFlow(AppLanguage.parse(prefs.getString("language", null)))
     val language: StateFlow<AppLanguage> = _language.asStateFlow()
 
+    /** پیشنهاد ذخیرهٔ رمز جدید (SaveInfo سیستم)؛ خاموش که باشد هیچ‌وقت پیشنهاد نمی‌شود. */
+    private val _autosaveEnabled = MutableStateFlow(prefs.getBoolean("autosave_enabled", true))
+    val autosaveEnabled: StateFlow<Boolean> = _autosaveEnabled.asStateFlow()
+
     fun autoLockMillis(): Long = _autoLock.value.millis
     fun clipboardClearMillis(): Long = _clipboardClear.value.millis
 
@@ -90,11 +94,17 @@ class SecurityPrefs(context: Context) {
         _language.value = lang
     }
 
+    fun setAutosaveEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("autosave_enabled", enabled).apply()
+        _autosaveEnabled.value = enabled
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
         _autoLock.value = AutoLockOption.OneMinute
         _clipboardClear.value = ClipboardClearOption.ThirtySeconds
         _themeMode.value = ThemeMode.System
         _language.value = AppLanguage.FA
+        _autosaveEnabled.value = true
     }
 }

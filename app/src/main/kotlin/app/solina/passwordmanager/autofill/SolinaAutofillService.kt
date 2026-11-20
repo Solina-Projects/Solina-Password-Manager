@@ -34,22 +34,25 @@ class SolinaAutofillService : AutofillService() {
             return
         }
         container.session.enforceTimeout(container.securityPrefs.autoLockMillis())
+        // پیشنهاد ذخیره (SaveInfo) فقط وقتی کاربر آن را خاموش نکرده باشد؛ در غیر این صورت
+        // سیستم هیچ‌وقت پنجرهٔ «ذخیرهٔ رمز» را نشان نمی‌دهد.
+        val includeSaveInfo = container.securityPrefs.autosaveEnabled.value
         val response = if (container.session.unlocked.value) {
             val matches = AutofillMatcher.match(container.repository.items.value, parsed.webHost, parsed.packageName)
             if (parsed.usernameId != null) {
                 // مرحلهٔ اول (نام کاربری): بهترین تطابق را برای مرحلهٔ رمز نگه می‌دارد.
                 matches.firstOrNull()?.let { multiStepMemory.remember(it, parsed.webHost, parsed.packageName) }
-                AutofillResponses.datasets(this, container.repository.items.value, parsed)
+                AutofillResponses.datasets(this, container.repository.items.value, parsed, includeSaveInfo = includeSaveInfo)
             } else if (parsed.passwordId != null && matches.isEmpty()) {
                 // مرحلهٔ دوم (فقط رمز): تطابق معمولی چیزی نداد؛ ورودیِ به‌یادماندهٔ همان مبدأ را بده.
                 val remembered = multiStepMemory.recallForPasswordOnly(parsed.webHost, parsed.packageName)
                 if (remembered != null) {
-                    AutofillResponses.datasets(this, container.repository.items.value, parsed, preselected = listOf(remembered))
+                    AutofillResponses.datasets(this, container.repository.items.value, parsed, includeSaveInfo = includeSaveInfo, preselected = listOf(remembered))
                 } else {
-                    AutofillResponses.datasets(this, container.repository.items.value, parsed)
+                    AutofillResponses.datasets(this, container.repository.items.value, parsed, includeSaveInfo = includeSaveInfo)
                 }
             } else {
-                AutofillResponses.datasets(this, container.repository.items.value, parsed)
+                AutofillResponses.datasets(this, container.repository.items.value, parsed, includeSaveInfo = includeSaveInfo)
             }
         } else {
             multiStepMemory.clear()
@@ -66,6 +69,12 @@ class SolinaAutofillService : AutofillService() {
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
         val container = (application as SolinaApplication).container
         container.session.enforceTimeout(container.securityPrefs.autoLockMillis())
+        // دفاع دوم: حتی اگر SaveInfo از قبل در پاسخ بوده باشد، وقتی کاربر پیشنهاد
+        // ذخیره را خاموش کرده، هیچ رمزی ذخیره نمی‌شود.
+        if (!container.securityPrefs.autosaveEnabled.value) {
+            callback.onSuccess()
+            return
+        }
         if (!container.session.unlocked.value) {
             callback.onFailure("برای ذخیرهٔ رمز جدید ابتدا خزانهٔ Solina را باز کنید.")
             return
