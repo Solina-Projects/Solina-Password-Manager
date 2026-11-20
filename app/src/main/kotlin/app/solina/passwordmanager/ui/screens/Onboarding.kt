@@ -43,6 +43,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.backup.BackupHeaderInfo
+import app.solina.passwordmanager.core.security.AppLanguage
+import app.solina.passwordmanager.core.security.AutoLockOption
+import app.solina.passwordmanager.core.security.ListDensity
+import app.solina.passwordmanager.core.security.ThemeMode
 import app.solina.passwordmanager.core.fa
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.Mono
@@ -719,5 +723,162 @@ fun ChangeMasterPasswordScreen(
             confirm = ""
         }
         TextLink("انصراف و بازگشت", onBack)
+    }
+}
+
+// ───────────────────────── آنبوردینگ اولین اجرا (۳ صفحه، فقط نصب تازه) ─────────────────────────
+
+@Composable
+private fun OnboardingOptionRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    val c = Solina.colors
+    Row(
+        Modifier.fillMaxWidth().height(44.dp).clickable(role = Role.RadioButton, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        if (selected) Text("●", color = c.primary, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun PermissionActionButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+    val c = Solina.colors
+    Box(
+        Modifier
+            .height(38.dp)
+            .clip(RoundedCornerShape(19.dp))
+            .background(if (enabled) c.primary else c.container)
+            .then(if (enabled) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(text, color = if (enabled) c.onPrimary else c.muted, fontSize = 13.sp, fontWeight = FontWeight.Medium) }
+}
+
+@Composable
+private fun PermissionRow(title: String, subtitle: String, actionLabel: String, actionEnabled: Boolean, onAction: () -> Unit) {
+    val c = Solina.colors
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(subtitle, color = c.muted, fontSize = 12.sp, lineHeight = 18.sp)
+        }
+        PermissionActionButton(actionLabel, actionEnabled, onAction)
+    }
+}
+
+@Composable
+fun FirstRunOnboarding(
+    themeMode: ThemeMode,
+    onSetThemeMode: (ThemeMode) -> Unit,
+    density: ListDensity,
+    onSetDensity: (ListDensity) -> Unit,
+    autoLock: AutoLockOption,
+    onSetAutoLock: (AutoLockOption) -> Unit,
+    language: AppLanguage,
+    onSetLanguage: (AppLanguage) -> Unit,
+    notifSupported: Boolean,
+    notifGranted: Boolean,
+    onRequestNotifPermission: () -> Unit,
+    onRequestCameraPermission: () -> Unit,
+    onEnableAutofill: () -> Unit,
+    onDone: () -> Unit,
+) {
+    val c = Solina.colors
+    var page by remember { mutableStateOf(0) }
+    var cameraAsked by remember { mutableStateOf(false) }
+    Page {
+        when (page) {
+            0 -> {
+                Spacer(Modifier.height(12.dp))
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        Modifier.size(72.dp).clip(RoundedCornerShape(24.dp)).background(c.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) { SIcon(SolinaIcons.Shield, c.primary, 38.dp) }
+                    Text("Solina", color = c.text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                }
+                Heading(
+                    "به سولینا خوش آمدید",
+                    "مدیریت رمز عبور و کد دومرحله‌ای؛ همه‌چیز آفلاین و رمزگذاری‌شده روی همین دستگاه می‌ماند.",
+                )
+                Text(
+                    "ساخته‌شده توسط Solina-Projects (ناصر سلیمانی) — متن‌باز، GPL-3.0.",
+                    color = c.muted,
+                    fontSize = 13.sp,
+                    lineHeight = 22.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                PrimaryButton("ادامه") { page = 1 }
+            }
+            1 -> {
+                Heading(
+                    "شخصی‌سازی",
+                    "ظاهر برنامه را به سلیقهٔ خودت تنظیم کن؛ همه را بعداً هم می‌توانی از تنظیمات عوض کنی.",
+                )
+                Text("تم", color = c.muted, fontSize = 12.sp)
+                for (option in ThemeMode.entries) {
+                    OnboardingOptionRow(option.labelFa, themeMode == option) { onSetThemeMode(option) }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Text("تراکم فهرست", color = c.muted, fontSize = 12.sp)
+                for (option in ListDensity.entries) {
+                    OnboardingOptionRow(option.labelFa, density == option) { onSetDensity(option) }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Text("زمان قفل خودکار", color = c.muted, fontSize = 12.sp)
+                for (option in AutoLockOption.entries) {
+                    OnboardingOptionRow(option.label, autoLock == option) { onSetAutoLock(option) }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Text("زبان", color = c.muted, fontSize = 12.sp)
+                for (option in AppLanguage.entries) {
+                    OnboardingOptionRow(option.label, language == option) { onSetLanguage(option) }
+                }
+                PrimaryButton("ادامه") { page = 2 }
+                TextLink("بازگشت") { page = 0 }
+            }
+            else -> {
+                Heading(
+                    "مجوزها",
+                    "فقط چیزهایی که برنامه واقعاً لازم دارد؛ هر کدام اختیاری است و رد کردنش مشکلی ایجاد نمی‌کند.",
+                )
+                if (notifSupported) {
+                    PermissionRow(
+                        "اعلان‌ها",
+                        "برای اعلان خطا و یادآوری کارها",
+                        if (notifGranted) "فعال است" else "فعال‌سازی",
+                        !notifGranted,
+                        onRequestNotifPermission,
+                    )
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                }
+                PermissionRow(
+                    "دوربین",
+                    "فقط برای اسکن کد QR — اختیاری",
+                    if (cameraAsked) "درخواست شد" else "فعال‌سازی",
+                    !cameraAsked,
+                    { cameraAsked = true; onRequestCameraPermission() },
+                )
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                PermissionRow(
+                    "پر کردن خودکار",
+                    "برای اینکه Solina رمزها را در مرورگر و اپ‌ها پر کند",
+                    "فعال‌سازی",
+                    true,
+                    onEnableAutofill,
+                )
+                Notice("به فضای ذخیره‌سازی دسترسی لازم نیست — انتخاب فایل و پوشه با انتخاب‌گر سیستم انجام می‌شود.")
+                PrimaryButton("شروع") { onDone() }
+                TextLink("بازگشت") { page = 1 }
+            }
+        }
     }
 }
