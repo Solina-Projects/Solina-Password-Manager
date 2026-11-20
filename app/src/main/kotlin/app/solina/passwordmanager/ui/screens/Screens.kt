@@ -59,6 +59,8 @@ import app.solina.passwordmanager.core.security.AutoLockOption
 import app.solina.passwordmanager.core.security.ClipboardClearOption
 import app.solina.passwordmanager.core.security.ThemeMode
 import app.solina.passwordmanager.core.storage.Flag
+import app.solina.passwordmanager.core.storage.ChangedField
+import app.solina.passwordmanager.core.storage.HistoryDiff
 import app.solina.passwordmanager.core.storage.HistoryEntry
 import app.solina.passwordmanager.core.storage.ItemKind
 import app.solina.passwordmanager.core.storage.ItemPayload
@@ -121,6 +123,28 @@ private fun strengthLevel(pw: String): Int {
         bits >= 40 -> 2
         else -> 1
     }
+}
+
+private fun strengthLabel(level: Int, isFa: Boolean): String = when (level) {
+    4 -> if (isFa) "خیلی قوی" else "Very strong"
+    3 -> if (isFa) "قوی" else "Strong"
+    2 -> if (isFa) "متوسط" else "Medium"
+    else -> if (isFa) "ضعیف" else "Weak"
+}
+
+/** نام نمایشی فیلد تغییرکرده در تفاوت تاریخچه (فقط نام فیلد، هرگز مقدار). */
+private fun changedFieldLabel(field: ChangedField, isFa: Boolean): String = when (field) {
+    ChangedField.Title -> if (isFa) "عنوان" else "Title"
+    ChangedField.Username -> if (isFa) "نام کاربری" else "Username"
+    ChangedField.Password -> if (isFa) "رمز عبور" else "Password"
+    ChangedField.Website -> if (isFa) "وب‌سایت" else "Website"
+    ChangedField.Note -> if (isFa) "یادداشت" else "Note"
+    ChangedField.Category -> if (isFa) "دسته‌بندی" else "Category"
+    ChangedField.Tags -> if (isFa) "برچسب‌ها" else "Tags"
+    ChangedField.Favorite -> if (isFa) "علاقه‌مندی" else "Favorite"
+    ChangedField.Totp -> if (isFa) "کد دوعاملی" else "Two-factor code"
+    ChangedField.Card -> if (isFa) "اطلاعات کارت" else "Card details"
+    ChangedField.Identity -> if (isFa) "اطلاعات هویت" else "Identity details"
 }
 
 @Composable
@@ -950,6 +974,13 @@ fun DetailScreen(
                             Column(Modifier.weight(1f)) {
                                 Text("ویرایش ${h.rev.toInt().fa()} · ${formatJalali(h.payload.editedAt)}", color = c.muted, fontSize = 12.sp)
                                 Text(h.payload.title, color = c.text, fontSize = 14.sp)
+                                val changed = HistoryDiff.diffFields(h.payload, p)
+                                if (changed.isNotEmpty()) {
+                                    Text(
+                                        (if (str.isFa) "تغییرات: " else "Changed: ") + changed.joinToString(if (str.isFa) "، " else ", ") { changedFieldLabel(it, str.isFa) },
+                                        color = c.muted, fontSize = 12.sp, lineHeight = 18.sp,
+                                    )
+                                }
                             }
                             Text(
                                 "بازگردانی",
