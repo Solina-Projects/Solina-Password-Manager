@@ -27,12 +27,15 @@ class SteamTotpTest {
     }
 
     @Test fun steamCodeIsFiveLettersFromSteamAlphabet() {
-        val code = Totp.generateSteam(secret, 1_700_000_000_000L)
+        // زمان پایه دقیقاً ابتدای یک پنجرهٔ ۳۰ثانیه‌ای است (مضرب ۳۰٬۰۰۰)، تا ‎+29٬999ms
+        // در همان پنجره بماند و ‎+30٬000ms پنجرهٔ بعد باشد.
+        val windowStart = 1_699_999_980_000L // 56_666_666 × 30_000
+        val code = Totp.generateSteam(secret, windowStart)
         assertEquals(5, code.length)
         assertTrue(code.all { it in Totp.STEAM_ALPHABET })
         // در همان پنجرهٔ ۳۰ثانیه‌ای کد ثابت است، در پنجرهٔ بعد عوض می‌شود.
-        assertEquals(code, Totp.generateSteam(secret, 1_700_000_000_000L + 29_999L))
-        assertTrue(code != Totp.generateSteam(secret, 1_700_000_000_000L + 30_000L))
+        assertEquals(code, Totp.generateSteam(secret, windowStart + 29_999L))
+        assertTrue(code != Totp.generateSteam(secret, windowStart + 30_000L))
     }
 
     @Test fun steamDiffersFromNumericTotp() {
