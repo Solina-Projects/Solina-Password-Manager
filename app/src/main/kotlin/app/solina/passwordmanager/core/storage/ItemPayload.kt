@@ -44,6 +44,8 @@ data class ItemPayload(
     // دسته‌بندی و آیکون اختصاصی
     val category: String = "",
     val icon: String = "",
+    // برچسب‌های چندگانه (مکمل دسته‌بندی، نه جایگزین آن)
+    val tags: List<String> = emptyList(),
     // فیلدهای تکمیلی کارت
     val bankName: String = "",
     val cardPin: String = "",
@@ -80,6 +82,7 @@ data class ItemPayload(
         if (otpType != OtpType.TOTP) o.put("otpType", otpType.code)
         if (totpCounter != 0L) o.put("totpCounter", totpCounter)
         if (category.isNotEmpty()) o.put("category", category)
+        if (tags.isNotEmpty()) o.put("tags", org.json.JSONArray(tags))
         if (icon.isNotEmpty()) o.put("icon", icon)
         if (bankName.isNotEmpty()) o.put("bankName", bankName)
         if (cardPin.isNotEmpty()) o.put("cardPin", cardPin)
@@ -121,6 +124,9 @@ data class ItemPayload(
                 otpType = OtpType.fromCode(o.optString("otpType", "totp")),
                 totpCounter = o.optLong("totpCounter", 0L),
                 category = o.optString("category"),
+                tags = o.optJSONArray("tags")?.let { arr ->
+                    List(arr.length()) { i -> arr.optString(i) }.mapNotNull { TagHelper.normalize(it) }
+                } ?: emptyList(),
                 icon = o.optString("icon"),
                 bankName = o.optString("bankName"),
                 cardPin = o.optString("cardPin"),

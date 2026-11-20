@@ -63,6 +63,7 @@ import app.solina.passwordmanager.core.storage.HistoryEntry
 import app.solina.passwordmanager.core.storage.ItemKind
 import app.solina.passwordmanager.core.storage.ItemPayload
 import app.solina.passwordmanager.core.storage.SecurityReport
+import app.solina.passwordmanager.core.storage.TagHelper
 import app.solina.passwordmanager.core.storage.VaultItem
 import app.solina.passwordmanager.core.storage.VaultRepository
 import app.solina.passwordmanager.ui.components.AnimatedFilterRow
@@ -436,8 +437,10 @@ fun VaultScreen(
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(0) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var selectedTag by remember { mutableStateOf<String?>(null) }
     val filters = listOf(str.all, str.kindLogin, str.kindCard, str.kindIdentity, str.kindNote, str.filterIssues)
     val categories = remember(items) { items.mapNotNull { it.payload.category.trim().ifBlank { null } }.distinct().sorted() }
+    val tags = remember(items) { TagHelper.allTags(items) }
 
     val shown = items.filter { item ->
         val p = item.payload
@@ -452,13 +455,15 @@ fun VaultScreen(
             else -> true
         }
         val byCat = selectedCategory == null || p.category.trim().equals(selectedCategory, ignoreCase = true)
+        val byTag = selectedTag == null || TagHelper.matchesTag(p, selectedTag!!)
         val q = query.trim()
-        byFilter && byCat && (
+        byFilter && byCat && byTag && (
             q.isEmpty() ||
                 p.title.contains(q, ignoreCase = true) ||
                 p.username.contains(q, ignoreCase = true) ||
                 p.website.contains(q, ignoreCase = true) ||
                 p.category.contains(q, ignoreCase = true) ||
+                p.tags.any { it.contains(q, ignoreCase = true) } ||
                 p.fullName.contains(q, ignoreCase = true) ||
                 p.email.contains(q, ignoreCase = true) ||
                 p.bankName.contains(q, ignoreCase = true)
@@ -511,6 +516,20 @@ fun VaultScreen(
                                 .clickable(role = Role.RadioButton) { selectedCategory = if (active) null else cat }
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                         ) { Text(cat, color = if (active) c.onPrimaryContainer else c.muted, fontSize = 12.sp) }
+                    }
+                }
+            }
+            if (tags.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    tags.forEach { tag ->
+                        val active = selectedTag == tag
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (active) c.primaryContainer else c.container)
+                                .clickable(role = Role.RadioButton) { selectedTag = if (active) null else tag }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) { Text("#$tag", color = if (active) c.onPrimaryContainer else c.muted, fontSize = 12.sp) }
                     }
                 }
             }
@@ -739,6 +758,11 @@ fun DetailScreen(
             }
             if (p.website.isNotEmpty()) Text(p.website, color = c.primary, fontSize = 14.sp, fontFamily = Mono)
             if (p.category.isNotBlank()) Pill(p.category, c.container, c.text)
+            if (p.tags.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    p.tags.forEach { tag -> Pill("#$tag", c.primaryContainer, c.onPrimaryContainer) }
+                }
+            }
         }
 
         if (breachCount > 0) {
@@ -984,14 +1008,17 @@ fun CodesScreen(
     val now = rememberNow()
     var query by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var selectedTag by remember { mutableStateOf<String?>(null) }
 
     val allOtp = items.filter { codeFor(it.payload, now) != null }
     val categories = remember(allOtp) { allOtp.mapNotNull { it.payload.category.trim().ifBlank { null } }.distinct().sorted() }
+    val tags = remember(allOtp) { TagHelper.allTags(allOtp) }
     val withOtp = allOtp.filter { item ->
         val p = item.payload
         val q = query.trim()
         val byCat = selectedCategory == null || p.category.trim().equals(selectedCategory, ignoreCase = true)
-        byCat && (q.isEmpty() || p.title.contains(q, ignoreCase = true) || p.username.contains(q, ignoreCase = true) || p.category.contains(q, ignoreCase = true))
+        val byTag = selectedTag == null || TagHelper.matchesTag(p, selectedTag!!)
+        byCat && byTag && (q.isEmpty() || p.title.contains(q, ignoreCase = true) || p.username.contains(q, ignoreCase = true) || p.category.contains(q, ignoreCase = true) || p.tags.any { it.contains(q, ignoreCase = true) })
     }.sortedByDescending { it.payload.favorite }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1048,6 +1075,20 @@ fun CodesScreen(
                                 .clickable(role = Role.RadioButton) { selectedCategory = if (active) null else cat }
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                         ) { Text(cat, color = if (active) c.onPrimaryContainer else c.muted, fontSize = 12.sp) }
+                    }
+                }
+            }
+            if (tags.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    tags.forEach { tag ->
+                        val active = selectedTag == tag
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (active) c.primaryContainer else c.container)
+                                .clickable(role = Role.RadioButton) { selectedTag = if (active) null else tag }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) { Text("#$tag", color = if (active) c.onPrimaryContainer else c.muted, fontSize = 12.sp) }
                     }
                 }
             }

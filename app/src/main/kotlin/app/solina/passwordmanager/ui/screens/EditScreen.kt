@@ -47,6 +47,7 @@ import app.solina.passwordmanager.core.OtpType
 import app.solina.passwordmanager.core.PasswordGenerator
 import app.solina.passwordmanager.core.storage.ItemKind
 import app.solina.passwordmanager.core.storage.ItemPayload
+import app.solina.passwordmanager.core.storage.TagHelper
 import app.solina.passwordmanager.ui.components.AnimatedFilterRow
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.Mono
@@ -106,6 +107,8 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
     var kind by remember { mutableStateOf(start.kind) }
     var title by remember { mutableStateOf(start.title) }
     var category by remember { mutableStateOf(start.category) }
+    var tags by remember { mutableStateOf(start.tags) }
+    var tagInput by remember { mutableStateOf("") }
     var icon by remember { mutableStateOf(start.icon) }
     var favorite by remember { mutableStateOf(start.favorite) }
 
@@ -178,6 +181,59 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
 
         Field(if (str.isFa) "عنوان" else "Title", title, { title = it }, error = titleError)
         Field(str.categoryLabel, category, { category = it })
+
+        // برچسب‌های چندگانه (مکمل دسته‌بندی)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(if (str.isFa) "برچسب‌ها (اختیاری، با ویرگول جدا کنید)" else "Tags (optional, comma-separated)", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+            if (tags.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    tags.forEach { tag ->
+                        Row(
+                            Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(c.primaryContainer)
+                                .clickable(role = Role.Button) { tags = TagHelper.removeTag(tags, tag) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(tag, color = c.onPrimaryContainer, fontSize = 13.sp)
+                            Text("✕", color = c.onPrimaryContainer, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(c.container)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicTextField(
+                    value = tagInput,
+                    onValueChange = { tagInput = it },
+                    singleLine = true,
+                    textStyle = TextStyle(color = c.text, fontSize = 15.sp),
+                    cursorBrush = SolidColor(c.primary),
+                    modifier = Modifier.weight(1f).height(54.dp).padding(vertical = 15.dp),
+                )
+                Text(
+                    if (str.isFa) "＋ افزودن" else "+ Add",
+                    color = c.primary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clickable(role = Role.Button) {
+                        val added = TagHelper.parseTags(tagInput)
+                        if (added.isNotEmpty()) {
+                            tags = (tags + added.filter { t -> tags.none { it.equals(t, ignoreCase = true) } }).take(TagHelper.MAX_TAGS)
+                            tagInput = ""
+                        }
+                    }.padding(8.dp),
+                )
+            }
+        }
 
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(str.customIconLabel, color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
@@ -296,6 +352,7 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
                                 kind = kind,
                                 title = title.trim(),
                                 category = category.trim(),
+                                tags = tags,
                                 icon = icon,
                                 favorite = favorite,
                                 username = username.trim(),

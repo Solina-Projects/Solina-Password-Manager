@@ -102,7 +102,7 @@ class VaultRepository(
         listOf(
             p.kind.code, p.title, p.username, p.password, p.website,
             p.totpSecret, p.otpType.code, p.cardNumber, p.bankName,
-            p.fullName, p.email, p.phone, p.nationalId, p.category, p.note,
+            p.fullName, p.email, p.phone, p.nationalId, p.category, p.tags.joinToString(","), p.note,
         ).joinToString("\u0001")
 
     /**
