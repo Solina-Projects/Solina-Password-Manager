@@ -28,7 +28,7 @@ class ImportResult(val items: List<ItemPayload>, val source: String, val skipped
  * Aegis (عادی و رمزشده، از جمله اسلات‌های بکاپ و issue #95)، 2FAS (v3/v4 عادی و رمزشده)،
  * Bitwarden (JSON عادی/رمزشده PBKDF2 و Argon2id، و CSV)، Proton Pass (ZIP/JSON/CSV)،
  * Proton Authenticator (عادی و رمزشده)، andOTP (عادی و رمزشده .aes)، Raivo، Ente Auth (متن ساده)،
- * Google Authenticator، CSV مرورگرها و مدیران رمز، و لینک‌های otpauth.
+ * Google Authenticator، Steam (maFile استیم + otpauth://steam)، CSV مرورگرها و مدیران رمز، و لینک‌های otpauth.
  */
 object Importers {
     /** نشانهٔ ترتیب بایت UTF-8 که بعضی برنامه‌ها اول CSV یا JSON می‌گذارند. */
@@ -169,6 +169,7 @@ object Importers {
                 o.has("services") || o.has("servicesEncrypted") -> twoFas(o, password)
                 o.has("vaults") -> protonPass(o)
                 o.has("salt") && o.has("content") && o.has("version") -> protonAuthenticator(o, password)
+                o.has("shared_secret") -> steamMaFile(o)
                 o.has("kdfParams") && o.has("encryptedData") ->
                     throw ImportException("خروجی رمزشدهٔ Ente Auth هنوز پشتیبانی نمی‌شود. در Ente Auth از «Export» خروجی متنی ساده (otpauth) بگیرید؛ آن پشتیبانی می‌شود.")
                 else -> collectOtpauth(o)
@@ -442,6 +443,46 @@ object Importers {
         if (uris.isEmpty()) return null
         val items = OtpImport.parse(uris.joinToString("\n")) ?: throw ImportException("کد TOTP معتبری در فایل نبود.")
         return ImportResult(items, "otpauth (JSON)", (uris.size - items.size).coerceAtLeast(0))
+    }
+
+    // ───── Steam (Steam Desktop Authenticator — فایل maFile) ─────
+
+    /**
+     * خروجی Steam Desktop Authenticator (maFile JSON):
+     * {"shared_secret": "<base64>", "serial_number": "...", "account_name": "...",
+     *  "revocation_code": "...", "uri": "otpauth://totp/Steam:...", ...}
+     * فقط shared_secret لازم است؛ بقیه اختیاری‌اند. کد ۵حرفی Steam با OtpType.STEAM
+     * ذخیره می‌شود و با Totp.generateSteam نمایش داده می‌شود.
+     *
+     * Battle.net و Duo در این فاز اضافه نشدند: هیچ‌کدام قالب خروجی مستند و آفلاین ندارند —
+     * Battle.net راز Authenticator را فقط در جریان ثبت‌نام (enrollment) می‌دهد و فایل
+     * خروجی ندارد؛ Duo Mobile هم به‌عمد هیچ خروجی‌ای ندارد. پس چیزی برای parseکردن نیست.
+     */
+    private fun steamMaFile(o: JSONObject): ImportResult {
+        val secretB64 = o.str("shared_secret")
+        if (secretB64.isEmpty()) throw ImportException("فایل Steam معتبر نیست (shared_secret ندارد).")
+        val secretBytes = try {
+            java.util.Base64.getDecoder().decode(secretB64.replace(' ', '+'))
+        } catch (e: IllegalArgumentException) {
+            throw ImportException("فایل Steam خراب است (shared_secret معتبر نیست).")
+        }
+        if (secretBytes.isEmpty() || secretBytes.size > 64) {
+            throw ImportException("فایل Steam خراب است (shared_secret معتبر نیست).")
+        }
+        val account = o.str("account_name")
+        val serial = o.str("serial_number")
+        val item = ItemPayload(
+            ItemKind.Login,
+            title = "Steam",
+            username = account,
+            note = if (serial.isNotEmpty()) "Steam serial: $serial" else "",
+            totpSecret = Base32.encode(secretBytes),
+            totpDigits = 5,
+            totpPeriod = 30,
+            totpAlgorithm = "SHA1",
+            otpType = OtpType.STEAM,
+        )
+        return ImportResult(listOf(item), "Steam (maFile)")
     }
 
     // ───── 2FAS (v3/v4 عادی و رمزشده) ─────

@@ -294,20 +294,37 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
                 Field(if (str.isFa) "راز احراز هویت OTP (Base32، اختیاری)" else "OTP Secret (Base32, optional)", totp, { totp = it.uppercase() }, mono = true, error = totpError)
                 if (totp.isNotBlank()) {
                     AnimatedFilterRow(
-                        labels = listOf("TOTP (زمانی)", "HOTP (شمارنده‌ای)"),
-                        selected = if (otpType == OtpType.TOTP) 0 else 1,
-                        onSelect = { otpType = if (it == 0) OtpType.TOTP else OtpType.HOTP },
+                        labels = listOf("TOTP (زمانی)", "HOTP (شمارنده‌ای)", "Steam (۵حرفی)"),
+                        selected = when (otpType) {
+                            OtpType.TOTP -> 0
+                            OtpType.HOTP -> 1
+                            OtpType.STEAM -> 2
+                        },
+                        onSelect = {
+                            otpType = when (it) {
+                                1 -> OtpType.HOTP
+                                2 -> OtpType.STEAM
+                                else -> OtpType.TOTP
+                            }
+                            // استیم همیشه ۵ حرف و SHA1 است؛ انتخاب قبلی کاربر حفظ نمی‌شود.
+                            if (otpType == OtpType.STEAM) {
+                                otpDigits = 5
+                                otpAlgo = "SHA1"
+                            }
+                        },
                     )
-                    AnimatedFilterRow(
-                        labels = listOf("6 digits", "8 digits"),
-                        selected = if (otpDigits == 8) 1 else 0,
-                        onSelect = { otpDigits = if (it == 1) 8 else 6 },
-                    )
-                    AnimatedFilterRow(
-                        labels = listOf("SHA1", "SHA256", "SHA512"),
-                        selected = when (otpAlgo) { "SHA256" -> 1; "SHA512" -> 2; else -> 0 },
-                        onSelect = { otpAlgo = when (it) { 1 -> "SHA256"; 2 -> "SHA512"; else -> "SHA1" } },
-                    )
+                    if (otpType != OtpType.STEAM) {
+                        AnimatedFilterRow(
+                            labels = listOf("6 digits", "8 digits"),
+                            selected = if (otpDigits == 8) 1 else 0,
+                            onSelect = { otpDigits = if (it == 1) 8 else 6 },
+                        )
+                        AnimatedFilterRow(
+                            labels = listOf("SHA1", "SHA256", "SHA512"),
+                            selected = when (otpAlgo) { "SHA256" -> 1; "SHA512" -> 2; else -> 0 },
+                            onSelect = { otpAlgo = when (it) { 1 -> "SHA256"; 2 -> "SHA512"; else -> "SHA1" } },
+                        )
+                    }
                     if (otpType == OtpType.HOTP) {
                         Field(str.counterLabel, otpCounter, { otpCounter = it.filter { ch -> ch.isDigit() } }, mono = true, keyboard = KeyboardType.Number)
                     }

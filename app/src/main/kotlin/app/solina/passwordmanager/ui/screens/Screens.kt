@@ -102,10 +102,11 @@ private fun secretBytes(p: ItemPayload): ByteArray? = if (p.totpSecret.isBlank()
 
 private fun codeFor(p: ItemPayload, now: Long, offsetMillis: Long = 0L): String? = secretBytes(p)?.let {
     runCatching {
-        if (p.otpType == OtpType.HOTP) {
-            Totp.generateHotp(it, p.totpCounter, p.totpDigits, "Hmac" + p.totpAlgorithm)
-        } else {
-            Totp.generate(it, now + offsetMillis, p.totpPeriod, p.totpDigits, "Hmac" + p.totpAlgorithm)
+        when (p.otpType) {
+            OtpType.HOTP -> Totp.generateHotp(it, p.totpCounter, p.totpDigits, "Hmac" + p.totpAlgorithm)
+            // استیم (فاز ۴): کد ۵حرفی با الفبای مخصوص، همیشه SHA1.
+            OtpType.STEAM -> Totp.generateSteam(it, now + offsetMillis, p.totpPeriod)
+            else -> Totp.generate(it, now + offsetMillis, p.totpPeriod, p.totpDigits, "Hmac" + p.totpAlgorithm)
         }
     }.getOrNull()
 }
@@ -452,7 +453,14 @@ private fun ItemRow(item: VaultItem, flags: Set<Flag>, breached: Boolean = false
             Flag.Reused in flags -> Pill("تکراری", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Copy)
             Flag.InsecureHttp in flags -> Pill("HTTP", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
             Flag.Old in flags -> Pill("قدیمی", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Clock)
-            p.totpSecret.isNotBlank() -> Pill(if (p.otpType == OtpType.HOTP) "HOTP" else "۲FA", c.primaryContainer, c.onPrimaryContainer)
+            p.totpSecret.isNotBlank() -> Pill(
+                when (p.otpType) {
+                    OtpType.HOTP -> "HOTP"
+                    OtpType.STEAM -> "Steam"
+                    else -> "۲FA"
+                },
+                c.primaryContainer, c.onPrimaryContainer,
+            )
         }
     }
 }
@@ -1830,7 +1838,7 @@ fun SettingsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("معماری امنیتی Solina", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Text("• رمزگذاری سرتاسری Zero-Knowledge: هر ورودی با کلید تصادفی اختصاصی (DEK) و AES-256-GCM رمز می‌شود؛ کلید اصلی با Argon2id و عبارت بازیابی ۲۴ کلمه‌ای BIP-39 محافظت می‌شود.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
-                Text("• Authenticator داخلی: پشتیبانی کامل از TOTP (RFC 6238) و HOTP (RFC 4226) با ۶/۸ رقم، SHA1/256/512، اسکن QR، ورود از Aegis/2FAS/andOTP/Google Authenticator و بکاپ جداگانهٔ رمزشده.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
+                Text("• Authenticator داخلی: پشتیبانی کامل از TOTP (RFC 6238) و HOTP (RFC 4226) با ۶/۸ رقم، SHA1/256/512، کد ۵حرفی Steam Guard، اسکن QR، ورود از Aegis/2FAS/andOTP/Google Authenticator/Steam (maFile) و بکاپ جداگانهٔ رمزشده.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
                 Text("• Autofill مدرن: پشتیبانی از Android Autofill Framework و Inline Suggestions روی اندروید ۱۱ به بالا با تطبیق دقیق دامنه و نام پکیج.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
                 Text("• همگام‌سازی اختیاری HTTPS-only: پوشهٔ محلی/ابری (SAF) یا سرور شخصی WebDAV (Nextcloud / OwnCloud) با فایل‌های تغییرناپذیر احرازشده (HMAC-SHA256).", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)
                 Text("• شبکه کاملاً اختیاری و TLS-only (Cleartext مسدود): اینترنت فقط هنگام اجرای دستی بررسی افشا (k-Anonymity)، اتصال WebDAV یا OAuth 2.0 + PKCE استفاده می‌شود.", color = c.muted, fontSize = 13.sp, lineHeight = 22.sp)

@@ -51,6 +51,8 @@ object OtpImport {
         val otpType = when (typeStr) {
             "totp" -> OtpType.TOTP
             "hotp" -> OtpType.HOTP
+            // استیم (فاز ۴): otpauth://steam/... — کد ۵حرفی، همیشه SHA1 و ۳۰ ثانیه.
+            "steam" -> OtpType.STEAM
             else -> return null
         }
         val afterType = rest.substringAfter('/', "")
@@ -68,7 +70,13 @@ object OtpImport {
             "SHA512" -> "SHA512"
             else -> return null
         }
-        val digits = (q["digits"]?.toIntOrNull() ?: 6).takeIf { it in 6..8 } ?: return null
+        // استیم فقط SHA1 دارد؛ URI با الگوریتم دیگر برای استیم معتبر نیست.
+        if (otpType == OtpType.STEAM && algo != "SHA1") return null
+        val digits = if (otpType == OtpType.STEAM) {
+            5
+        } else {
+            (q["digits"]?.toIntOrNull() ?: 6).takeIf { it in 6..8 } ?: return null
+        }
         val period = if (otpType == OtpType.HOTP) {
             (q["period"]?.toIntOrNull() ?: 30).let { if (it in 1..300) it else 30 }
         } else {
@@ -81,7 +89,11 @@ object OtpImport {
         } else {
             0L
         }
-        val defaultTitle = if (otpType == OtpType.HOTP) "HOTP" else "TOTP"
+        val defaultTitle = when (otpType) {
+            OtpType.HOTP -> "HOTP"
+            OtpType.STEAM -> "Steam"
+            else -> "TOTP"
+        }
         return ItemPayload(
             kind = ItemKind.Login,
             title = issuer.ifEmpty { account }.ifEmpty { defaultTitle },
