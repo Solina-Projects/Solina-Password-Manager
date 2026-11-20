@@ -210,6 +210,8 @@ fun HomeScreen(
     onGoGenerator: () -> Unit,
     onAdd: () -> Unit,
     onScan: () -> Unit,
+    showSecrets: Boolean = false,
+    onToggleShowSecrets: () -> Unit = {},
 ) {
     val c = Solina.colors
     val str = Solina.strings
@@ -230,7 +232,10 @@ fun HomeScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { ScreenTitle(str.tabHome) }
             Box(Modifier.statusBarsPadding().padding(top = 12.dp)) {
-                IconAction(SolinaIcons.Lock, str.lockVault, tint = c.text, background = c.container, onClick = onLock)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IconAction(if (showSecrets) SolinaIcons.EyeOff else SolinaIcons.Eye, if (showSecrets) "پنهان کردن رمزها" else "نمایش رمزها", tint = c.text, background = c.container, onClick = onToggleShowSecrets)
+                    IconAction(SolinaIcons.Lock, str.lockVault, tint = c.text, background = c.container, onClick = onLock)
+                }
             }
         }
 
@@ -352,7 +357,11 @@ fun HomeScreen(
                                         )
                                     }
                                 }
-                                RollingTotpCode(code, c.primary, 22.sp, modifier = Modifier.fillMaxWidth())
+                                if (showSecrets) {
+                                    RollingTotpCode(code, c.primary, 22.sp, modifier = Modifier.fillMaxWidth())
+                                } else {
+                                    Text(Totp.group("•".repeat(item.payload.totpDigits)), color = c.primary, fontFamily = Mono, fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, textAlign = TextAlign.Left, modifier = Modifier.fillMaxWidth())
+                                }
                             }
                         }
                     }
@@ -460,14 +469,6 @@ private fun ItemRow(item: VaultItem, flags: Set<Flag>, breached: Boolean = false
             Flag.Reused in flags -> Pill("تکراری", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Copy)
             Flag.InsecureHttp in flags -> Pill("HTTP", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
             Flag.Old in flags -> Pill("قدیمی", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Clock)
-            p.totpSecret.isNotBlank() -> Pill(
-                when (p.otpType) {
-                    OtpType.HOTP -> "HOTP"
-                    OtpType.STEAM -> "Steam"
-                    else -> "۲FA"
-                },
-                c.primaryContainer, c.onPrimaryContainer,
-            )
         }
     }
 }
@@ -529,6 +530,8 @@ fun VaultScreen(
     onOpenItem: (String) -> Unit,
     onAdd: () -> Unit,
     density: ListDensity = ListDensity.Normal,
+    showSecrets: Boolean = false,
+    onToggleShowSecrets: () -> Unit = {},
 ) {
     val c = Solina.colors
     val str = Solina.strings
@@ -572,7 +575,10 @@ fun VaultScreen(
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            ScreenTitle(str.tabVault)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { ScreenTitle(str.tabVault) }
+                IconAction(if (showSecrets) SolinaIcons.EyeOff else SolinaIcons.Eye, if (showSecrets) "پنهان کردن رمزها" else "نمایش رمزها", tint = c.text, background = c.container, onClick = onToggleShowSecrets)
+            }
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -832,6 +838,8 @@ fun DetailScreen(
     onIncrementHotp: () -> Unit = {},
     onToast: (String) -> Unit,
     clipboardClearMillis: Long = CLIPBOARD_CLEAR_MILLIS,
+    startShown: Boolean = false,
+    onGoCodes: () -> Unit = {},
     passkeySupported: Boolean = false,
     onCreatePasskey: () -> Unit = {},
     onSignInWithPasskey: (app.solina.passwordmanager.core.passkey.PasskeyRecord) -> Unit = {},
@@ -840,7 +848,7 @@ fun DetailScreen(
     val str = Solina.strings
     val ctx = LocalContext.current
     val now = rememberNow()
-    var shown by remember(item?.id) { mutableStateOf(false) }
+    var shown by remember(item?.id) { mutableStateOf(startShown) }
     var revealedFields by remember(item?.id) { mutableStateOf(setOf<Int>()) }
     var confirmDelete by remember(item?.id) { mutableStateOf(false) }
     var showHistory by remember(item?.id) { mutableStateOf(false) }
@@ -850,7 +858,6 @@ fun DetailScreen(
         return
     }
     val p = item.payload
-    val code = codeFor(p, now)
 
     Column(
         Modifier
@@ -1074,48 +1081,23 @@ fun DetailScreen(
             }
         }
 
-        if (code != null) {
-            Card(background = c.primaryContainer) {
-                if (p.otpType == OtpType.HOTP) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Column(Modifier.weight(1f)) {
-                                Text("کد شمارنده (HOTP · ${str.counterLabel}: ${p.totpCounter.toInt().fa()})", color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 12.sp)
-                                RollingTotpCode(code, c.onPrimaryContainer, 28.sp)
-                            }
-                            IconAction(SolinaIcons.Copy, "کپی کد", tint = c.onPrimaryContainer) {
-                                copySensitive(ctx, "hotp", code, clipboardClearMillis)
-                                onToast("کد کپی شد")
-                            }
-                        }
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(42.dp)
-                                .clip(RoundedCornerShape(21.dp))
-                                .background(c.primary)
-                                .clickable(role = Role.Button, onClick = onIncrementHotp),
-                            contentAlignment = Alignment.Center,
-                        ) { Text(str.nextHotpCode, color = c.onPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+        if (p.totpSecret.isNotBlank()) {
+            Card(background = c.primaryContainer, padding = 14.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("کد دومرحله‌ای این ورودی در بخش «کدها» است.", color = c.onPrimaryContainer, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    if (codeFor(p, now) == null) {
+                        Text("راز OTP معتبر نیست (Base32 نیست). آن را از «ویرایش» اصلاح کنید.", color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 13.sp, lineHeight = 22.sp)
                     }
-                } else {
-                    val left = Totp.remainingMillis(now, p.totpPeriod)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Column(Modifier.weight(1f)) {
-                            Text("کد یک‌بارمصرف (TOTP · ${p.totpDigits.fa()} رقمی)", color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 12.sp)
-                            RollingTotpCode(code, c.onPrimaryContainer, 28.sp)
-                        }
-                        TotpRing(left, p.totpPeriod, 44.dp, faSecondsLeft(now, p.totpPeriod), if (left <= 5000) c.secondary else c.primary, c.primary.copy(alpha = 0.2f), c.onPrimaryContainer)
-                        IconAction(SolinaIcons.Copy, "کپی کد", tint = c.onPrimaryContainer) {
-                            copySensitive(ctx, "totp", code, clipboardClearMillis)
-                            onToast("کد کپی شد")
-                        }
-                    }
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(42.dp)
+                            .clip(RoundedCornerShape(21.dp))
+                            .background(c.primary)
+                            .clickable(role = Role.Button, onClick = onGoCodes),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("باز کردن بخش کدها", color = c.onPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                 }
-            }
-        } else if (p.totpSecret.isNotBlank()) {
-            Card(background = c.secondaryContainer, padding = 12.dp) {
-                Text("راز OTP معتبر نیست (Base32 نیست). آن را از «ویرایش» اصلاح کنید.", color = c.onSecondaryContainer, fontSize = 13.sp, lineHeight = 22.sp)
             }
         }
 
@@ -1218,6 +1200,8 @@ fun CodesScreen(
     onBackupAuth: () -> Unit = {},
     clipboardClearMillis: Long = CLIPBOARD_CLEAR_MILLIS,
     density: ListDensity = ListDensity.Normal,
+    showSecrets: Boolean = false,
+    onToggleShowSecrets: () -> Unit = {},
 ) {
     val c = Solina.colors
     val str = Solina.strings
@@ -1247,6 +1231,7 @@ fun CodesScreen(
                 if (allOtp.isNotEmpty()) {
                     IconAction(SolinaIcons.Shield, str.authBackupButton, tint = c.text, background = c.container, onClick = onBackupAuth)
                 }
+                IconAction(if (showSecrets) SolinaIcons.EyeOff else SolinaIcons.Eye, if (showSecrets) "پنهان کردن کدها" else "نمایش کدها", tint = c.text, background = c.container, onClick = onToggleShowSecrets)
                 IconAction(SolinaIcons.Plus, "افزودن دستی کد", tint = c.text, background = c.container, onClick = onAdd)
                 IconAction(SolinaIcons.Qr, "اسکن QR", tint = c.onPrimary, background = c.primary, onClick = onScan)
             }
@@ -1330,7 +1315,7 @@ fun CodesScreen(
                 val left = if (isHotp) 30_000L else Totp.remainingMillis(now, p.totpPeriod)
                 val urgent = !isHotp && left <= 5000
                 val accent = if (urgent) c.secondary else c.primary
-                val revealed = item.id in revealedIds
+                val revealed = showSecrets || item.id in revealedIds
                 val masked = Totp.group("•".repeat(p.totpDigits))
                 Row(
                     Modifier
