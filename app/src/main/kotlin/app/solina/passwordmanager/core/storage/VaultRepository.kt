@@ -130,9 +130,70 @@ class VaultRepository(
 
     suspend fun delete(id: String) = lock.withLock {
         val current = _items.value.firstOrNull { it.id == id } ?: return@withLock
-        store.delete(id, clock(), current.rev + 1)
+        val now = clock()
+        val old = store.get(id)
+        // نسخهٔ فعلی را در تاریخچه بایگانی می‌کنیم تا از سطل زباله قابل بازگردانی باشد؛
+        // blob خود tombstone طبق قرارداد همگام‌سازی خالی می‌ماند.
+        val archived = old?.let { StoredHistory(id, it.rev, now, it.wrappedItemKey, it.blob) }
+        store.delete(id, now, current.rev + 1, archived)
         _items.value = _items.value.filterNot { it.id == id }
         _localChanges.value++
+    }
+
+    /** یک ورودی حذف‌شده (tombstone) به‌همراه آخرین نسخهٔ قابل بازیابی‌اش. */
+    data class TrashedItem(val id: String, val rev: Long, val deletedAt: Long, val payload: ItemPayload)
+
+    /** فهرست سطل زباله: tombstoneهایی که آخرین نسخه‌شان رمزگشایی می‌شود. */
+    suspend fun trashedItems(): List<TrashedItem> = withKey { key ->
+        val rows = store.all().filter { it.deletedAt != null }
+        val list = ArrayList<TrashedItem>(rows.size)
+        for (r in rows) {
+            val latest = store.history(r.id).maxByOrNull { it.rev } ?: continue
+            try {
+                val plain = VaultCrypto.openItem(key, r.id, latest.rev, ItemPayload.SCHEMA, SealedItem(latest.wrappedItemKey, latest.blob))
+                try {
+                    list.add(TrashedItem(r.id, r.rev, r.deletedAt!!, ItemPayload.fromBytes(plain)))
+                } finally {
+                    plain.wipe()
+                }
+            } catch (e: Exception) {
+                // نسخهٔ خراب: در سطل زباله نشان داده نمی‌شود ولی purge منقضی آن را می‌زداید.
+            }
+        }
+        list.sortedByDescending { it.deletedAt }
+    }
+
+    /** بازگردانی از سطل زباله: نسخهٔ آخر به‌عنوان ویرایش جدید زنده می‌شود تا همگام‌سازی آن را منتشر کند. */
+    suspend fun restoreTrashed(id: String): VaultItem? = lock.withLock {
+        val row = store.get(id) ?: return@withLock null
+        if (row.deletedAt == null) return@withLock _items.value.firstOrNull { it.id == id }
+        val trashed = trashedItems().firstOrNull { it.id == id } ?: return@withLock null
+        val now = clock()
+        val item = VaultItem(id, row.rev + 1, trashed.payload.copy(editedAt = now))
+        withKey { key -> store.save(seal(key, item, now), null, MAX_HISTORY) }
+        publish(item)
+        _localChanges.value++
+        item
+    }
+
+    /** حذف دائمی یک ورودی از سطل زباله (ردیف + تاریخچه). */
+    suspend fun purgeTrashed(id: String) = lock.withLock {
+        store.purge(id)
+        _localChanges.value++
+    }
+
+    /**
+     * پاک‌سازی خودکار tombstoneهای قدیمی‌تر از ۹۰ روز، هم‌راستا با
+     * [app.solina.passwordmanager.core.sync.SyncEngine.TOMBSTONE_RETENTION_MILLIS]؛
+     * بعد از این مدت حذف به دستگاه‌های آفلاین دیگر منتشر نمی‌شود، پس نگه‌داشتن ردیف بی‌فایده است.
+     */
+    suspend fun purgeExpiredTrash(now: Long = clock()): Int = lock.withLock {
+        val expired = store.all().filter {
+            it.deletedAt != null && now - it.deletedAt > app.solina.passwordmanager.core.sync.SyncEngine.TOMBSTONE_RETENTION_MILLIS
+        }
+        for (row in expired) store.purge(row.id)
+        if (expired.isNotEmpty()) _localChanges.value++
+        expired.size
     }
 
     suspend fun history(id: String): List<HistoryEntry> = withKey { key ->

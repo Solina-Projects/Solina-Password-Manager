@@ -86,6 +86,7 @@ import app.solina.passwordmanager.ui.screens.CreatePasswordScreen
 import app.solina.passwordmanager.ui.screens.DataScreen
 import app.solina.passwordmanager.ui.screens.DataStep
 import app.solina.passwordmanager.ui.screens.DetailScreen
+import app.solina.passwordmanager.ui.screens.TrashScreen
 import app.solina.passwordmanager.ui.screens.DiagnosticsScreen
 import app.solina.passwordmanager.ui.screens.EditScreen
 import app.solina.passwordmanager.ui.screens.ExternalAccountsScreen
@@ -390,7 +391,11 @@ private fun Root(
     val unlocked by container.session.unlocked.collectAsState()
 
     LaunchedEffect(unlocked) {
-        if (unlocked) runCatching { container.repository.load() } else container.repository.clear()
+        if (unlocked) {
+            runCatching { container.repository.load() }
+            // پاک‌سازی خودکار tombstoneهای قدیمی‌تر از ۹۰ روز (سطل زباله).
+            runCatching { container.repository.purgeExpiredTrash() }
+        } else container.repository.clear()
     }
 
     var hasVault by remember { mutableStateOf(auth.hasVault()) }
@@ -990,6 +995,15 @@ private fun MainApp(
     }
 
     var dataStep by remember { mutableStateOf<DataStep?>(null) }
+    var showTrash by remember { mutableStateOf(false) }
+    var trashed by remember { mutableStateOf<List<app.solina.passwordmanager.core.storage.VaultRepository.TrashedItem>>(emptyList()) }
+
+    fun refreshTrash() {
+        scope.launch { trashed = runCatching { repo.trashedItems() }.getOrDefault(emptyList()) }
+    }
+
+    LaunchedEffect(Unit) { refreshTrash() }
+    LaunchedEffect(localRev) { refreshTrash() }
     var dataBusy by remember { mutableStateOf(false) }
     var dataMessage by remember { mutableStateOf<String?>(null) }
     var pendingExport by remember { mutableStateOf<ByteArray?>(null) }
@@ -1217,7 +1231,7 @@ private fun MainApp(
         )
     }
 
-    val inSub = generator || editing || detailId != null || scanning || dataStep != null ||
+    val inSub = generator || editing || detailId != null || scanning || dataStep != null || showTrash ||
         showExternalAccounts || showWebDavConnect || showChangePassword
 
     BackHandler(enabled = inSub) {
@@ -1225,6 +1239,7 @@ private fun MainApp(
             showChangePassword -> { showChangePassword = false; changePwMessage = null }
             showWebDavConnect -> { showWebDavConnect = false; webDavMessage = null }
             showExternalAccounts -> { showExternalAccounts = false; oauthMessage = null }
+            showTrash -> { showTrash = false; refreshTrash() }
             dataStep != null -> {
                 if (dataStep == DataStep.Menu) dataStep = null
                 else { dataStep = DataStep.Menu; pendingRestore = null; pendingRestoreInfo = null; pendingRestoreFileName = null; pendingImport = null }
@@ -1243,6 +1258,35 @@ private fun MainApp(
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {
                 when {
+                    showTrash -> TrashScreen(
+                        items = trashed,
+                        onBack = { showTrash = false; refreshTrash() },
+                        onRestore = { id ->
+                            scope.launch {
+                                val restored = runCatching { repo.restoreTrashed(id) }.getOrNull()
+                                if (restored != null) {
+                                    detailId = restored.id
+                                    showTrash = false
+                                    toast = "ورودی بازگردانده شد"
+                                } else toast = "بازگردانی انجام نشد"
+                                refreshTrash()
+                            }
+                        },
+                        onPurge = { id ->
+                            scope.launch {
+                                runCatching { repo.purgeTrashed(id) }
+                                toast = "ورودی برای همیشه حذف شد"
+                                refreshTrash()
+                            }
+                        },
+                        onEmptyAll = {
+                            scope.launch {
+                                trashed.forEach { runCatching { repo.purgeTrashed(it.id) } }
+                                toast = "سطل زباله خالی شد"
+                                refreshTrash()
+                            }
+                        },
+                    )
                     showChangePassword -> ChangeMasterPasswordScreen(
                         busy = changePwBusy,
                         message = changePwMessage,
@@ -1460,7 +1504,8 @@ private fun MainApp(
                             scope.launch {
                                 runCatching { repo.delete(id) }
                                 detailId = null
-                                toast = "ورودی حذف شد"
+                                toast = "به سطل زباله منتقل شد"
+                                refreshTrash()
                             }
                         },
                         onRestore = { entry ->
@@ -1500,6 +1545,8 @@ private fun MainApp(
                             report = report,
                             unreadable = unreadable,
                             breachState = breachState,
+                            trashedCount = trashed.size,
+                            onOpenTrash = { showTrash = true; refreshTrash() },
                             onOpenItem = { detailId = it },
                             onAdd = { detailId = null; prefill = null; editing = true },
                         )

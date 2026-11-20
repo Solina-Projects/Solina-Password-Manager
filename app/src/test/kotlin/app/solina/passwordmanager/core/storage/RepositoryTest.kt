@@ -25,9 +25,17 @@ class FakeStore : ItemStore {
         }
         items[item.id] = item
     }
-    override suspend fun delete(id: String, deletedAt: Long, newRev: Long) {
-        hist.removeAll { it.itemId == id }
+    override suspend fun delete(id: String, deletedAt: Long, newRev: Long, archivedPrevious: StoredHistory?) {
+        if (archivedPrevious != null) {
+            hist.add(archivedPrevious)
+            val mine = hist.filter { it.itemId == id }.sortedByDescending { it.rev }
+            hist.removeAll(mine.drop(VaultRepository.MAX_HISTORY).toSet())
+        }
         items[id] = StoredItem(id, newRev, deletedAt, deletedAt, ByteArray(0), ByteArray(0))
+    }
+    override suspend fun purge(id: String) {
+        hist.removeAll { it.itemId == id }
+        items.remove(id)
     }
     override suspend fun history(itemId: String) = hist.filter { it.itemId == itemId }.sortedByDescending { it.rev }
     override suspend fun wipeAll() { items.clear(); hist.clear() }
@@ -133,13 +141,15 @@ class RepositoryTest {
         assertEquals(17L, restored.rev)
     }
 
-    @Test fun deleteLeavesTombstoneWithoutData() = runBlocking {
+    @Test fun deleteLeavesTombstoneWithoutDataButKeepsLastVersionForTrash() = runBlocking {
         val store = FakeStore(); val session = unlockedSession(); val r = repo(store, session)
         val item = r.add(login("a")); r.update(item.id, login("b"))
         r.delete(item.id)
         assertTrue(r.items.value.isEmpty())
         val row = store.items[item.id]!!
-        assertTrue(row.deletedAt != null); assertEquals(0, row.blob.size); assertTrue(store.hist.isEmpty())
+        assertTrue(row.deletedAt != null); assertEquals(0, row.blob.size)
+        // نسخهٔ فعلی (b) برای بازگردانی از سطل زباله در تاریخچه می‌ماند؛ blob خود tombstone خالی است.
+        assertEquals(1, store.hist.size); assertEquals("b", r.history(item.id).single().payload.title)
         val r2 = repo(store, session); r2.load()
         assertEquals(0, r2.unreadable.value)
     }

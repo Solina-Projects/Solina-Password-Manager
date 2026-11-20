@@ -28,8 +28,13 @@ interface ItemStore {
     /** ذخیرهٔ اتمیک ورودی جدید و (اختیاری) نسخهٔ قبلی در تاریخچه؛ تاریخچه به [keepHistory] نسخه محدود می‌شود. */
     suspend fun save(item: StoredItem, archivedPrevious: StoredHistory?, keepHistory: Int)
 
-    /** حذف نرم: blob خالی، تاریخچه پاک می‌شود. */
-    suspend fun delete(id: String, deletedAt: Long, newRev: Long)
+    /** حذف نرم: blob خالی، tombstone می‌ماند تا همگام‌سازی حذف را منتشر کند.
+     * تاریخچه حفظ می‌شود تا بازگردانی از سطل زباله ممکن باشد؛ اگر [archivedPrevious] داده شود
+     * (نسخهٔ فعلیِ در حال حذف) هم به تاریخچه اضافه می‌شود. */
+    suspend fun delete(id: String, deletedAt: Long, newRev: Long, archivedPrevious: StoredHistory? = null)
+
+    /** حذف دائمی ردیف و تاریخچه (خالی کردن سطل زباله / پاک‌سازی tombstone منقضی). */
+    suspend fun purge(id: String)
 
     suspend fun history(itemId: String): List<StoredHistory>
     suspend fun wipeAll()

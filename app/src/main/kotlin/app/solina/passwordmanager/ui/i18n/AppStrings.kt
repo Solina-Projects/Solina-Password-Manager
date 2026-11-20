@@ -45,6 +45,14 @@ data class AppStrings(
     val wipeVaultTitle: String,
     val wipeVaultConfirm: String,
     val lockVault: String,
+    val trashTitle: String,
+    val trashEmpty: String,
+    val trashEmptyBody: String,
+    val trashRestore: String,
+    val trashDeleteForever: String,
+    val trashEmptyAll: String,
+    val trashPurgeConfirm: String,
+    val trashDeletedOn: String,
 )
 
 val PersianStrings = AppStrings(
@@ -87,6 +95,14 @@ val PersianStrings = AppStrings(
     wipeVaultTitle = "خروج و پاک‌سازی امن اطلاعات محلی",
     wipeVaultConfirm = "تأیید پاک‌سازی کامل این دستگاه",
     lockVault = "قفل کردن خزانه",
+    trashTitle = "سطل زباله",
+    trashEmpty = "سطل زباله خالی است",
+    trashEmptyBody = "ورودی‌های حذف‌شده تا ۹۰ روز اینجا می‌مانند و بعد خودکار پاک می‌شوند.",
+    trashRestore = "بازگردانی",
+    trashDeleteForever = "حذف برای همیشه",
+    trashEmptyAll = "خالی کردن سطل زباله",
+    trashPurgeConfirm = "این ورودی برای همیشه حذف شود؟",
+    trashDeletedOn = "حذف‌شده",
 )
 
 val EnglishStrings = AppStrings(
@@ -129,6 +145,14 @@ val EnglishStrings = AppStrings(
     wipeVaultTitle = "Sign Out & Securely Wipe Local Data",
     wipeVaultConfirm = "Confirm Full Wipe on This Device",
     lockVault = "Lock Vault",
+    trashTitle = "Trash",
+    trashEmpty = "Trash is empty",
+    trashEmptyBody = "Deleted items stay here for 90 days, then are purged automatically.",
+    trashRestore = "Restore",
+    trashDeleteForever = "Delete forever",
+    trashEmptyAll = "Empty trash",
+    trashPurgeConfirm = "Delete this item forever?",
+    trashDeletedOn = "Deleted",
 )
 
 fun stringsFor(lang: AppLanguage): AppStrings = when (lang) {

@@ -64,6 +64,7 @@ import app.solina.passwordmanager.core.storage.ItemKind
 import app.solina.passwordmanager.core.storage.ItemPayload
 import app.solina.passwordmanager.core.storage.SecurityReport
 import app.solina.passwordmanager.core.storage.VaultItem
+import app.solina.passwordmanager.core.storage.VaultRepository
 import app.solina.passwordmanager.ui.components.AnimatedFilterRow
 import app.solina.passwordmanager.ui.components.CLIPBOARD_CLEAR_MILLIS
 import app.solina.passwordmanager.ui.components.Card
@@ -425,6 +426,8 @@ fun VaultScreen(
     report: SecurityReport,
     unreadable: Int,
     breachState: BreachScanState = BreachScanState(),
+    trashedCount: Int = 0,
+    onOpenTrash: () -> Unit = {},
     onOpenItem: (String) -> Unit,
     onAdd: () -> Unit,
 ) {
@@ -519,6 +522,20 @@ fun VaultScreen(
                     )
                 }
             }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(c.container)
+                    .clickable(role = Role.Button, onClick = onOpenTrash)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(str.trashTitle, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                if (trashedCount > 0) Pill(trashedCount.fa(), c.primaryContainer, c.onPrimaryContainer)
+                SIcon(SolinaIcons.ChevronRight, c.muted, 20.dp)
+            }
             if (items.isEmpty()) {
                 EmptyState("هنوز ورودی‌ای ندارید", "با دکمهٔ + یک رمز، کارت، هویت یا یادداشت امن اضافه کنید.")
             } else if (shown.isEmpty()) {
@@ -549,6 +566,104 @@ fun VaultScreen(
                 .clickable(role = Role.Button, onClickLabel = "افزودن ورودی", onClick = onAdd),
             contentAlignment = Alignment.Center,
         ) { SIcon(SolinaIcons.Plus, c.onPrimary, 28.dp, "افزودن ورودی") }
+    }
+}
+
+// ───────────────────────── سطل زباله ─────────────────────────
+
+@Composable
+fun TrashScreen(
+    items: List<VaultRepository.TrashedItem>,
+    onBack: () -> Unit,
+    onRestore: (String) -> Unit,
+    onPurge: (String) -> Unit,
+    onEmptyAll: () -> Unit,
+) {
+    val c = Solina.colors
+    val str = Solina.strings
+    var confirmPurgeId by remember { mutableStateOf<String?>(null) }
+    var confirmEmptyAll by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.statusBarsPadding().padding(top = 12.dp).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconAction(SolinaIcons.ChevronRight, "بازگشت", tint = c.text, onClick = onBack)
+            Text(str.trashTitle, color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        }
+        Text(str.trashEmptyBody, color = c.muted, fontSize = 13.sp, lineHeight = 20.sp)
+        if (items.isEmpty()) {
+            EmptyState(str.trashEmpty, str.trashEmptyBody)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(items, key = { it.id }) { trashed ->
+                    val p = trashed.payload
+                    val subtitle = when (p.kind) {
+                        ItemKind.Login -> p.username.ifBlank { p.website }
+                        ItemKind.Card -> if (p.cardNumber.length >= 4) "•••• " + p.cardNumber.takeLast(4) else p.bankName
+                        ItemKind.Identity -> p.fullName.ifBlank { p.email.ifBlank { p.phone } }
+                        ItemKind.Note -> p.category
+                    }
+                    Card(padding = 14.dp) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                ItemAvatar(p.title.ifBlank { "?" })
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(p.title, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                    if (subtitle.isNotBlank()) Text(subtitle, color = c.muted, fontSize = 13.sp, fontFamily = Mono, maxLines = 1)
+                                    Text("${str.trashDeletedOn}: ${formatJalali(trashed.deletedAt)}", color = c.muted, fontSize = 12.sp)
+                                }
+                            }
+                            if (confirmPurgeId == trashed.id) {
+                                Text(str.trashPurgeConfirm, color = c.onSecondaryContainer, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlineButton(str.cancel, SolinaIcons.Check, Modifier.weight(1f)) { confirmPurgeId = null }
+                                    Box(
+                                        Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(24.dp)).background(c.secondary).clickable(role = Role.Button) {
+                                            confirmPurgeId = null
+                                            onPurge(trashed.id)
+                                        },
+                                        contentAlignment = Alignment.Center,
+                                    ) { Text(str.trashDeleteForever, color = c.bg, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                                }
+                            } else {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlineButton(str.trashRestore, SolinaIcons.Refresh, Modifier.weight(1f)) { onRestore(trashed.id) }
+                                    OutlineButton(str.trashDeleteForever, SolinaIcons.Warning, Modifier.weight(1f)) { confirmPurgeId = trashed.id }
+                                }
+                            }
+                        }
+                    }
+                }
+                item {
+                    if (confirmEmptyAll) {
+                        Card(background = c.secondaryContainer) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("${str.trashEmptyAll}؟ همهٔ موارد برای همیشه حذف می‌شوند.", color = c.onSecondaryContainer, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlineButton(str.cancel, SolinaIcons.Check, Modifier.weight(1f)) { confirmEmptyAll = false }
+                                    Box(
+                                        Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(24.dp)).background(c.secondary).clickable(role = Role.Button) {
+                                            confirmEmptyAll = false
+                                            onEmptyAll()
+                                        },
+                                        contentAlignment = Alignment.Center,
+                                    ) { Text(str.trashEmptyAll, color = c.bg, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            str.trashEmptyAll,
+                            color = c.secondary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { confirmEmptyAll = true }.padding(vertical = 14.dp),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    Spacer(Modifier.height(24.dp))
+                }
+            }
+        }
     }
 }
 
@@ -826,13 +941,13 @@ fun DetailScreen(
         if (confirmDelete) {
             Card(background = c.secondaryContainer) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("این ورودی و تاریخچه‌اش برای همیشه حذف شود؟", color = c.onSecondaryContainer, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text("این ورودی به سطل زباله منتقل شود؟ تا ۹۰ روز قابل بازگردانی است.", color = c.onSecondaryContainer, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlineButton("انصراف", SolinaIcons.Check, Modifier.weight(1f)) { confirmDelete = false }
                         Box(
                             Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(24.dp)).background(c.secondary).clickable(role = Role.Button, onClick = onDelete),
                             contentAlignment = Alignment.Center,
-                        ) { Text("حذف", color = c.bg, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                        ) { Text("انتقال به سطل زباله", color = c.bg, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
                     }
                 }
             }

@@ -54,6 +54,9 @@ interface ItemDao {
     )
     suspend fun trimHistory(itemId: String, keep: Int)
 
+    @Query("DELETE FROM items WHERE id = :id")
+    suspend fun deleteItem(id: String)
+
     @Query("DELETE FROM history WHERE itemId = :itemId")
     suspend fun clearHistory(itemId: String)
 
@@ -103,10 +106,23 @@ class RoomItemStore(private val db: SolinaDatabase) : ItemStore {
         }
     }
 
-    override suspend fun delete(id: String, deletedAt: Long, newRev: Long) {
+    override suspend fun delete(id: String, deletedAt: Long, newRev: Long, archivedPrevious: StoredHistory?) {
+        db.withTransaction {
+            if (archivedPrevious != null) {
+                dao.addHistory(
+                    archivedPrevious.itemId, archivedPrevious.rev, archivedPrevious.savedAt,
+                    archivedPrevious.wrappedItemKey, archivedPrevious.blob,
+                )
+                dao.trimHistory(id, VaultRepository.MAX_HISTORY)
+            }
+            dao.upsert(ItemRow(id, newRev, deletedAt, deletedAt, ByteArray(0), ByteArray(0)))
+        }
+    }
+
+    override suspend fun purge(id: String) {
         db.withTransaction {
             dao.clearHistory(id)
-            dao.upsert(ItemRow(id, newRev, deletedAt, deletedAt, ByteArray(0), ByteArray(0)))
+            dao.deleteItem(id)
         }
     }
 
