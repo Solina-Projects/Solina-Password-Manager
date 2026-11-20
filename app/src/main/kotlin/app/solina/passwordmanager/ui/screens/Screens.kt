@@ -115,7 +115,7 @@ private fun faSecondsLeft(now: Long, period: Int = 30): String {
     return s.fa()
 }
 
-private fun strengthLevel(pw: String): Int {
+internal fun strengthLevel(pw: String): Int {
     val bits = PasswordGenerator.effectiveBits(pw)
     return when {
         bits >= 90 -> 4
@@ -125,7 +125,7 @@ private fun strengthLevel(pw: String): Int {
     }
 }
 
-private fun strengthLabel(level: Int, isFa: Boolean): String = when (level) {
+internal fun strengthLabel(level: Int, isFa: Boolean): String = when (level) {
     4 -> if (isFa) "خیلی قوی" else "Very strong"
     3 -> if (isFa) "قوی" else "Strong"
     2 -> if (isFa) "متوسط" else "Medium"

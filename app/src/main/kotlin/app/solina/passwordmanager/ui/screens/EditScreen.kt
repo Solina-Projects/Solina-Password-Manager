@@ -51,6 +51,7 @@ import app.solina.passwordmanager.core.storage.TagHelper
 import app.solina.passwordmanager.ui.components.AnimatedFilterRow
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.Mono
+import app.solina.passwordmanager.ui.components.StrengthBar
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 
@@ -281,6 +282,10 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
                         }
                     },
                 )
+                if (password.isNotEmpty()) {
+                    val level = strengthLevel(password)
+                    StrengthBar(level, strengthLabel(level, str.isFa))
+                }
                 Field(if (str.isFa) "وب‌سایت" else "Website", website, { website = it }, mono = true, keyboard = KeyboardType.Uri)
                 Field(if (str.isFa) "راز احراز هویت OTP (Base32، اختیاری)" else "OTP Secret (Base32, optional)", totp, { totp = it.uppercase() }, mono = true, error = totpError)
                 if (totp.isNotBlank()) {
