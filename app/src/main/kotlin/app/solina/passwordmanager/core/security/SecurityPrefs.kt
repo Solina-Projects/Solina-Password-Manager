@@ -82,6 +82,10 @@ class SecurityPrefs(context: Context) {
     private val _autosaveEnabled = MutableStateFlow(prefs.getBoolean("autosave_enabled", true))
     val autosaveEnabled: StateFlow<Boolean> = _autosaveEnabled.asStateFlow()
 
+    /** گرفتن اسکرین‌شات و فیلم از صفحه؛ پیش‌فرض خاموش است یعنی مسدود (FLAG_SECURE). */
+    private val _screenshotsAllowed = MutableStateFlow(prefs.getBoolean("screenshots_allowed", false))
+    val screenshotsAllowed: StateFlow<Boolean> = _screenshotsAllowed.asStateFlow()
+
     /** تراکم فهرست خزانه و کدها (فاز ۴). */
     private val _listDensity = MutableStateFlow(ListDensity.parse(prefs.getString("list_density", null)))
     val listDensity: StateFlow<ListDensity> = _listDensity.asStateFlow()
@@ -114,6 +118,11 @@ class SecurityPrefs(context: Context) {
         _autosaveEnabled.value = enabled
     }
 
+    fun setScreenshotsAllowed(allowed: Boolean) {
+        prefs.edit().putBoolean("screenshots_allowed", allowed).apply()
+        _screenshotsAllowed.value = allowed
+    }
+
     fun setListDensity(density: ListDensity) {
         prefs.edit().putString("list_density", density.name).apply()
         _listDensity.value = density
@@ -126,6 +135,7 @@ class SecurityPrefs(context: Context) {
         _themeMode.value = ThemeMode.System
         _language.value = AppLanguage.FA
         _autosaveEnabled.value = true
+        _screenshotsAllowed.value = false
         _listDensity.value = ListDensity.Normal
     }
 }
