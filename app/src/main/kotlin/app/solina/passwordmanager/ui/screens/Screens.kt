@@ -1051,6 +1051,8 @@ fun CodesScreen(
     var query by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var selectedTag by remember { mutableStateOf<String?>(null) }
+    // کدها تا زمان لمس پنهان‌اند (••• •••)؛ هر آیتم جداگانه آشکار می‌شود.
+    var revealedIds by remember { mutableStateOf(setOf<String>()) }
 
     val allOtp = items.filter { codeFor(it.payload, now) != null }
     val categories = remember(allOtp) { allOtp.mapNotNull { it.payload.category.trim().ifBlank { null } }.distinct().sorted() }
@@ -1153,14 +1155,23 @@ fun CodesScreen(
                 val left = if (isHotp) 30_000L else Totp.remainingMillis(now, p.totpPeriod)
                 val urgent = !isHotp && left <= 5000
                 val accent = if (urgent) c.secondary else c.primary
+                val revealed = item.id in revealedIds
+                val masked = Totp.group("•".repeat(p.totpDigits))
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(22.dp))
                         .background(if (urgent) c.secondaryContainer else c.surface)
-                        .clickable(role = Role.Button, onClickLabel = "کپی کد ${p.title}") {
-                            copySensitive(ctx, "otp", code, clipboardClearMillis)
-                            onToast("کد ${p.title} کپی شد")
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = if (revealed) "کپی کد ${p.title}" else "نمایش کد ${p.title}",
+                        ) {
+                            if (revealed) {
+                                copySensitive(ctx, "otp", code, clipboardClearMillis)
+                                onToast("کد ${p.title} کپی شد")
+                            } else {
+                                revealedIds = revealedIds + item.id
+                            }
                         }
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1173,10 +1184,24 @@ fun CodesScreen(
                             if (p.category.isNotBlank()) Pill(p.category, c.container, c.muted)
                         }
                         if (p.username.isNotBlank()) Text(p.username, color = c.muted, fontSize = 13.sp, fontFamily = Mono, textAlign = TextAlign.Left)
-                        RollingTotpCode(code, accent, 32.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 4.dp))
+                        if (revealed) {
+                            RollingTotpCode(code, accent, 32.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 4.dp))
+                        } else {
+                            Text(
+                                masked,
+                                color = accent,
+                                fontFamily = Mono,
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 2.sp,
+                                textAlign = TextAlign.Left,
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            )
+                            Text("برای نمایش، روی کد بزنید", color = c.muted, fontSize = 12.sp)
+                        }
                         if (urgent) {
                             Text(
-                                "بعدی: " + Totp.group(codeFor(p, now, p.totpPeriod * 1000L).orEmpty()),
+                                "بعدی: " + if (revealed) Totp.group(codeFor(p, now, p.totpPeriod * 1000L).orEmpty()) else masked,
                                 color = c.onSecondaryContainer,
                                 fontFamily = Mono,
                                 fontSize = 14.sp,
@@ -1200,6 +1225,10 @@ fun CodesScreen(
                             }
                         } else {
                             TotpRing(left, p.totpPeriod, 52.dp, faSecondsLeft(now, p.totpPeriod), accent, accent.copy(alpha = 0.2f), c.text)
+                        }
+                        IconAction(SolinaIcons.Copy, "کپی کد ${p.title}", tint = c.muted) {
+                            copySensitive(ctx, "otp", code, clipboardClearMillis)
+                            onToast("کد ${p.title} کپی شد")
                         }
                         IconAction(SolinaIcons.Edit, "جزئیات و ویرایش ${p.title}", tint = c.muted) { onOpenItem(item.id) }
                     }
