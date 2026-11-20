@@ -209,7 +209,9 @@ fun HomeScreen(
     val str = Solina.strings
     val now = rememberNow()
     val withTotp = items.filter { secretBytes(it.payload) != null }
-    val recent = items.sortedByDescending { it.payload.editedAt }.take(3)
+    // «اخیر» فقط ورودی‌های خزانه است؛ یادداشت/کار تب خودشان را دارند.
+    val recent = items.filter { it.payload.kind != ItemKind.QuickNote && it.payload.kind != ItemKind.Task }
+        .sortedByDescending { it.payload.editedAt }.take(3)
     val breachedCount = breachState.breachedIds.size
 
     Column(
@@ -400,6 +402,10 @@ private fun ItemRow(item: VaultItem, flags: Set<Flag>, breached: Boolean = false
         ItemKind.Card -> if (p.cardNumber.length >= 4) "•••• " + p.cardNumber.takeLast(4) else p.bankName.ifBlank { str.kindCard }
         ItemKind.Identity -> p.fullName.ifBlank { p.email.ifBlank { p.phone.ifBlank { str.kindIdentity } } }
         ItemKind.Note -> p.category.ifBlank { "یادداشت امن" }
+        // یادداشت/کار بخش «یادداشت و کارها» در تب خزانه نشان داده نمی‌شوند، ولی اگر جایی
+        // به ItemRow رسیدند، زیرنویس معنادار داشته باشند.
+        ItemKind.QuickNote -> p.category.ifBlank { "یادداشت سریع" }
+        ItemKind.Task -> if (p.dueAt > 0) formatJalali(p.dueAt) else str.noDueDate
     }
     Row(
         Modifier
@@ -419,6 +425,8 @@ private fun ItemRow(item: VaultItem, flags: Set<Flag>, breached: Boolean = false
                 ItemKind.Card -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Card, c.text) }
                 ItemKind.Identity -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.primaryContainer), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Shield, c.onPrimaryContainer) }
                 ItemKind.Note -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
+                ItemKind.QuickNote -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
+                ItemKind.Task -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Checklist, c.text) }
                 ItemKind.Login -> ItemAvatar(p.title.ifBlank { "?" })
             }
         }
@@ -470,6 +478,8 @@ fun VaultScreen(
 
     val shown = items.filter { item ->
         val p = item.payload
+        // یادداشت/کار بخش «یادداشت و کارها» تب جداگانه دارند و اینجا نشان داده نمی‌شوند.
+        if (p.kind == ItemKind.QuickNote || p.kind == ItemKind.Task) return@filter false
         val flags = report.flags[item.id].orEmpty()
         val breached = item.id in breachState.breachedIds
         val byFilter = when (filter) {
@@ -646,6 +656,8 @@ fun TrashScreen(
                         ItemKind.Card -> if (p.cardNumber.length >= 4) "•••• " + p.cardNumber.takeLast(4) else p.bankName
                         ItemKind.Identity -> p.fullName.ifBlank { p.email.ifBlank { p.phone } }
                         ItemKind.Note -> p.category
+                        ItemKind.QuickNote -> p.category.ifBlank { "یادداشت سریع" }
+                        ItemKind.Task -> if (p.dueAt > 0) formatJalali(p.dueAt) else ""
                     }
                     Card(padding = 14.dp) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -901,6 +913,9 @@ fun DetailScreen(
                 }
             }
             ItemKind.Note -> Unit
+            // یادداشت/کار بخش جدا دارند و هرگز به صفحهٔ جزئیات خزانه نمی‌رسند.
+            ItemKind.QuickNote -> Unit
+            ItemKind.Task -> Unit
         }
 
         if (p.kind == ItemKind.Login) {

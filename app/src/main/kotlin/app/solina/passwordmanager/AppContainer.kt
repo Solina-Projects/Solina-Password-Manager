@@ -83,6 +83,8 @@ class SolinaApplication : Application() {
         super.onCreate()
         DiagLog.init(this)
         ErrorNotifier.createChannel(this)
+        app.solina.passwordmanager.core.notes.TaskNotifier.createChannel(this)
+        app.solina.passwordmanager.core.notes.TaskReminderScheduler.scheduleSweep(this)
         CrashReporter.install(this)
         DiagLog.startWatchdog(this)
         DiagLog.log("APP", "start")

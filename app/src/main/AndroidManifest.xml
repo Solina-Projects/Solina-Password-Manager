@@ -89,5 +89,18 @@
             android:exported="false"
             android:theme="@style/Theme.Solina"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- ویجت «یادداشت سریع» (فاز ۳): فقط یک دکمه است، هیچ محتوایی نشان نمی‌دهد. -->
+        <receiver
+            android:name=".ui.widget.QuickNoteWidget"
+            android:exported="false"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/quick_note_widget_info" />
+        </receiver>
     </application>
 </manifest>

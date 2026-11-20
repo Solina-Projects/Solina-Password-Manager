@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -91,6 +92,10 @@ import app.solina.passwordmanager.ui.screens.ChangeMasterPasswordScreen
 import app.solina.passwordmanager.ui.screens.CodesScreen
 import app.solina.passwordmanager.ui.screens.ConfirmWordsScreen
 import app.solina.passwordmanager.ui.screens.CreatePasswordScreen
+import app.solina.passwordmanager.core.notes.TaskReminderScheduler
+import app.solina.passwordmanager.core.notes.completeTask
+import app.solina.passwordmanager.core.notes.overdueCount
+import app.solina.passwordmanager.core.storage.ItemKind
 import app.solina.passwordmanager.ui.screens.DataScreen
 import app.solina.passwordmanager.ui.screens.DataStep
 import app.solina.passwordmanager.ui.screens.DetailScreen
@@ -108,6 +113,7 @@ import app.solina.passwordmanager.ui.screens.ScanScreen
 import app.solina.passwordmanager.ui.screens.SettingsScreen
 import app.solina.passwordmanager.ui.screens.VaultScreen
 import app.solina.passwordmanager.ui.screens.VaultUnlockScreen
+import app.solina.passwordmanager.ui.screens.NotesTasksScreen
 import app.solina.passwordmanager.ui.screens.WebDavSetupScreen
 import app.solina.passwordmanager.ui.screens.LegacyBackupRestoreScreen
 import app.solina.passwordmanager.ui.screens.WelcomeRestoreBackupScreen
@@ -128,6 +134,12 @@ class MainActivity : FragmentActivity() {
         /** وقتی نوتیف خطا زده شد، با این extra باز می‌شود تا مستقیم گزارش عیب‌یابی نشان داده شود. */
         const val EXTRA_SHOW_DIAGNOSTICS = "solina_show_diagnostics"
 
+        /** باز کردن مستقیم تب «یادداشت و کارها» (از اعلان یادآوری یا ویجت). */
+        const val EXTRA_OPEN_NOTES = "solina_open_notes"
+
+        /** باز کردن مستقیم ویرایشگر یادداشت سریع جدید (از ویجت خانه). */
+        const val EXTRA_QUICK_NOTE = "solina_quick_note"
+
         const val RC_JOIN_FOLDER = 1001
         const val RC_CONNECT_FOLDER = 1002
         const val RC_EXPORT_FILE = 1003
@@ -142,6 +154,15 @@ class MainActivity : FragmentActivity() {
     private val container get() = (application as SolinaApplication).container
     private val _pendingOAuthCallback = MutableStateFlow<Uri?>(null)
     val pendingOAuthCallback = _pendingOAuthCallback.asStateFlow()
+
+    /** لینک عمیق به تب یادداشت‌ها: "notes" یا "quicknote"؛ MainApp آن را مصرف می‌کند. */
+    private val _notesLink = MutableStateFlow<String?>(null)
+    val notesLink = _notesLink.asStateFlow()
+    fun consumeNotesLink() { _notesLink.value = null }
+    private fun captureNotesLink(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_QUICK_NOTE, false) == true) _notesLink.value = "quicknote"
+        else if (intent?.getBooleanExtra(EXTRA_OPEN_NOTES, false) == true) _notesLink.value = "notes"
+    }
 
     fun consumeOAuthCallback() {
         _pendingOAuthCallback.value = null
@@ -203,6 +224,7 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         captureOAuthIntent(intent)
+        captureNotesLink(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -211,6 +233,7 @@ class MainActivity : FragmentActivity() {
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         captureOAuthIntent(intent)
+        captureNotesLink(intent)
         val auth = AuthController(container)
         val viewModel = ViewModelProvider(this)[SolinaViewModel::class.java]
         DiagLog.log("ACT", "onCreate")
@@ -939,6 +962,7 @@ private enum class Tab(val icon: ImageVector) {
     Home(SolinaIcons.Home),
     Vault(SolinaIcons.Lock),
     Codes(SolinaIcons.Clock),
+    NotesTasks(SolinaIcons.Checklist),
     Settings(SolinaIcons.Sliders),
 }
 
@@ -1223,6 +1247,20 @@ private fun MainApp(
     var prefill by remember { mutableStateOf<ItemPayload?>(null) }
     var saving by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
+    // ── یادداشت و کارها (فاز ۳) ──
+    var noteHistory by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
+    var newNoteSignal by remember { mutableStateOf(0) }
+    val notesLink by activity.notesLink.collectAsState()
+    val overdueNotes = remember(items) {
+        overdueCount(items.filter { it.payload.kind == ItemKind.Task }, System.currentTimeMillis())
+    }
+    LaunchedEffect(notesLink) {
+        val link = notesLink ?: return@LaunchedEffect
+        tab = Tab.NotesTasks
+        if (link == "quicknote") newNoteSignal++
+        activity.consumeNotesLink()
+    }
+    LaunchedEffect(Unit) { TaskReminderScheduler.scheduleSweep(activity) }
     var biometricEnabled by remember { mutableStateOf(auth.hasBiometric()) }
     fun autofillOn() = activity.getSystemService(AutofillManager::class.java)?.hasEnabledAutofillServices() == true
     var autofillEnabled by remember { mutableStateOf(autofillOn()) }
@@ -1715,6 +1753,73 @@ private fun MainApp(
                             onBackupAuth = { dataMessage = null; dataStep = DataStep.ExportAuthPassword },
                             clipboardClearMillis = clipboardClear.millis,
                         )
+                        Tab.NotesTasks -> NotesTasksScreen(
+                            items = items,
+                            overdue = overdueNotes,
+                            newNoteSignal = newNoteSignal,
+                            history = noteHistory,
+                            onRequestHistory = { id ->
+                                scope.launch { noteHistory = runCatching { repo.history(id) }.getOrDefault(emptyList()) }
+                            },
+                            onRestoreHistory = { id, entry ->
+                                scope.launch {
+                                    runCatching { repo.restore(id, entry) }
+                                    noteHistory = runCatching { repo.history(id) }.getOrDefault(emptyList())
+                                    toast = "نسخه بازگردانی شد"
+                                }
+                            },
+                            onSaveNote = { id, payload, onCreated ->
+                                scope.launch {
+                                    val saved = if (id == null) repo.add(payload)
+                                    else runCatching { repo.update(id, payload) }.getOrNull() ?: return@launch
+                                    onCreated(saved.id)
+                                }
+                            },
+                            onSaveTask = { id, payload, onCreated ->
+                                scope.launch {
+                                    val saved = if (id == null) repo.add(payload)
+                                    else runCatching { repo.update(id, payload) }.getOrNull() ?: return@launch
+                                    onCreated(saved.id)
+                                    if (!saved.payload.done && saved.payload.dueAt > 0) {
+                                        TaskReminderScheduler.scheduleOneTime(activity, saved.id, saved.payload.dueAt)
+                                    } else {
+                                        TaskReminderScheduler.cancel(activity, saved.id)
+                                    }
+                                }
+                            },
+                            onDeleteItem = { id ->
+                                scope.launch {
+                                    TaskReminderScheduler.cancel(activity, id)
+                                    runCatching { repo.delete(id) }
+                                    toast = "به سطل زباله رفت"
+                                }
+                            },
+                            onToggleDone = { item ->
+                                scope.launch {
+                                    val (done, next) = completeTask(item, System.currentTimeMillis())
+                                    runCatching { repo.update(item.id, done) }
+                                    if (next != null) {
+                                        val created = repo.add(next)
+                                        if (created.payload.dueAt > 0) {
+                                            TaskReminderScheduler.scheduleOneTime(activity, created.id, created.payload.dueAt)
+                                        }
+                                        toast = "انجام شد؛ نسخهٔ بعدی ساخته شد"
+                                    } else {
+                                        TaskReminderScheduler.cancel(activity, item.id)
+                                        toast = "انجام شد"
+                                    }
+                                }
+                            },
+                            onSnoozeTask = { item, dueAt ->
+                                scope.launch {
+                                    runCatching { repo.update(item.id, item.payload.copy(dueAt = dueAt)) }
+                                    TaskReminderScheduler.scheduleOneTime(activity, item.id, dueAt)
+                                    toast = "به تعویق افتاد"
+                                }
+                            },
+                            onOpenTrash = { showTrash = true; refreshTrash() },
+                            onToast = { toast = it },
+                        )
                         Tab.Settings -> SettingsScreen(
                             biometricAvailable = auth.biometricAvailable(activity),
                             biometricEnabled = biometricEnabled,
@@ -1800,7 +1905,7 @@ private fun MainApp(
                 }
             }
             if (!inSub) {
-                NavBar(tab) { tab = it }
+                NavBar(tab, overdueNotes) { tab = it }
             }
         }
         toast?.let {
@@ -1823,7 +1928,7 @@ private fun MainApp(
 }
 
 @Composable
-private fun NavBar(selected: Tab, onSelect: (Tab) -> Unit) {
+private fun NavBar(selected: Tab, overdueCount: Int = 0, onSelect: (Tab) -> Unit) {
     val c = Solina.colors
     val str = Solina.strings
     Row(
@@ -1841,6 +1946,7 @@ private fun NavBar(selected: Tab, onSelect: (Tab) -> Unit) {
                 Tab.Home -> str.tabHome
                 Tab.Vault -> str.tabVault
                 Tab.Codes -> str.tabCodes
+                Tab.NotesTasks -> str.tabNotesTasks
                 Tab.Settings -> str.tabSettings
             }
             Column(
@@ -1857,7 +1963,25 @@ private fun NavBar(selected: Tab, onSelect: (Tab) -> Unit) {
                         .clip(RoundedCornerShape(16.dp))
                         .background(if (active) c.primaryContainer else Color.Transparent),
                     contentAlignment = Alignment.Center,
-                ) { SIcon(t.icon, if (active) c.onPrimaryContainer else c.muted, 22.dp) }
+                ) {
+                    SIcon(t.icon, if (active) c.onPrimaryContainer else c.muted, 22.dp)
+                    // نشان قرمز تعداد کارهای عقب‌افتاده روی تب یادداشت و کارها
+                    if (t == Tab.NotesTasks && overdueCount > 0) {
+                        Box(
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFDC2626)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                if (overdueCount > 9) "۹+" else overdueCount.fa(),
+                                color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
                 Text(
                     label,
                     color = if (active) c.text else c.muted,

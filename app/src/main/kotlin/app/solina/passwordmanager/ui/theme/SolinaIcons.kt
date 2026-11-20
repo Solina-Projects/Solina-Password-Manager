@@ -111,5 +111,21 @@ object SolinaIcons {
             "M9 12h6M9 16h6",
         )
     }
+    val Checklist by lazy {
+        build(
+            "Checklist",
+            "M9 6h11M9 12h11M9 18h11",
+            "M4 6l1 1 2-2",
+            "M4 12l1 1 2-2",
+            "M4 18l1 1 2-2",
+        )
+    }
+    val Pin by lazy {
+        build(
+            "Pin",
+            "M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11z",
+            "M15 10a3 3 0 1 1-6 0a3 3 0 1 1 6 0",
+        )
+    }
     val Check by lazy { build("Check", "M5 12l5 5 9-10") }
 }
