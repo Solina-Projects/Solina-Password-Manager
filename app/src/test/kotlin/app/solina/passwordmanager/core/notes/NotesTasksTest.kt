@@ -20,7 +20,7 @@ import java.time.ZoneOffset
 class NotesTasksTest {
     private val utc = ZoneOffset.UTC
     // ۱۴۰۵/۰۸/۲۹ = 2026-11-20 (UTC)
-    private val now = 1794604800000L // 2026-11-20T00:00:00Z
+    private val now = 1795132800000L // 2026-11-20T00:00:00Z
 
     private fun note(title: String = "خرید", body: String = "خرید\nشیر و نان") =
         VaultItem("n1", 1, ItemPayload(kind = ItemKind.QuickNote, title = title, body = body, tags = listOf("بانک")))
@@ -97,7 +97,7 @@ class NotesTasksTest {
     // ── تکرار ──
 
     @Test fun nextOccurrenceDailyWeeklyMonthly() {
-        val base = 1794604800000L // 2026-11-20T00:00Z
+        val base = 1795132800000L // 2026-11-20T00:00Z
         assertEquals(base + 86_400_000L, nextOccurrence(TaskRepeat.Daily, base, utc))
         assertEquals(base + 7 * 86_400_000L, nextOccurrence(TaskRepeat.Weekly, base, utc))
         // ماهانه: ۲۰ نوامبر ← ۲۰ دسامبر
