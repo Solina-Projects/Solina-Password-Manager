@@ -22,6 +22,22 @@ enum class ItemKind(val code: String) {
 /** یک ردیف چک‌لیست داخل یادداشت (متن و وضعیت تیک، هر دو داخل blob رمز می‌شوند). */
 data class CheckItem(val text: String = "", val done: Boolean = false)
 
+/** یک فیلد سفارشی کاربر (برچسب، مقدار، پنهان‌بودن مقدار). حداکثر ۲۰ فیلد؛ برچسب ≤ ۶۴ و مقدار ≤ ۵۱۲ کاراکتر. */
+data class CustomField(val label: String = "", val value: String = "", val hidden: Boolean = false) {
+    companion object {
+        const val MAX_FIELDS = 20
+        const val MAX_LABEL = 64
+        const val MAX_VALUE = 512
+
+        fun sanitize(label: String, value: String, hidden: Boolean): CustomField? {
+            val l = label.trim().take(MAX_LABEL)
+            val v = value.take(MAX_VALUE)
+            if (l.isEmpty() || v.isEmpty()) return null
+            return CustomField(l, v, hidden)
+        }
+    }
+}
+
 /** اولویت کار: زیاد / متوسط / کم. */
 enum class TaskPriority(val code: String) {
     High("high"), Medium("medium"), Low("low");
@@ -108,6 +124,8 @@ data class ItemPayload(
     val linkedItemId: String = "",
     /** شناسهٔ یادداشت مرتبط (برای کار). */
     val linkedNoteId: String = "",
+    /** فیلدهای سفارشی (فاز ۴) — برای همهٔ نوع‌های ورودی؛ داخل blob رمز می‌شوند. */
+    val customFields: List<CustomField> = emptyList(),
 ) {
     fun toBytes(): ByteArray {
         val o = JSONObject()
@@ -164,6 +182,17 @@ data class ItemPayload(
         if (archived) o.put("archived", true)
         if (linkedItemId.isNotEmpty()) o.put("linkedItemId", linkedItemId)
         if (linkedNoteId.isNotEmpty()) o.put("linkedNoteId", linkedNoteId)
+        if (customFields.isNotEmpty()) {
+            val arr = org.json.JSONArray()
+            for (f in customFields.take(CustomField.MAX_FIELDS)) {
+                val fo = JSONObject()
+                fo.put("l", f.label)
+                fo.put("v", f.value)
+                if (f.hidden) fo.put("h", true)
+                arr.put(fo)
+            }
+            o.put("customFields", arr)
+        }
         return o.toString().toByteArray(Charsets.UTF_8)
     }
 
@@ -224,6 +253,12 @@ data class ItemPayload(
                 archived = o.optBoolean("archived"),
                 linkedItemId = o.optString("linkedItemId"),
                 linkedNoteId = o.optString("linkedNoteId"),
+                customFields = o.optJSONArray("customFields")?.let { arr ->
+                    List(arr.length()) { i ->
+                        val fo = arr.optJSONObject(i) ?: return@let emptyList<CustomField>()
+                        CustomField.sanitize(fo.optString("l"), fo.optString("v"), fo.optBoolean("h"))
+                    }.filterNotNull().take(CustomField.MAX_FIELDS)
+                } ?: emptyList(),
             )
         }
     }

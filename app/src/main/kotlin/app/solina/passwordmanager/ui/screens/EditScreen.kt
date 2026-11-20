@@ -144,6 +144,7 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
     var country by remember { mutableStateOf(start.country) }
 
     var note by remember { mutableStateOf(start.note) }
+    var customFields by remember { mutableStateOf(start.customFields) }
     var tried by remember { mutableStateOf(false) }
 
     val titleError = if (tried && title.isBlank()) (if (str.isFa) "عنوان لازم است" else "Title is required") else null
@@ -349,6 +350,64 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
             multiline = true,
         )
 
+        // فیلدهای سفارشی (فاز ۴) — برای همهٔ نوع‌های ورودی؛ مقدار پنهان مثل رمز پوشیده می‌ماند.
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(if (str.isFa) "فیلدهای سفارشی (اختیاری)" else "Custom fields (optional)", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+            customFields.forEachIndexed { idx, field ->
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(c.container)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) {
+                            Field(if (str.isFa) "برچسب" else "Label", field.label, { v ->
+                                customFields = customFields.toMutableList().also { it[idx] = field.copy(label = v) }
+                            })
+                        }
+                        Text(
+                            if (str.isFa) "حذف" else "Remove",
+                            color = c.secondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.clickable(role = Role.Button) {
+                                customFields = customFields.filterIndexed { i, _ -> i != idx }
+                            }.padding(8.dp),
+                        )
+                    }
+                    Field(if (str.isFa) "مقدار" else "Value", field.value, { v ->
+                        customFields = customFields.toMutableList().also { it[idx] = field.copy(value = v) }
+                    }, hidden = field.hidden)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (str.isFa) "مقدار پنهان باشد" else "Hide value", color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = field.hidden,
+                            onCheckedChange = { h ->
+                                customFields = customFields.toMutableList().also { it[idx] = field.copy(hidden = h) }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = c.onPrimary, checkedTrackColor = c.primary,
+                                uncheckedThumbColor = c.outline, uncheckedTrackColor = c.container, uncheckedBorderColor = c.outline,
+                            ),
+                        )
+                    }
+                }
+            }
+            if (customFields.size < app.solina.passwordmanager.core.storage.CustomField.MAX_FIELDS) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(c.container)
+                        .clickable(role = Role.Button) { customFields = customFields + app.solina.passwordmanager.core.storage.CustomField() },
+                    contentAlignment = Alignment.Center,
+                ) { Text(if (str.isFa) "＋ افزودن فیلد سفارشی" else "+ Add custom field", color = c.primary, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+            }
+        }
+
         Box(
             Modifier
                 .fillMaxWidth()
@@ -375,6 +434,9 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
                                 totpAlgorithm = otpAlgo,
                                 totpCounter = if (otpType == OtpType.HOTP) (otpCounter.toLongOrNull() ?: 0L).coerceAtLeast(0L) else 0L,
                                 note = note,
+                                customFields = customFields.mapNotNull {
+                                    app.solina.passwordmanager.core.storage.CustomField.sanitize(it.label, it.value, it.hidden)
+                                }.take(app.solina.passwordmanager.core.storage.CustomField.MAX_FIELDS),
                                 bankName = bankName.trim(),
                                 cardHolder = holder.trim(),
                                 cardNumber = number,

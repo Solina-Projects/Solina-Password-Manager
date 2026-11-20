@@ -760,6 +760,7 @@ fun DetailScreen(
     val ctx = LocalContext.current
     val now = rememberNow()
     var shown by remember(item?.id) { mutableStateOf(false) }
+    var revealedFields by remember(item?.id) { mutableStateOf(setOf<Int>()) }
     var confirmDelete by remember(item?.id) { mutableStateOf(false) }
     var showHistory by remember(item?.id) { mutableStateOf(false) }
 
@@ -916,6 +917,46 @@ fun DetailScreen(
             // یادداشت/کار بخش جدا دارند و هرگز به صفحهٔ جزئیات خزانه نمی‌رسند.
             ItemKind.QuickNote -> Unit
             ItemKind.Task -> Unit
+        }
+
+        // فیلدهای سفارشی (فاز ۴) — مقدار پنهان تا لمس، پوشیده می‌ماند (مثل CVV کارت).
+        if (p.customFields.isNotEmpty()) {
+            Card(padding = 6.dp) {
+                Column {
+                    Text(
+                        if (str.isFa) "فیلدهای سفارشی" else "Custom fields",
+                        color = c.text,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 4.dp),
+                    )
+                    p.customFields.forEachIndexed { idx, field ->
+                        if (idx > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                        val revealed = idx in revealedFields || !field.hidden
+                        Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f).padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(field.label, color = c.muted, fontSize = 12.sp)
+                                Text(
+                                    if (revealed) field.value else "•".repeat(minOf(12, maxOf(field.value.length, 6))),
+                                    color = c.text,
+                                    fontSize = 16.sp,
+                                    fontFamily = Mono,
+                                    textAlign = TextAlign.Left,
+                                )
+                            }
+                            if (field.hidden) {
+                                IconAction(if (revealed) SolinaIcons.EyeOff else SolinaIcons.Eye, if (revealed) "پنهان کردن" else "نمایش") {
+                                    revealedFields = if (revealed) revealedFields - idx else revealedFields + idx
+                                }
+                            }
+                            IconAction(SolinaIcons.Copy, "کپی ${field.label}") {
+                                copySensitive(ctx, field.label, field.value, clipboardClearMillis)
+                                onToast("${field.label} کپی شد")
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if (p.kind == ItemKind.Login) {
