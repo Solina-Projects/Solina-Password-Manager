@@ -49,6 +49,17 @@ object Backup {
         }
     }
 
+    /** آیا بایت‌ها با سرآیند رسمی بکاپ Solina («SLNB») شروع می‌شوند؟ */
+    fun isSolinaBackup(bytes: ByteArray): Boolean =
+        bytes.size >= MAGIC.size && bytes.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)
+
+    /** نمایش خوانای اندازهٔ فایل بکاپ. */
+    fun formatByteSize(bytes: Int): String = when {
+        bytes >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+        bytes >= 1024 -> "${(bytes + 512) / 1024} KB"
+        else -> "$bytes B"
+    }
+
     /** اعتبارسنجی هدر و پارامترهای KDF پیش از نمایش صفحهٔ ورود رمز بازیابی. */
     fun inspect(bytes: ByteArray): BackupHeaderInfo {
         if (bytes.size < HEADER_SIZE + 28 || !bytes.copyOfRange(0, 4).contentEquals(MAGIC)) {

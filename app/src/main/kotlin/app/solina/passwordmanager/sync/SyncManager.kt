@@ -62,6 +62,7 @@ sealed interface ConnectResult {
 sealed interface StageJoinResult {
     data class Ready(val staged: StagedJoin) : StageJoinResult
     data object NoVaultInFolder : StageJoinResult
+    data class BackupFilesFound(val fileNames: List<String>) : StageJoinResult
     data class Failed(val reason: String) : StageJoinResult
 }
 
@@ -231,7 +232,11 @@ class SyncManager(
         return try {
             val remote = FolderRemote(context, uri)
             val bytes = remote.readHeader()
-            if (bytes == null) return StageJoinResult.NoVaultInFolder
+            if (bytes == null) {
+                val backups = remote.findBackupFiles()
+                return if (backups.isNotEmpty()) StageJoinResult.BackupFilesFound(backups)
+                else StageJoinResult.NoVaultInFolder
+            }
             val header = try {
                 VaultHeader.decode(bytes)
             } catch (e: CorruptVaultException) {

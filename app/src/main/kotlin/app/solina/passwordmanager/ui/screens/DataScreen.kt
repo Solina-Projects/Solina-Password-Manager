@@ -44,7 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.solina.passwordmanager.ui.components.Card
 import app.solina.passwordmanager.ui.components.IconAction
+import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.backup.BackupHeaderInfo
+import app.solina.passwordmanager.core.fa
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 import kotlin.math.roundToInt
@@ -122,6 +124,7 @@ fun DataScreen(
     itemCount: Int,
     authCount: Int = 0,
     restoreHeaderInfo: BackupHeaderInfo? = null,
+    restoreFileName: String? = null,
     onBack: () -> Unit,
     onStartExport: () -> Unit,
     onSubmitExport: (CharArray) -> Unit,
@@ -147,13 +150,13 @@ fun DataScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("بکاپ رمزشده", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            "همهٔ ورودی‌ها (${itemCount.toString()} مورد) در یک فایل با رمز جداگانه‌ای که خودتان انتخاب می‌کنید رمز می‌شود. " +
+                            "همهٔ ورودی‌ها (${itemCount.fa()} مورد) در یک فایل .slnb با رمز جداگانه‌ای که خودتان انتخاب می‌کنید رمز می‌شود. " +
                                 "این رمز را فراموش کنید، بکاپ قابل‌بازیابی نیست. فایل را جایی امن (فضای ابری یا حافظهٔ جدا) نگه دارید.",
                             color = c.muted, fontSize = 14.sp, lineHeight = 24.sp,
                         )
                         BigButton("ساخت بکاپ کامل خزانه", enabled = itemCount > 0, onClick = onStartExport)
-                        BigButton("بکاپ مستقل Authenticator (${authCount} حساب)", filled = false, enabled = authCount > 0, onClick = onStartAuthExport)
-                        BigButton("بازیابی از بکاپ Solina", filled = false, onClick = onPickRestore)
+                        BigButton("بکاپ مستقل Authenticator (${authCount.fa()} حساب)", filled = false, enabled = authCount > 0, onClick = onStartAuthExport)
+                        BigButton("بازیابی از فایل بکاپ Solina (.slnb)", filled = false, onClick = onPickRestore)
                     }
                 }
                 Card {
@@ -218,11 +221,16 @@ fun DataScreen(
                 Header("بازیابی بکاپ", onBack)
                 if (restoreHeaderInfo != null) {
                     Card(background = c.primaryContainer) {
-                        Text(
-                            "فایل بکاپ معتبر است · نسخه ${restoreHeaderInfo.version} · Argon2id (${restoreHeaderInfo.kdf.memoryKiB / 1024} MiB × ${restoreHeaderInfo.kdf.iterations}) · ${restoreHeaderInfo.totalBytes} بایت",
-                            color = c.onPrimaryContainer,
-                            fontSize = 13.sp,
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (!restoreFileName.isNullOrBlank()) {
+                                Text("فایل: $restoreFileName", color = c.onPrimaryContainer, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                            Text(
+                                "فایل بکاپ معتبر است · نسخه ${restoreHeaderInfo.version.fa()} · Argon2id (${(restoreHeaderInfo.kdf.memoryKiB / 1024).fa()} MiB × ${restoreHeaderInfo.kdf.iterations.fa()}) · ${Backup.formatByteSize(restoreHeaderInfo.totalBytes)}",
+                                color = c.onPrimaryContainer,
+                                fontSize = 13.sp,
+                            )
+                        }
                     }
                 }
                 Text("رمزی را که هنگام ساخت این بکاپ انتخاب کرده بودید وارد کنید.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)

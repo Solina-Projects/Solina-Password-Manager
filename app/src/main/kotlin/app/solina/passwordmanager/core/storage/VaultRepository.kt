@@ -99,7 +99,11 @@ class VaultRepository(
     }
 
     private fun fingerprint(p: ItemPayload) =
-        listOf(p.kind.code, p.title, p.username, p.password, p.website, p.totpSecret, p.cardNumber, p.note).joinToString("\u0001")
+        listOf(
+            p.kind.code, p.title, p.username, p.password, p.website,
+            p.totpSecret, p.otpType.code, p.cardNumber, p.bankName,
+            p.fullName, p.email, p.phone, p.nationalId, p.category, p.note,
+        ).joinToString("\u0001")
 
     /**
      * افزودن دسته‌ای (ایمپورت/بازیابی). ورودی‌ای که عیناً مشابه موجود باشد رد می‌شود؛ تاریخ‌های اصلی حفظ می‌شوند.

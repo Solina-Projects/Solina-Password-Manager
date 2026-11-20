@@ -11,7 +11,7 @@ import java.io.IOException
 /**
  * پوشهٔ همگام‌سازی روی هر ارائه‌دهندهٔ فایل اندروید (حافظهٔ داخلی، Syncthing، برنامهٔ Drive، Nextcloud ...)
  * از طریق Storage Access Framework؛ بدون مجوز اضافه و بدون شبکه در خود Solina.
- * همه‌چیز داخل زیرپوشهٔ `Solina-Sync` نوشته می‌شود. فقط بایت‌های رمزشده/احراز‌شده روی پوشه می‌روند.
+ * اگر کاربر خود پوشهٔ `Solina-Sync` (حاوی `vault.hdr`) را مستقیم انتخاب کند نیز به‌درستی تشخیص داده می‌شود.
  */
 class FolderRemote(private val context: Context, private val tree: Uri) : SyncRemote {
     companion object {
@@ -25,11 +25,21 @@ class FolderRemote(private val context: Context, private val tree: Uri) : SyncRe
 
     private fun dir(create: Boolean): DocumentFile? {
         val r = root() ?: return null
+        // اگر کاربر مستقیم خود پوشهٔ Solina-Sync را انتخاب کرده باشد (دارای vault.hdr)، همان را استفاده کن
+        if (r.findFile(HEADER)?.isFile == true) return r
         r.findFile(DIR)?.let { return if (it.isDirectory) it else null }
         return if (create) r.createDirectory(DIR) else null
     }
 
     fun displayName(): String = root()?.name ?: "پوشه"
+
+    /** بررسی وجود فایل‌های بکاپ ‎.slnb‎ درون پوشهٔ انتخاب‌شده برای راهنمایی دقیق کاربر. */
+    suspend fun findBackupFiles(): List<String> = withContext(Dispatchers.IO) {
+        val r = root() ?: return@withContext emptyList()
+        r.listFiles()
+            .filter { it.isFile && it.name?.endsWith(".slnb", ignoreCase = true) == true }
+            .mapNotNull { it.name }
+    }
 
     override suspend fun list(): List<String> = withContext(Dispatchers.IO) {
         dir(false)?.listFiles()?.mapNotNull { it.name }.orEmpty()
@@ -67,7 +77,6 @@ class FolderRemote(private val context: Context, private val tree: Uri) : SyncRe
                 val existing = d.findFile(name)
                 existing?.delete()
                 if (tmp.renameTo(name)) return@withContext
-                // اگر ارائه‌دهنده SAF تغییر نام را پشتیبانی نکرد، فایل موقت را پاک و مستقیم می‌نویسیم
                 tmp.delete()
             } catch (e: Exception) {
                 tmp.delete()
@@ -76,10 +85,13 @@ class FolderRemote(private val context: Context, private val tree: Uri) : SyncRe
         }
         val existing = d.findFile(name)
         val target = existing ?: d.createFile(MIME, name) ?: throw IOException("ساخت فایل ممکن نشد")
-        context.contentResolver.openOutputStream(target.uri, "wt")?.use { out ->
+        val stream = runCatching { context.contentResolver.openOutputStream(target.uri, "wt") }.getOrNull()
+            ?: context.contentResolver.openOutputStream(target.uri, "w")
+            ?: throw IOException("نوشتن فایل ممکن نشد")
+        stream.use { out ->
             out.write(bytes)
             out.flush()
-        } ?: throw IOException("نوشتن فایل ممکن نشد")
+        }
     }
 
     override suspend fun delete(name: String) {

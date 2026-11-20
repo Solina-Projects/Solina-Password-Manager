@@ -1,10 +1,14 @@
 package app.solina.passwordmanager.core.storage
 
-import app.solina.passwordmanager.core.crypto.KdfParams
 import app.solina.passwordmanager.core.OtpType
 import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.backup.BackupFormatException
+import app.solina.passwordmanager.core.crypto.KdfParams
+import app.solina.passwordmanager.core.crypto.randomBytes
+import app.solina.passwordmanager.core.security.VaultSession
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -52,16 +56,45 @@ class IdentityAndBackupTest {
             ItemPayload(kind = ItemKind.Login, title = "Token", username = "ops", totpSecret = "MZXW6YTBOI", otpType = OtpType.HOTP, totpCounter = 12L),
         )
         val blob = Backup.encodeAuthenticatorOnly(items, "backup-pass-123".toCharArray(), 1700000000L, fastKdf)
+        assertTrue(Backup.isSolinaBackup(blob))
+        assertFalse(Backup.isSolinaBackup("{}".toByteArray()))
         val info = Backup.inspect(blob)
         assertEquals(1, info.version)
         assertEquals(fastKdf, info.kdf)
         assertEquals(blob.size, info.totalBytes)
+        assertTrue(Backup.formatByteSize(512).endsWith("B"))
+        assertTrue(Backup.formatByteSize(4096).endsWith("KB"))
+        assertTrue(Backup.formatByteSize(2 * 1024 * 1024).endsWith("MB"))
 
         val decoded = Backup.decode(blob, "backup-pass-123".toCharArray())
         assertEquals(2, decoded.size)
         assertTrue(decoded.none { it.title == "NoOTP" })
         assertEquals(OtpType.HOTP, decoded[1].otpType)
         assertEquals(12L, decoded[1].totpCounter)
+    }
+
+    @Test fun fullBackupRestorePreservesDistinctIdentitiesInRepository() = runBlocking {
+        val items = listOf(
+            ItemPayload(kind = ItemKind.Identity, title = "ID", fullName = "Alice", email = "alice@example.com", nationalId = "111"),
+            ItemPayload(kind = ItemKind.Identity, title = "ID", fullName = "Bob", email = "bob@example.com", nationalId = "222"),
+            ItemPayload(kind = ItemKind.Card, title = "Bank", bankName = "Melli", cardNumber = "6037997712345678", cardPin = "1234"),
+            ItemPayload(kind = ItemKind.Login, title = "HOTP", username = "ops", totpSecret = "MZXW6YTBOI", otpType = OtpType.HOTP, totpCounter = 3L),
+        )
+        val blob = Backup.encode(items, "restore-pass-123".toCharArray(), 1700000000L, fastKdf)
+        val decoded = Backup.decode(blob, "restore-pass-123".toCharArray())
+
+        val session = VaultSession().also { it.unlock(randomBytes(32)) }
+        var n = 0
+        val repository = VaultRepository(FakeStore(), session, clock = { 10_000L }, newId = { "r${++n}" })
+        val stats = repository.importItems(decoded)
+        assertEquals(4, stats.added)
+        assertEquals(0, stats.skipped)
+        assertEquals(4, repository.items.value.size)
+
+        // Re-importing the exact same backup should deduplicate cleanly
+        val stats2 = repository.importItems(decoded)
+        assertEquals(0, stats2.added)
+        assertEquals(4, stats2.skipped)
     }
 
     @Test fun authenticatorOnlyBackupRejectsEmptyOtpSetAndInspectRejectsGarbage() {

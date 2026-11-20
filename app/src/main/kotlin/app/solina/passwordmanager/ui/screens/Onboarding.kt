@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,6 +40,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.solina.passwordmanager.core.backup.Backup
+import app.solina.passwordmanager.core.backup.BackupHeaderInfo
 import app.solina.passwordmanager.core.fa
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.Mono
@@ -56,6 +59,7 @@ private fun Page(content: @Composable () -> Unit) {
             .background(Solina.colors.bg)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -158,24 +162,160 @@ private fun Notice(text: String, error: Boolean = false) {
 // ───────────────────────── خوش‌آمدگویی ─────────────────────────
 
 @Composable
-fun WelcomeScreen(message: String? = null, onCreate: () -> Unit, onJoinCloud: () -> Unit, onJoinStorage: () -> Unit, onJoinWebDav: () -> Unit = {}, onDiagnostics: () -> Unit = {}) {
+private fun WelcomeOptionRow(
+    title: String,
+    subtitle: String,
+    highlight: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val c = Solina.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                title,
+                color = if (highlight) c.primary else c.text,
+                fontSize = 15.sp,
+                fontWeight = if (highlight) FontWeight.Bold else FontWeight.SemiBold,
+            )
+            Text(subtitle, color = c.muted, fontSize = 12.sp, lineHeight = 18.sp)
+        }
+        SIcon(SolinaIcons.ChevronRight, if (highlight) c.primary else c.muted, 20.dp)
+    }
+}
+
+@Composable
+fun WelcomeScreen(
+    message: String? = null,
+    busy: Boolean = false,
+    onCreate: () -> Unit,
+    onRestoreBackupFile: () -> Unit = {},
+    onJoinCloud: () -> Unit,
+    onJoinStorage: () -> Unit,
+    onJoinWebDav: () -> Unit = {},
+    onDiagnostics: () -> Unit = {},
+) {
     val c = Solina.colors
     Page {
-        Spacer(Modifier.height(24.dp))
-        Box(
-            Modifier.size(88.dp).clip(RoundedCornerShape(28.dp)).background(c.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) { SIcon(SolinaIcons.Shield, c.primary, 48.dp) }
-        Heading("به Solina خوش آمدید", "گاوصندوق دیجیتال شما. همه‌چیز فقط روی همین دستگاه رمزگذاری و نگه‌داری می‌شود.")
-        Notice("فقط روی دستگاه شما، بدون نیاز به حساب، و شما تنها کسی هستید که کلید را دارید.")
-        Notice("نسخهٔ آزمایشی: رمزنگاری و ذخیره‌سازی واقعی‌اند ولی هنوز بازبینی امنیتی مستقل نشده‌اند. فعلاً رمزهای حیاتی خود را در آن نگه ندارید.", error = true)
+        Spacer(Modifier.height(12.dp))
+        Column(
+            Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                Modifier.size(72.dp).clip(RoundedCornerShape(24.dp)).background(c.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) { SIcon(SolinaIcons.Shield, c.primary, 38.dp) }
+            Text("Solina", color = c.text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "مدیریت رمز عبور و Authenticator با رمزگذاری سرتاسری",
+                color = c.muted,
+                fontSize = 14.sp,
+                lineHeight = 22.sp,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                "Argon2id · AES-256-GCM · Zero-Knowledge",
+                color = c.muted.copy(alpha = 0.8f),
+                fontSize = 12.sp,
+                fontFamily = Mono,
+            )
+        }
+
         if (message != null) Notice(message, error = true)
-        Spacer(Modifier.height(8.dp))
-        PrimaryButton("ساخت خزانهٔ جدید", onClick = onCreate)
-        SecondaryButton("بازیابی از فضای ابری", onClick = onJoinCloud)
-        SecondaryButton("بازیابی از فضای ذخیره‌سازی", onClick = onJoinStorage)
-        SecondaryButton("بازیابی از سرور اختصاصی (WebDAV)", onClick = onJoinWebDav)
-        TextLink("گزارش عیب‌یابی", onDiagnostics)
+
+        PrimaryButton(if (busy) "لطفاً صبر کنید…" else "ساخت خزانهٔ جدید", enabled = !busy, onClick = onCreate)
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "بازیابی یا اتصال به خزانهٔ موجود",
+                color = c.muted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(c.surface),
+            ) {
+                WelcomeOptionRow(
+                    title = "بازیابی از فایل بکاپ (.slnb)",
+                    subtitle = "انتخاب مستقیم فایل بکاپ خزانه یا بکاپ Authenticator",
+                    highlight = true,
+                    onClick = onRestoreBackupFile,
+                )
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                WelcomeOptionRow(
+                    title = "اتصال به پوشهٔ همگام‌سازی گوشی",
+                    subtitle = "انتخاب پوشهٔ Solina-Sync روی حافظهٔ داخلی یا SD",
+                    onClick = onJoinStorage,
+                )
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                WelcomeOptionRow(
+                    title = "اتصال به پوشهٔ فضای ابری",
+                    subtitle = "Google Drive، Nextcloud، Syncthing و ارائه‌دهندگان فایل",
+                    onClick = onJoinCloud,
+                )
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                WelcomeOptionRow(
+                    title = "اتصال به سرور اختصاصی WebDAV",
+                    subtitle = "همگام‌سازی سرتاسری از طریق HTTPS",
+                    onClick = onJoinWebDav,
+                )
+            }
+        }
+
+        Column(
+            Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            TextLink("گزارش عیب‌یابی", onDiagnostics)
+            Text("Solina 2.0 · GPL-3.0", color = c.muted.copy(alpha = 0.7f), fontSize = 11.sp, fontFamily = Mono)
+        }
+    }
+}
+
+@Composable
+fun WelcomeRestoreBackupScreen(
+    fileName: String,
+    headerInfo: BackupHeaderInfo,
+    busy: Boolean,
+    message: String?,
+    onSubmit: (CharArray) -> Unit,
+    onCancel: () -> Unit,
+) {
+    val c = Solina.colors
+    var pw by remember { mutableStateOf("") }
+    Page {
+        Heading(
+            "بازیابی از فایل بکاپ",
+            "فایل بکاپ Solina شناسایی شد. رمزی را که هنگام ساخت این بکاپ انتخاب کرده بودید وارد کنید.",
+        )
+        Notice(
+            buildString {
+                if (fileName.isNotBlank()) append("فایل: $fileName\n")
+                append("نسخهٔ ${headerInfo.version.fa()} · Argon2id (${(headerInfo.kdf.memoryKiB / 1024).fa()} MiB × ${headerInfo.kdf.iterations.fa()}) · ${Backup.formatByteSize(headerInfo.totalBytes)}")
+            },
+        )
+        SecretField("رمز فایل بکاپ", pw, { pw = it })
+        if (message != null) Notice(message, error = true)
+        PrimaryButton(
+            text = if (busy) "در حال رمزگشایی بکاپ…" else "بازگشایی و ادامه",
+            enabled = pw.isNotEmpty() && !busy,
+        ) {
+            onSubmit(pw.toCharArray())
+        }
+        TextLink("انصراف و بازگشت", onCancel)
     }
 }
 
@@ -184,7 +324,7 @@ fun WelcomeScreen(message: String? = null, onCreate: () -> Unit, onJoinCloud: ()
 private const val MIN_MASTER_LENGTH = 10
 
 @Composable
-fun CreatePasswordScreen(busy: Boolean, onSubmit: (CharArray) -> Unit) {
+fun CreatePasswordScreen(busy: Boolean, restoreCount: Int = 0, onSubmit: (CharArray) -> Unit) {
     val c = Solina.colors
     var pass by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
@@ -197,6 +337,9 @@ fun CreatePasswordScreen(busy: Boolean, onSubmit: (CharArray) -> Unit) {
             "رمز اصلی را بسازید",
             "این تنها رمزی است که باید به خاطر بسپارید. عبارتی طولانی و قابل‌به‌خاطرسپاری بهتر از رمز پیچیده و کوتاه است.",
         )
+        if (restoreCount > 0) {
+            Notice("${restoreCount.fa()} ورودی از فایل بکاپ رمزگشایی شد و بلافاصله پس از ساخت خزانهٔ جدید وارد می‌شود.")
+        }
         SecretField("رمز اصلی", pass, { pass = it })
         SecretField("تکرار رمز اصلی", confirm, { confirm = it })
         Text(

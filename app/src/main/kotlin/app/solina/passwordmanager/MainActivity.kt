@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.WindowManager
 import android.view.autofill.AutofillManager
@@ -94,6 +95,7 @@ import app.solina.passwordmanager.ui.screens.SettingsScreen
 import app.solina.passwordmanager.ui.screens.VaultScreen
 import app.solina.passwordmanager.ui.screens.VaultUnlockScreen
 import app.solina.passwordmanager.ui.screens.WebDavSetupScreen
+import app.solina.passwordmanager.ui.screens.WelcomeRestoreBackupScreen
 import app.solina.passwordmanager.ui.screens.WelcomeScreen
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
@@ -119,6 +121,7 @@ class MainActivity : FragmentActivity() {
         const val RC_NOTIFICATION = 1006
         const val RC_CAMERA = 1007
         const val RC_GALLERY_IMAGE = 1008
+        const val RC_WELCOME_RESTORE_FILE = 1009
     }
 
     private val container get() = (application as SolinaApplication).container
@@ -300,6 +303,57 @@ private fun hasFolderPicker(activity: FragmentActivity): Boolean {
     return activity.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) != null
 }
 
+/**
+ * ساخت Intent انتخاب فایل برای هر پسوند (از جمله ‎.slnb‎).
+ * نکته: افزودن ‎EXTRA_MIME_TYPES = arrayOf("*/*")‎ روی برخی رام‌های اندروید (MIUI/OneUI/EMUI)
+ * باعث غیرفعال شدن فایل‌های با پسوند ناشناخته مانند ‎.slnb‎ می‌شود؛ بنابراین فقط ‎setType("*/*")‎ تنظیم می‌شود.
+ */
+@Suppress("DEPRECATION")
+private fun buildOpenAnyFileIntent(activity: FragmentActivity): Intent {
+    val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        .addCategory(Intent.CATEGORY_OPENABLE)
+        .setType("*/*")
+    if (activity.packageManager.resolveActivity(openDoc, PackageManager.MATCH_DEFAULT_ONLY) != null) {
+        return openDoc
+    }
+    return Intent(Intent.ACTION_GET_CONTENT)
+        .addCategory(Intent.CATEGORY_OPENABLE)
+        .setType("*/*")
+}
+
+private fun readLimitedUri(resolver: android.content.ContentResolver, uri: Uri, max: Int): ByteArray? =
+    resolver.openInputStream(uri)?.use { input ->
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(16 * 1024)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            out.write(buf, 0, n)
+            if (out.size() > max) return null
+        }
+        out.toByteArray()
+    }
+
+private fun queryDisplayName(resolver: android.content.ContentResolver, uri: Uri): String =
+    runCatching {
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    }.getOrNull().orEmpty()
+
+private fun writeBytesSafe(resolver: android.content.ContentResolver, uri: Uri, bytes: ByteArray): Boolean =
+    runCatching {
+        val stream = runCatching { resolver.openOutputStream(uri, "w") }.getOrNull()
+            ?: runCatching { resolver.openOutputStream(uri, "wt") }.getOrNull()
+            ?: resolver.openOutputStream(uri)
+            ?: return@runCatching false
+        stream.use { out ->
+            out.write(bytes)
+            out.flush()
+        }
+        true
+    }.getOrDefault(false)
+
 private const val NO_FOLDER_PICKER_MESSAGE =
     "روی این دستگاه برنامه‌ای برای انتخاب پوشه نیست (Files / DocumentsUI). " +
         "آن را فعال کنید یا «Files by Google» را نصب کنید، بعد دوباره بزنید."
@@ -351,6 +405,51 @@ private fun Root(
     var webDavJoinBusy by remember { mutableStateOf(false) }
     var webDavJoinMsg by remember { mutableStateOf<String?>(null) }
     var stagedJoin by remember { mutableStateOf<StagedJoin?>(null) }
+    var welcomeRestoreBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var welcomeRestoreInfo by remember { mutableStateOf<BackupHeaderInfo?>(null) }
+    var welcomeRestoreName by remember { mutableStateOf("") }
+    var welcomeRestoreBusy by remember { mutableStateOf(false) }
+    var welcomeRestoreMsg by remember { mutableStateOf<String?>(null) }
+    var pendingRestoredPayloads by remember { mutableStateOf<List<ItemPayload>>(emptyList()) }
+
+    fun launchWelcomeRestoreFile() {
+        joinMessage = null
+        activity.launchForResult(
+            buildOpenAnyFileIntent(activity),
+            MainActivity.RC_WELCOME_RESTORE_FILE,
+            handler = { resultCode, data ->
+                val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
+                if (uri != null) {
+                    welcomeRestoreBusy = true
+                    scope.launch {
+                        try {
+                            val (bytes, name) = withContext(Dispatchers.IO) {
+                                readLimitedUri(activity.contentResolver, uri, 64 * 1024 * 1024) to
+                                    queryDisplayName(activity.contentResolver, uri)
+                            }
+                            if (bytes == null) {
+                                joinMessage = "فایل بکاپ خوانده نشد یا بیش از حد بزرگ است."
+                            } else {
+                                val info = Backup.inspect(bytes)
+                                welcomeRestoreBytes = bytes
+                                welcomeRestoreInfo = info
+                                welcomeRestoreName = name
+                                welcomeRestoreMsg = null
+                            }
+                        } catch (e: BackupFormatException) {
+                            joinMessage = e.message ?: "این فایل یک بکاپ معتبر Solina (.slnb) نیست."
+                        } catch (e: Exception) {
+                            DiagLog.logError("RESTORE", e, "launchWelcomeRestoreFile")
+                            joinMessage = "خواندن فایل بکاپ ناموفق بود."
+                        } finally {
+                            welcomeRestoreBusy = false
+                        }
+                    }
+                }
+            },
+            onFail = { joinMessage = "انتخاب‌گر فایل روی این دستگاه در دسترس نیست." },
+        )
+    }
 
     fun launchJoinFolder(kind: String) {
         if (!hasFolderPicker(activity)) {
@@ -370,7 +469,8 @@ private fun Root(
                             message = null
                             stagedJoin = r.staged
                         }
-                        StageJoinResult.NoVaultInFolder -> joinMessage = "در این پوشه خزانه‌ای پیدا نشد. پوشه‌ای را انتخاب کنید که شامل «Solina-Sync» است (یعنی همان پوشه‌ای که در دستگاه اول انتخاب شد)."
+                        is StageJoinResult.BackupFilesFound -> joinMessage = "در این پوشه فایل بکاپ (.slnb) وجود دارد، نه پوشهٔ همگام‌سازی Solina-Sync. برای بازیابی آن، گزینهٔ «بازیابی از فایل بکاپ (.slnb)» را بزنید و مستقیم فایل را انتخاب کنید."
+                        StageJoinResult.NoVaultInFolder -> joinMessage = "در این پوشه خزانه‌ای پیدا نشد. پوشهٔ همگام‌سازی «Solina-Sync» (یا پوشهٔ والد آن) را انتخاب کنید، یا برای فایل‌های .slnb گزینهٔ «بازیابی از فایل بکاپ (.slnb)» را بزنید."
                         is StageJoinResult.Failed -> joinMessage = r.reason
                     }
                 }
@@ -416,6 +516,52 @@ private fun Root(
             )
         }
 
+        !hasVault && welcomeRestoreBytes != null && welcomeRestoreInfo != null -> {
+            BackHandler {
+                welcomeRestoreBytes?.fill(0)
+                welcomeRestoreBytes = null
+                welcomeRestoreInfo = null
+                welcomeRestoreMsg = null
+            }
+            WelcomeRestoreBackupScreen(
+                fileName = welcomeRestoreName,
+                headerInfo = welcomeRestoreInfo!!,
+                busy = welcomeRestoreBusy,
+                message = welcomeRestoreMsg,
+                onSubmit = { pw ->
+                    val bytes = welcomeRestoreBytes ?: return@WelcomeRestoreBackupScreen
+                    welcomeRestoreBusy = true
+                    welcomeRestoreMsg = null
+                    scope.launch {
+                        try {
+                            val payloads = withContext(Dispatchers.Default) { Backup.decode(bytes, pw) }
+                            bytes.fill(0)
+                            welcomeRestoreBytes = null
+                            welcomeRestoreInfo = null
+                            pendingRestoredPayloads = payloads
+                            stage = Stage.CreatePassword
+                        } catch (e: AuthenticationFailedException) {
+                            welcomeRestoreMsg = "رمز فایل بکاپ درست نیست یا فایل دست‌کاری شده است."
+                        } catch (e: BackupFormatException) {
+                            welcomeRestoreMsg = e.message ?: "ساختار بکاپ معتبر نیست."
+                        } catch (e: Exception) {
+                            DiagLog.logError("RESTORE", e, "welcomeRestoreDecode")
+                            welcomeRestoreMsg = "بازگشایی فایل بکاپ ناموفق بود."
+                        } finally {
+                            pw.fill('\u0000')
+                            welcomeRestoreBusy = false
+                        }
+                    }
+                },
+                onCancel = {
+                    welcomeRestoreBytes?.fill(0)
+                    welcomeRestoreBytes = null
+                    welcomeRestoreInfo = null
+                    welcomeRestoreMsg = null
+                },
+            )
+        }
+
         !hasVault && showJoinWebDav -> {
             BackHandler { showJoinWebDav = false; webDavJoinMsg = null }
             WebDavSetupScreen(
@@ -432,7 +578,7 @@ private fun Root(
                                 message = null
                                 stagedJoin = r.staged
                             }
-                            StageJoinResult.NoVaultInFolder -> webDavJoinMsg = "در این مسیر WebDAV خزانه‌ای پیدا نشد."
+                            StageJoinResult.NoVaultInFolder, is StageJoinResult.BackupFilesFound -> webDavJoinMsg = "در این مسیر WebDAV خزانه‌ای پیدا نشد."
                             is StageJoinResult.Failed -> webDavJoinMsg = r.reason
                         }
                         webDavJoinBusy = false
@@ -446,7 +592,9 @@ private fun Root(
             Stage.Welcome -> {
                 WelcomeScreen(
                     message = joinMessage,
-                    onCreate = { joinMessage = null; stage = Stage.CreatePassword },
+                    busy = welcomeRestoreBusy,
+                    onCreate = { joinMessage = null; pendingRestoredPayloads = emptyList(); stage = Stage.CreatePassword },
+                    onRestoreBackupFile = { launchWelcomeRestoreFile() },
                     onDiagnostics = onDiagnostics,
                     onJoinCloud = { joinMessage = null; DiagLog.log("JOIN", "cloud button tapped"); showJoinCloud = true },
                     onJoinStorage = { joinMessage = null; DiagLog.log("JOIN", "storage button tapped"); launchJoinFolder("storage") },
@@ -461,7 +609,7 @@ private fun Root(
                     )
                 }
             }
-            Stage.CreatePassword -> CreatePasswordScreen(busy) { password ->
+            Stage.CreatePassword -> CreatePasswordScreen(busy, restoreCount = pendingRestoredPayloads.size) { password ->
                 busy = true
                 scope.launch {
                     created = auth.create(password)
@@ -477,7 +625,14 @@ private fun Root(
                     created?.let { vault ->
                         auth.commit(vault)
                         created = null
+                        val toRestore = pendingRestoredPayloads
+                        pendingRestoredPayloads = emptyList()
                         hasVault = true
+                        if (toRestore.isNotEmpty()) {
+                            scope.launch {
+                                runCatching { container.repository.importItems(toRestore) }
+                            }
+                        }
                         offerBiometric = auth.biometricAvailable(activity)
                     }
                 },
@@ -671,21 +826,9 @@ private fun MainApp(
     var pendingExport by remember { mutableStateOf<ByteArray?>(null) }
     var pendingRestore by remember { mutableStateOf<ByteArray?>(null) }
     var pendingRestoreInfo by remember { mutableStateOf<BackupHeaderInfo?>(null) }
+    var pendingRestoreFileName by remember { mutableStateOf<String?>(null) }
     var pendingImport by remember { mutableStateOf<ByteArray?>(null) }
     val resolver = activity.contentResolver
-
-    fun readLimited(uri: Uri, max: Int): ByteArray? =
-        resolver.openInputStream(uri)?.use { input ->
-            val out = java.io.ByteArrayOutputStream()
-            val buf = ByteArray(16 * 1024)
-            while (true) {
-                val n = input.read(buf)
-                if (n < 0) break
-                out.write(buf, 0, n)
-                if (out.size() > max) return null
-            }
-            out.toByteArray()
-        }
 
     fun launchExportFile(fileName: String) {
         activity.launchForResult(
@@ -699,38 +842,61 @@ private fun MainApp(
                 pendingExport = null
                 val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
                 if (uri != null && bytes != null) {
-                    val ok = runCatching { resolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } != null }.getOrDefault(false)
-                    toast = if (ok) "بکاپ ذخیره شد" else "ذخیرهٔ فایل انجام نشد"
-                    if (ok) dataStep = DataStep.Menu
+                    scope.launch {
+                        try {
+                            val ok = withContext(Dispatchers.IO) { writeBytesSafe(resolver, uri, bytes) }
+                            toast = if (ok) "فایل بکاپ ذخیره شد" else "ذخیرهٔ فایل انجام نشد"
+                            if (ok) dataStep = DataStep.Menu else dataMessage = "نوشتن فایل بکاپ ناموفق بود؛ مسیر دیگری انتخاب کنید."
+                        } finally {
+                            bytes.fill(0)
+                            dataBusy = false
+                        }
+                    }
+                } else {
+                    bytes?.fill(0)
+                    dataBusy = false
                 }
+            },
+            onFail = {
+                pendingExport?.fill(0)
+                pendingExport = null
+                dataMessage = "انتخاب‌گر فایل در دسترس نیست."
                 dataBusy = false
             },
-            onFail = { dataMessage = "انتخاب‌گر فایل در دسترس نیست."; dataBusy = false },
         )
     }
 
     fun launchRestoreFile() {
         activity.launchForResult(
-            Intent(Intent.ACTION_OPEN_DOCUMENT)
-                .addCategory(Intent.CATEGORY_OPENABLE)
-                .setType("*/*")
-                .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("*/*")),
+            buildOpenAnyFileIntent(activity),
             MainActivity.RC_RESTORE_FILE,
             handler = { resultCode, data ->
                 val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
                 if (uri != null) {
-                    val bytes = runCatching { readLimited(uri, 64 * 1024 * 1024) }.getOrNull()
-                    if (bytes == null) {
-                        dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
-                    } else {
+                    dataBusy = true
+                    dataMessage = null
+                    scope.launch {
                         try {
-                            val headerInfo = Backup.inspect(bytes)
-                            pendingRestore = bytes
-                            pendingRestoreInfo = headerInfo
-                            dataMessage = null
-                            dataStep = DataStep.RestorePassword
+                            val (bytes, name) = withContext(Dispatchers.IO) {
+                                readLimitedUri(resolver, uri, 64 * 1024 * 1024) to queryDisplayName(resolver, uri)
+                            }
+                            if (bytes == null) {
+                                dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
+                            } else {
+                                val headerInfo = Backup.inspect(bytes)
+                                pendingRestore = bytes
+                                pendingRestoreInfo = headerInfo
+                                pendingRestoreFileName = name
+                                dataMessage = null
+                                dataStep = DataStep.RestorePassword
+                            }
                         } catch (e: BackupFormatException) {
                             dataMessage = e.message ?: "ساختار فایل بکاپ معتبر نیست."
+                        } catch (e: Exception) {
+                            DiagLog.logError("RESTORE", e, "launchRestoreFile")
+                            dataMessage = "خواندن فایل بکاپ ناموفق بود."
+                        } finally {
+                            dataBusy = false
                         }
                     }
                 }
@@ -739,8 +905,18 @@ private fun MainApp(
         )
     }
 
-    suspend fun runImport(bytes: ByteArray, password: CharArray?) {
+    suspend fun runImport(bytes: ByteArray, password: CharArray?, displayName: String? = null) {
         try {
+            // اگر کاربر به‌اشتباه فایل بکاپ ‎.slnb‎ سولینا را از بخش «ورود از برنامهٔ دیگر» انتخاب کرد، مستقیم به بازیابی بکاپ هدایت شود
+            if (password == null && Backup.isSolinaBackup(bytes)) {
+                val info = Backup.inspect(bytes)
+                pendingRestore = bytes
+                pendingRestoreInfo = info
+                pendingRestoreFileName = displayName
+                dataMessage = null
+                dataStep = DataStep.RestorePassword
+                return
+            }
             val r = withContext(Dispatchers.Default) { Importers.parseBytes(bytes, password) }
             val stats = repo.importItems(r.items)
             pendingImport = null
@@ -754,6 +930,8 @@ private fun MainApp(
             dataStep = DataStep.ImportPassword
         } catch (e: app.solina.passwordmanager.core.importer.WrongImportPasswordException) {
             dataMessage = "رمز درست نیست یا فایل دست‌کاری شده است."
+        } catch (e: BackupFormatException) {
+            dataMessage = e.message
         } catch (e: ImportException) {
             dataMessage = e.message
         } catch (e: Exception) {
@@ -766,10 +944,7 @@ private fun MainApp(
 
     fun launchImportFile() {
         activity.launchForResult(
-            Intent(Intent.ACTION_OPEN_DOCUMENT)
-                .addCategory(Intent.CATEGORY_OPENABLE)
-                .setType("*/*")
-                .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("*/*")),
+            buildOpenAnyFileIntent(activity),
             MainActivity.RC_IMPORT_FILE,
             handler = { resultCode, data ->
                 val uri = if (resultCode == Activity.RESULT_OK) data?.data else null
@@ -777,11 +952,14 @@ private fun MainApp(
                     dataBusy = true
                     scope.launch {
                         try {
-                            val bytes = withContext(Dispatchers.IO) { runCatching { readLimited(uri, 20 * 1024 * 1024) }.getOrNull() }
+                            val (bytes, name) = withContext(Dispatchers.IO) {
+                                runCatching { readLimitedUri(resolver, uri, 20 * 1024 * 1024) }.getOrNull() to
+                                    queryDisplayName(resolver, uri)
+                            }
                             if (bytes == null) {
                                 dataMessage = "فایل خوانده نشد یا بیش از حد بزرگ است."
                             } else {
-                                runImport(bytes, null)
+                                runImport(bytes, null, name)
                             }
                         } catch (e: ImportException) {
                             dataMessage = e.message
@@ -870,7 +1048,7 @@ private fun MainApp(
             showExternalAccounts -> { showExternalAccounts = false; oauthMessage = null }
             dataStep != null -> {
                 if (dataStep == DataStep.Menu) dataStep = null
-                else { dataStep = DataStep.Menu; pendingRestore = null; pendingRestoreInfo = null; pendingImport = null }
+                else { dataStep = DataStep.Menu; pendingRestore = null; pendingRestoreInfo = null; pendingRestoreFileName = null; pendingImport = null }
                 dataMessage = null
             }
             scanning -> scanning = false
@@ -961,9 +1139,10 @@ private fun MainApp(
                         itemCount = items.size,
                         authCount = authItemsCount,
                         restoreHeaderInfo = pendingRestoreInfo,
+                        restoreFileName = pendingRestoreFileName,
                         onBack = {
                             if (dataStep == DataStep.Menu) dataStep = null
-                            else { dataStep = DataStep.Menu; pendingRestore = null; pendingRestoreInfo = null; pendingImport = null }
+                            else { dataStep = DataStep.Menu; pendingRestore = null; pendingRestoreInfo = null; pendingRestoreFileName = null; pendingImport = null }
                             dataMessage = null
                         },
                         onStartExport = { dataMessage = null; dataStep = DataStep.ExportPassword },
@@ -1021,6 +1200,7 @@ private fun MainApp(
                                         val stats = repo.importItems(payloads)
                                         pendingRestore = null
                                         pendingRestoreInfo = null
+                                        pendingRestoreFileName = null
                                         dataStep = DataStep.Menu
                                         toast = "${stats.added.fa()} ورودی بازیابی شد" + if (stats.skipped > 0) " (${stats.skipped.fa()} تکراری)" else ""
                                     } catch (e: AuthenticationFailedException) {
