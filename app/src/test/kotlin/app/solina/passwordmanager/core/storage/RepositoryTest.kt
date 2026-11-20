@@ -188,6 +188,29 @@ class RepositoryTest {
         assertEquals(100, SecurityAnalyzer.analyze(emptyList()).score)
     }
 
+    @Test fun analyzerFlagsOldPasswordByEditedAt() {
+        val now = 1_800_000_000_000L
+        val year = SecurityAnalyzer.OLD_PASSWORD_MILLIS
+        fun vi(id: String, editedAt: Long) =
+            VaultItem(id, 1, ItemPayload(title = id, password = "kPq7vM#xR42wL!z9Hd", totpSecret = "JBSWY3DP", editedAt = editedAt))
+        val rep = SecurityAnalyzer.analyze(
+            listOf(
+                vi("old", now - year - 1),
+                vi("almost-old", now - year + 60_000L),
+                vi("fresh", now - 1_000L),
+                vi("unknown-age", 0L),
+            ),
+            now = now,
+        )
+        assertTrue(Flag.Old in rep.flags["old"].orEmpty())
+        assertTrue(Flag.Old !in rep.flags.getOrDefault("almost-old", emptySet()))
+        assertTrue("fresh" !in rep.flags)
+        assertTrue("unknown-age" !in rep.flags)
+        assertEquals(1, rep.oldPasswords)
+        // رمز قدیمی فقط هشدار است و امتیاز را کم نمی‌کند.
+        assertEquals(100, rep.score)
+    }
+
     @Test fun base32() {
         assertArrayEquals("foobar".toByteArray(), Base32.decode("MZXW6YTBOI======"))
         assertArrayEquals("foob".toByteArray(), Base32.decode("mzxw 6yq-"))

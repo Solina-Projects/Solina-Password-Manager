@@ -2,7 +2,7 @@ package app.solina.passwordmanager.core.storage
 
 import app.solina.passwordmanager.core.PasswordGenerator
 
-enum class Flag { Weak, Reused, NoTwoFa, InsecureHttp }
+enum class Flag { Weak, Reused, NoTwoFa, InsecureHttp, Old }
 
 data class SecurityReport(
     val flags: Map<String, Set<Flag>>,
@@ -12,11 +12,14 @@ data class SecurityReport(
     val reused: Int,
     val withoutTotp: Int,
     val insecureHttp: Int = 0,
+    val oldPasswords: Int = 0,
 )
 
 /** تحلیل محلی؛ هیچ داده‌ای جایی ارسال نمی‌شود. */
 object SecurityAnalyzer {
     const val WEAK_BITS = 50.0
+    /** رمز عبور قدیمی: بیش از یک سال از آخرین ویرایش گذشته باشد. */
+    const val OLD_PASSWORD_MILLIS = 365L * 24 * 3600_000L
 
     private fun isInsecureHttp(website: String): Boolean {
         val w = website.trim().lowercase()
@@ -25,7 +28,7 @@ object SecurityAnalyzer {
         return host != "localhost" && host != "127.0.0.1"
     }
 
-    fun analyze(items: List<VaultItem>): SecurityReport {
+    fun analyze(items: List<VaultItem>, now: Long = System.currentTimeMillis()): SecurityReport {
         val logins = items.filter { it.payload.kind == ItemKind.Login && it.payload.password.isNotEmpty() }
         val counts = logins.groupingBy { it.payload.password }.eachCount()
         val flags = HashMap<String, Set<Flag>>()
@@ -33,6 +36,7 @@ object SecurityAnalyzer {
         var reused = 0
         var noTotp = 0
         var insecureHttp = 0
+        var oldPasswords = 0
         var clean = 0
         for (i in logins) {
             val f = mutableSetOf<Flag>()
@@ -52,11 +56,16 @@ object SecurityAnalyzer {
                 f += Flag.InsecureHttp
                 insecureHttp++
             }
+            // رمز قدیمی فقط هشدار است (مثل نبود 2FA) و روی امتیاز اثر نمی‌گذارد.
+            if (i.payload.editedAt > 0 && now - i.payload.editedAt > OLD_PASSWORD_MILLIS) {
+                f += Flag.Old
+                oldPasswords++
+            }
             // نبود 2FA و HTTP هشدار هستند؛ امتیاز اصلی ضعف و تکرار رمز را می‌سنجد.
             if (Flag.Weak !in f && Flag.Reused !in f) clean++
             if (f.isNotEmpty()) flags[i.id] = f
         }
         val score = if (logins.isEmpty()) 100 else (clean * 100) / logins.size
-        return SecurityReport(flags, score, weak, reused, noTotp, insecureHttp)
+        return SecurityReport(flags, score, weak, reused, noTotp, insecureHttp, oldPasswords)
     }
 }
