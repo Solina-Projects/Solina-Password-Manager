@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -57,6 +61,7 @@ import app.solina.passwordmanager.core.formatJalali
 import app.solina.passwordmanager.core.security.AppLanguage
 import app.solina.passwordmanager.core.security.AutoLockOption
 import app.solina.passwordmanager.core.security.ClipboardClearOption
+import app.solina.passwordmanager.core.security.ListDensity
 import app.solina.passwordmanager.core.security.ThemeMode
 import app.solina.passwordmanager.core.storage.Flag
 import app.solina.passwordmanager.core.storage.ChangedField
@@ -395,10 +400,12 @@ private fun QuickAction(text: String, icon: androidx.compose.ui.graphics.vector.
 // ───────────────────────── خزانه ─────────────────────────
 
 @Composable
-private fun ItemRow(item: VaultItem, flags: Set<Flag>, breached: Boolean = false, onClick: () -> Unit) {
+private fun ItemRow(item: VaultItem, flags: Set<Flag>, breached: Boolean = false, compact: Boolean = false, onClick: () -> Unit) {
     val c = Solina.colors
     val str = Solina.strings
     val p = item.payload
+    val avatarSize = if (compact) 36.dp else 44.dp
+    val rowHeight = if (compact) 52.dp else 64.dp
     val subtitle = when (p.kind) {
         ItemKind.Login -> p.username.ifBlank { p.website }
         ItemKind.Card -> if (p.cardNumber.length >= 4) "•••• " + p.cardNumber.takeLast(4) else p.bankName.ifBlank { str.kindCard }
@@ -412,29 +419,29 @@ private fun ItemRow(item: VaultItem, flags: Set<Flag>, breached: Boolean = false
     Row(
         Modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .height(rowHeight)
             .clip(RoundedCornerShape(16.dp))
             .clickable(role = Role.Button, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (p.icon.isNotBlank()) {
-            Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) {
-                Text(p.icon, fontSize = 20.sp)
+            Box(Modifier.size(avatarSize).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) {
+                Text(p.icon, fontSize = if (compact) 17.sp else 20.sp)
             }
         } else {
             when (p.kind) {
-                ItemKind.Card -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Card, c.text) }
-                ItemKind.Identity -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.primaryContainer), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Shield, c.onPrimaryContainer) }
-                ItemKind.Note -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
-                ItemKind.QuickNote -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
-                ItemKind.Task -> Box(Modifier.size(44.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Checklist, c.text) }
-                ItemKind.Login -> ItemAvatar(p.title.ifBlank { "?" })
+                ItemKind.Card -> Box(Modifier.size(avatarSize).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Card, c.text) }
+                ItemKind.Identity -> Box(Modifier.size(avatarSize).clip(CircleShape).background(c.primaryContainer), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Shield, c.onPrimaryContainer) }
+                ItemKind.Note -> Box(Modifier.size(avatarSize).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
+                ItemKind.QuickNote -> Box(Modifier.size(avatarSize).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
+                ItemKind.Task -> Box(Modifier.size(avatarSize).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Checklist, c.text) }
+                ItemKind.Login -> ItemAvatar(p.title.ifBlank { "?" }, website = p.website)
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(p.title, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text(p.title, color = c.text, fontSize = if (compact) 15.sp else 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                 if (p.favorite) Text("★", color = c.primary, fontSize = 13.sp)
             }
             val line2 = buildString {
@@ -466,6 +473,52 @@ private fun ItemRow(item: VaultItem, flags: Set<Flag>, breached: Boolean = false
 }
 
 @Composable
+private fun TileCard(item: VaultItem, flags: Set<Flag>, breached: Boolean = false, onClick: () -> Unit) {
+    val c = Solina.colors
+    val str = Solina.strings
+    val p = item.payload
+    val subtitle = when (p.kind) {
+        ItemKind.Login -> p.username.ifBlank { p.website }
+        ItemKind.Card -> if (p.cardNumber.length >= 4) "•••• " + p.cardNumber.takeLast(4) else p.bankName.ifBlank { str.kindCard }
+        ItemKind.Identity -> p.fullName.ifBlank { p.email.ifBlank { p.phone.ifBlank { str.kindIdentity } } }
+        ItemKind.Note -> p.category.ifBlank { "یادداشت امن" }
+        ItemKind.QuickNote -> p.category.ifBlank { "یادداشت سریع" }
+        ItemKind.Task -> if (p.dueAt > 0) formatJalali(p.dueAt) else str.noDueDate
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(c.surface)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (p.icon.isNotBlank()) {
+                Box(Modifier.size(40.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) {
+                    Text(p.icon, fontSize = 18.sp)
+                }
+            } else {
+                when (p.kind) {
+                    ItemKind.Card -> Box(Modifier.size(40.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Card, c.text) }
+                    ItemKind.Identity -> Box(Modifier.size(40.dp).clip(CircleShape).background(c.primaryContainer), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Shield, c.onPrimaryContainer) }
+                    ItemKind.Note -> Box(Modifier.size(40.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
+                    ItemKind.QuickNote -> Box(Modifier.size(40.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
+                    ItemKind.Task -> Box(Modifier.size(40.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Checklist, c.text) }
+                    ItemKind.Login -> ItemAvatar(p.title.ifBlank { "?" }, 40.dp, website = p.website)
+                }
+            }
+            if (p.favorite) Text("★", color = c.primary, fontSize = 13.sp)
+            if (breached) Pill(str.breachedBadge, c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
+            else if (Flag.Weak in flags || Flag.Common in flags) Pill("!", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
+        }
+        Text(p.title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        if (subtitle.isNotBlank()) Text(subtitle, color = c.muted, fontSize = 12.sp, fontFamily = Mono, textAlign = TextAlign.Left, maxLines = 1)
+    }
+}
+
+@Composable
 fun VaultScreen(
     items: List<VaultItem>,
     report: SecurityReport,
@@ -475,6 +528,7 @@ fun VaultScreen(
     onOpenTrash: () -> Unit = {},
     onOpenItem: (String) -> Unit,
     onAdd: () -> Unit,
+    density: ListDensity = ListDensity.Normal,
 ) {
     val c = Solina.colors
     val str = Solina.strings
@@ -607,6 +661,22 @@ fun VaultScreen(
                 Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
                     Text("موردی پیدا نشد", color = c.muted, fontSize = 15.sp)
                 }
+            } else if (density == ListDensity.Tiles) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    gridItems(shown, key = { it.id }) { item ->
+                        TileCard(
+                            item = item,
+                            flags = report.flags[item.id].orEmpty(),
+                            breached = item.id in breachState.breachedIds,
+                            onClick = { onOpenItem(item.id) },
+                        )
+                    }
+                    item(span = { GridItemSpan(2) }) { Spacer(Modifier.height(96.dp)) }
+                }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     items(shown, key = { it.id }) { item ->
@@ -614,6 +684,7 @@ fun VaultScreen(
                             item = item,
                             flags = report.flags[item.id].orEmpty(),
                             breached = item.id in breachState.breachedIds,
+                            compact = density == ListDensity.Compact,
                             onClick = { onOpenItem(item.id) },
                         )
                     }
@@ -672,7 +743,7 @@ fun TrashScreen(
                     Card(padding = 14.dp) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                ItemAvatar(p.title.ifBlank { "?" })
+                                ItemAvatar(p.title.ifBlank { "?" }, website = p.website)
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(p.title, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                                     if (subtitle.isNotBlank()) Text(subtitle, color = c.muted, fontSize = 13.sp, fontFamily = Mono, maxLines = 1)
@@ -803,7 +874,7 @@ fun DetailScreen(
                     Text(p.icon, fontSize = 34.sp)
                 }
             } else {
-                ItemAvatar(p.title.ifBlank { "?" }, 72.dp)
+                ItemAvatar(p.title.ifBlank { "?" }, 72.dp, website = p.website)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(p.title, color = c.text, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
@@ -1146,6 +1217,7 @@ fun CodesScreen(
     onIncrementHotp: (VaultItem) -> Unit = {},
     onBackupAuth: () -> Unit = {},
     clipboardClearMillis: Long = CLIPBOARD_CLEAR_MILLIS,
+    density: ListDensity = ListDensity.Normal,
 ) {
     val c = Solina.colors
     val str = Solina.strings
@@ -1276,7 +1348,7 @@ fun CodesScreen(
                                 revealedIds = revealedIds + item.id
                             }
                         }
-                        .padding(16.dp),
+                        .padding(if (density == ListDensity.Compact) 10.dp else 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -1288,13 +1360,13 @@ fun CodesScreen(
                         }
                         if (p.username.isNotBlank()) Text(p.username, color = c.muted, fontSize = 13.sp, fontFamily = Mono, textAlign = TextAlign.Left)
                         if (revealed) {
-                            RollingTotpCode(code, accent, 32.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 4.dp))
+                            RollingTotpCode(code, accent, if (density == ListDensity.Compact) 26.sp else 32.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 4.dp))
                         } else {
                             Text(
                                 masked,
                                 color = accent,
                                 fontFamily = Mono,
-                                fontSize = 32.sp,
+                                fontSize = if (density == ListDensity.Compact) 26.sp else 32.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 2.sp,
                                 textAlign = TextAlign.Left,
@@ -1541,6 +1613,8 @@ fun SettingsScreen(
     onSetThemeMode: (ThemeMode) -> Unit = {},
     language: AppLanguage = AppLanguage.FA,
     onSetLanguage: (AppLanguage) -> Unit = {},
+    density: ListDensity = ListDensity.Normal,
+    onSetDensity: (ListDensity) -> Unit = {},
     externalAccountCount: Int = 0,
     onOpenExternalAccounts: () -> Unit = {},
     onChangeMasterPassword: () -> Unit = {},
@@ -1757,6 +1831,17 @@ fun SettingsScreen(
                     ) {
                         Text(option.label, color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
                         if (language == option) Text("●", color = c.primary, fontSize = 14.sp)
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
+                Text(str.densityTitle, color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                for (option in ListDensity.entries) {
+                    Row(
+                        Modifier.fillMaxWidth().height(44.dp).clickable(role = Role.RadioButton) { onSetDensity(option) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(option.labelFa, color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        if (density == option) Text("●", color = c.primary, fontSize = 14.sp)
                     }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))

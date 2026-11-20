@@ -125,7 +125,7 @@ fun IconAction(
 }
 
 @Composable
-fun ItemAvatar(title: String, size: Dp = 44.dp) {
+fun ItemAvatar(title: String, size: Dp = 44.dp, website: String = "") {
     val c = Solina.colors
     val palette = if (c.isDark) {
         listOf(
@@ -142,7 +142,37 @@ fun ItemAvatar(title: String, size: Dp = 44.dp) {
             Color(0xFFE0E7FF) to Color(0xFF312E81),
         )
     }
-    val (bg, fg) = palette[(title.hashCode() and 0x7fffffff) % palette.size]
+    // پالت سرویس‌های شناخته‌شده (فاز ۴) — ۸ رنگ ثابت؛ فقط وقتی دامنه/عنوان شناخته شد.
+    val servicePalette = if (c.isDark) {
+        listOf(
+            Color(0xFF1E3A5F) to Color(0xFFBFDBFE),
+            Color(0xFF3B1A2B) to Color(0xFFFBCFE8),
+            Color(0xFF0B4F49) to Color(0xFFCCFBF1),
+            Color(0xFF4A2F05) to Color(0xFFFDE68A),
+            Color(0xFF2A1B4A) to Color(0xFFE9D5FF),
+            Color(0xFF1E2A5A) to Color(0xFFC7D2FE),
+            Color(0xFF3A1F0D) to Color(0xFFFED7AA),
+            Color(0xFF123524) to Color(0xFFBBF7D0),
+        )
+    } else {
+        listOf(
+            Color(0xFFDBEAFE) to Color(0xFF1E3A8A),
+            Color(0xFFFCE7F3) to Color(0xFF9D174D),
+            Color(0xFFCCFBF1) to Color(0xFF0B4F49),
+            Color(0xFFFEF3C7) to Color(0xFF5A3A06),
+            Color(0xFFF3E8FF) to Color(0xFF6B21A8),
+            Color(0xFFE0E7FF) to Color(0xFF312E81),
+            Color(0xFFFFEDD5) to Color(0xFF9A3412),
+            Color(0xFFDCFCE7) to Color(0xFF166534),
+        )
+    }
+    val service = app.solina.passwordmanager.core.storage.ServiceIcon.resolve(website, title)
+    val (bg, fg) = if (service != null) {
+        servicePalette[service.colorIndex % servicePalette.size]
+    } else {
+        palette[(title.hashCode() and 0x7fffffff) % palette.size]
+    }
+    val letter = service?.letter ?: title.take(1).uppercase()
     Box(
         modifier = Modifier
             .size(size)
@@ -151,7 +181,7 @@ fun ItemAvatar(title: String, size: Dp = 44.dp) {
             .semantics { contentDescription = "" },
         contentAlignment = Alignment.Center,
     ) {
-        Text(title.take(1).uppercase(), color = fg, fontSize = (size.value * 0.4f).sp, fontWeight = FontWeight.SemiBold)
+        Text(letter, color = fg, fontSize = (size.value * 0.4f).sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

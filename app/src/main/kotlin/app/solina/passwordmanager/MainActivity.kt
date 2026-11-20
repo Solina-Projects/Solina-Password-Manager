@@ -993,6 +993,7 @@ private fun MainApp(
     val language by container.securityPrefs.language.collectAsState()
     val pinEnabled by container.pinUnlock.pinEnabled.collectAsState()
     val autosaveEnabled by container.securityPrefs.autosaveEnabled.collectAsState()
+    val listDensity by container.securityPrefs.listDensity.collectAsState()
     var editing by remember { mutableStateOf(false) }
     var generator by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
@@ -1735,6 +1736,7 @@ private fun MainApp(
                             onOpenTrash = { showTrash = true; refreshTrash() },
                             onOpenItem = { detailId = it },
                             onAdd = { detailId = null; prefill = null; editing = true },
+                            density = listDensity,
                         )
                         Tab.Codes -> CodesScreen(
                             items = items,
@@ -1752,6 +1754,7 @@ private fun MainApp(
                             },
                             onBackupAuth = { dataMessage = null; dataStep = DataStep.ExportAuthPassword },
                             clipboardClearMillis = clipboardClear.millis,
+                            density = listDensity,
                         )
                         Tab.NotesTasks -> NotesTasksScreen(
                             items = items,
@@ -1899,6 +1902,8 @@ private fun MainApp(
                             },
                             autosaveEnabled = autosaveEnabled,
                             onSetAutosaveEnabled = { container.securityPrefs.setAutosaveEnabled(it) },
+                            density = listDensity,
+                            onSetDensity = { container.securityPrefs.setListDensity(it) },
                             onLock = { container.session.lock() },
                         )
                     }

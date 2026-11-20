@@ -51,6 +51,17 @@ enum class AppLanguage(val label: String) {
     }
 }
 
+/** تراکم فهرست خزانه و کدها (فاز ۴): معمولی / فشرده / کاشی‌ها (شبکهٔ دو ستونه). */
+enum class ListDensity(val labelFa: String, val labelEn: String) {
+    Normal("معمولی", "Normal"),
+    Compact("فشرده", "Compact"),
+    Tiles("کاشی‌ها", "Tiles");
+
+    companion object {
+        fun parse(name: String?): ListDensity = entries.firstOrNull { it.name == name } ?: Normal
+    }
+}
+
 /** تنظیمات امنیتی و شخصی‌سازی کاربر (قفل خودکار، کلیپ‌بورد، تم و زبان). */
 class SecurityPrefs(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("security_prefs", Context.MODE_PRIVATE)
@@ -70,6 +81,10 @@ class SecurityPrefs(context: Context) {
     /** پیشنهاد ذخیرهٔ رمز جدید (SaveInfo سیستم)؛ خاموش که باشد هیچ‌وقت پیشنهاد نمی‌شود. */
     private val _autosaveEnabled = MutableStateFlow(prefs.getBoolean("autosave_enabled", true))
     val autosaveEnabled: StateFlow<Boolean> = _autosaveEnabled.asStateFlow()
+
+    /** تراکم فهرست خزانه و کدها (فاز ۴). */
+    private val _listDensity = MutableStateFlow(ListDensity.parse(prefs.getString("list_density", null)))
+    val listDensity: StateFlow<ListDensity> = _listDensity.asStateFlow()
 
     fun autoLockMillis(): Long = _autoLock.value.millis
     fun clipboardClearMillis(): Long = _clipboardClear.value.millis
@@ -99,6 +114,11 @@ class SecurityPrefs(context: Context) {
         _autosaveEnabled.value = enabled
     }
 
+    fun setListDensity(density: ListDensity) {
+        prefs.edit().putString("list_density", density.name).apply()
+        _listDensity.value = density
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
         _autoLock.value = AutoLockOption.OneMinute
@@ -106,5 +126,6 @@ class SecurityPrefs(context: Context) {
         _themeMode.value = ThemeMode.System
         _language.value = AppLanguage.FA
         _autosaveEnabled.value = true
+        _listDensity.value = ListDensity.Normal
     }
 }
