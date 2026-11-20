@@ -113,9 +113,11 @@ class AutofillLogicTest {
         val memory = AutofillSessionMemory()
         val github = item("1", "GitHub", "github.com")
         memory.remember(github, "github.com", "com.android.chrome")
-        // دامنهٔ دیگر: هیچی برنمی‌گردد و حافظه سر جایش می‌ماند.
-        assertNull(memory.recallForPasswordOnly("evil.com", "com.android.chrome"))
+        // دامنه و بستهٔ دیگر: هیچی برنمی‌گردد و حافظه سر جایش می‌ماند.
+        assertNull(memory.recallForPasswordOnly("evil.com", "com.other.app"))
         assertNull(memory.recallForPasswordOnly(null, "com.other.app"))
+        assertNull(memory.recallForPasswordOnly("evil.com", null))
+        // همان دامنه (حتی بدون بسته) کافی است.
         assertEquals(github, memory.recallForPasswordOnly("github.com", null))
     }
 
