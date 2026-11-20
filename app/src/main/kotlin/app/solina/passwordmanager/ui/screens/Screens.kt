@@ -229,6 +229,7 @@ fun HomeScreen(
     // «اخیر»: تازه‌ترین ورودی‌های هر چهار بخش، هر کدام با کارت اختصاصی خودش.
     val recent = items.sortedByDescending { it.payload.editedAt }.take(6)
     val breachedCount = breachState.breachedIds.size
+    val hasProblems = report.weak > 0 || report.reused > 0 || report.insecureHttp > 0 || report.oldPasswords > 0 || report.commonPasswords > 0 || breachedCount > 0
 
     Column(
         Modifier
@@ -255,73 +256,69 @@ fun HomeScreen(
                 onAdd,
             )
         } else {
-            Card(background = c.primaryContainer, padding = 18.dp) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        TotpRing(
-                            remainingMillis = (report.score * 300L).coerceAtLeast(1L),
-                            periodSeconds = 30,
-                            size = 88.dp,
-                            faSeconds = "${report.score.fa()}٪",
-                            color = c.primary,
-                            track = c.primary.copy(alpha = 0.2f),
-                            textColor = c.onPrimaryContainer,
+            // کارت سلامت، فشرده (حدود نصف ارتفاع قبل): حلقهٔ کوچک + متن وضعیت + دکمه‌ها در ستون کناری.
+            Card(background = c.primaryContainer, padding = 12.dp) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TotpRing(
+                        remainingMillis = (report.score * 300L).coerceAtLeast(1L),
+                        periodSeconds = 30,
+                        size = 56.dp,
+                        faSeconds = "${report.score.fa()}٪",
+                        color = c.primary,
+                        track = c.primary.copy(alpha = 0.2f),
+                        textColor = c.onPrimaryContainer,
+                    )
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(str.vaultHealth, color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 12.sp)
+                        Text(
+                            if (hasProblems) {
+                                buildString {
+                                    append("${report.reused.fa()} رمز تکراری و ${report.weak.fa()} رمز ضعیف")
+                                    if (report.commonPasswords > 0) append(" و ${report.commonPasswords.fa()} رمز خیلی رایج")
+                                    if (report.oldPasswords > 0) append(" و ${report.oldPasswords.fa()} رمز قدیمی")
+                                    if (report.insecureHttp > 0) append(" و ${report.insecureHttp.fa()} نشانی HTTP ناامن")
+                                    if (breachedCount > 0) append(" و ${breachedCount.fa()} رمز افشاشده")
+                                    append(" دارید.")
+                                }
+                            } else "مشکلی نیست.",
+                            color = c.onPrimaryContainer,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 20.sp,
+                            maxLines = 3,
                         )
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(str.vaultHealth, color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 13.sp)
-                            Text(
-                                if (report.weak == 0 && report.reused == 0 && report.insecureHttp == 0 && report.oldPasswords == 0 && report.commonPasswords == 0 && breachedCount == 0) {
-                                    "رمز ضعیف، تکراری، قدیمی یا نشانی ناامن ندارید."
-                                } else {
-                                    buildString {
-                                        append("${report.reused.fa()} رمز تکراری و ${report.weak.fa()} رمز ضعیف")
-                                        if (report.commonPasswords > 0) append(" و ${report.commonPasswords.fa()} رمز خیلی رایج")
-                                        if (report.oldPasswords > 0) append(" و ${report.oldPasswords.fa()} رمز قدیمی")
-                                        if (report.insecureHttp > 0) append(" و ${report.insecureHttp.fa()} نشانی HTTP ناامن")
-                                        if (breachedCount > 0) append(" و ${breachedCount.fa()} رمز افشاشده")
-                                        append(" دارید.")
-                                    }
-                                },
-                                color = c.onPrimaryContainer,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                                lineHeight = 24.sp,
-                            )
-                            if (report.weak > 0 || report.reused > 0 || report.insecureHttp > 0 || report.oldPasswords > 0 || report.commonPasswords > 0 || breachedCount > 0) {
-                                Box(
-                                    Modifier
-                                        .height(38.dp)
-                                        .clip(RoundedCornerShape(19.dp))
-                                        .background(c.primary)
-                                        .clickable(role = Role.Button, onClick = onGoVault)
-                                        .padding(horizontal = 16.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) { Text("رفع مشکلات", color = c.onPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium) }
-                            }
-                        }
+                        Text(
+                            if (breachState.scanning) str.checkingBreaches
+                            else if (breachState.error != null) breachState.error
+                            else if (breachState.checkedCount > 0) {
+                                if (breachedCount == 0) "${breachState.checkedCount.fa()} رمز بررسی شد — افشایی یافت نشد."
+                                else "${breachedCount.fa()} رمز در نشت‌های عمومی یافت شد!"
+                            } else "فقط ۵ کاراکتر اول SHA-1 ارسال می‌شود",
+                            color = if (breachedCount > 0) c.secondary else c.onPrimaryContainer.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            maxLines = 2,
+                        )
                     }
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.onPrimaryContainer.copy(alpha = 0.14f)))
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                if (breachState.scanning) str.checkingBreaches
-                                else if (breachState.error != null) breachState.error
-                                else if (breachState.checkedCount > 0) {
-                                    if (breachedCount == 0) "${breachState.checkedCount.fa()} رمز بررسی شد — افشایی یافت نشد."
-                                    else "${breachedCount.fa()} رمز در نشت‌های عمومی یافت شد!"
-                                } else "بررسی اختیاری نشت رمز (فقط ۵ کاراکتر اول SHA-1 ارسال می‌شود)",
-                                color = if (breachedCount > 0) c.secondary else c.onPrimaryContainer.copy(alpha = 0.85f),
-                                fontSize = 12.sp,
-                                lineHeight = 18.sp,
-                            )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.End) {
+                        if (hasProblems) {
+                            Box(
+                                Modifier
+                                    .height(32.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(c.primary)
+                                    .clickable(role = Role.Button, onClick = onGoVault)
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) { Text("رفع مشکلات", color = c.onPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
                         }
                         Box(
                             Modifier
-                                .height(36.dp)
-                                .clip(RoundedCornerShape(18.dp))
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(c.surface)
                                 .clickable(enabled = !breachState.scanning, role = Role.Button, onClick = onRunBreachCheck)
-                                .padding(horizontal = 14.dp),
+                                .padding(horizontal = 12.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
