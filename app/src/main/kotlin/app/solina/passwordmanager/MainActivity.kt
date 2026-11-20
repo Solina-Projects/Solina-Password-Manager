@@ -93,6 +93,7 @@ import app.solina.passwordmanager.ui.screens.EditScreen
 import app.solina.passwordmanager.ui.screens.ExternalAccountsScreen
 import app.solina.passwordmanager.ui.screens.GeneratorScreen
 import app.solina.passwordmanager.ui.screens.HomeScreen
+import app.solina.passwordmanager.ui.screens.PinSetupScreen
 import app.solina.passwordmanager.ui.screens.RecoveryEntryScreen
 import app.solina.passwordmanager.ui.screens.RecoveryWordsScreen
 import app.solina.passwordmanager.ui.screens.ResetPasswordScreen

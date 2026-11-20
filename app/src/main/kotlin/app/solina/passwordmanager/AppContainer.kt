@@ -7,6 +7,7 @@ import android.os.Looper
 import android.os.SystemClock
 import app.solina.passwordmanager.auth.ExternalAccountManager
 import app.solina.passwordmanager.core.security.BiometricKeystore
+import app.solina.passwordmanager.core.security.PinUnlockManager
 import app.solina.passwordmanager.core.security.SecurityPrefs
 import app.solina.passwordmanager.core.security.VaultFiles
 import app.solina.passwordmanager.core.security.VaultSession
