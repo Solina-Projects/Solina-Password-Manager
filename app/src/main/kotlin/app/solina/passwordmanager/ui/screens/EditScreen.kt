@@ -168,6 +168,9 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
                     ItemKind.Card -> 1
                     ItemKind.Identity -> 2
                     ItemKind.Note -> 3
+                    // یادداشت/کار بخش جدا دارند و هرگز به این ویرایشگر نمی‌رسند.
+                    ItemKind.QuickNote -> 3
+                    ItemKind.Task -> 3
                 },
                 onSelect = {
                     kind = when (it) {
@@ -333,6 +336,9 @@ fun EditScreen(initial: ItemPayload?, isNew: Boolean, busy: Boolean, onSave: (It
                 Field(if (str.isFa) "کشور" else "Country", country, { country = it })
             }
             ItemKind.Note -> Unit
+            // یادداشت/کار بخش جدا دارند و هرگز به این ویرایشگر نمی‌رسند.
+            ItemKind.QuickNote -> Unit
+            ItemKind.Task -> Unit
         }
 
         Field(
