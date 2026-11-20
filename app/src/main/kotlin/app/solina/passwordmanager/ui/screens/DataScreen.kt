@@ -38,15 +38,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.solina.passwordmanager.ui.components.Card
-import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.backup.BackupHeaderInfo
 import app.solina.passwordmanager.core.fa
+import app.solina.passwordmanager.core.importer.ForeignCrypto
+import app.solina.passwordmanager.ui.components.Card
+import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.theme.Solina
 import app.solina.passwordmanager.ui.theme.SolinaIcons
 import kotlin.math.roundToInt
@@ -125,6 +126,9 @@ fun DataScreen(
     authCount: Int = 0,
     restoreHeaderInfo: BackupHeaderInfo? = null,
     restoreFileName: String? = null,
+    importSource: String? = null,
+    importHint: String? = null,
+    importFileName: String? = null,
     onBack: () -> Unit,
     onStartExport: () -> Unit,
     onSubmitExport: (CharArray) -> Unit,
@@ -138,6 +142,7 @@ fun DataScreen(
     val c = Solina.colors
     var pw by remember(step) { mutableStateOf("") }
     var pw2 by remember(step) { mutableStateOf("") }
+    var showPw by remember(step) { mutableStateOf(false) }
 
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
@@ -164,7 +169,7 @@ fun DataScreen(
                         Text("ورود از برنامهٔ دیگر", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         Text(
                             "بدون رمز: Bitwarden (JSON/CSV)، Aegis، 2FAS، andOTP، Raivo، Proton Pass (ZIP/JSON/CSV)، Proton Authenticator، Ente Auth (متن ساده)، Google Authenticator (کد QR انتقال)، CSV مرورگرها و گوگل، LastPass، KeePass، Dashlane، NordPass، 1Password و لینک‌های otpauth.\n" +
-                                "رمزشده (با رمز خود فایل): Aegis، 2FAS و Bitwarden. خروجی رمزشدهٔ Ente و PGP پروتون هنوز پشتیبانی نمی‌شود.\n" +
+                                "رمزشده (با رمز خود فایل): Aegis، 2FAS، Bitwarden، Proton Authenticator و andOTP (.aes). خروجی رمزشدهٔ Ente و PGP پروتون هنوز پشتیبانی نمی‌شود.\n" +
                                 "ورودی‌های عیناً تکراری اضافه نمی‌شوند.",
                             color = c.muted, fontSize = 14.sp, lineHeight = 24.sp,
                         )
@@ -183,8 +188,10 @@ fun DataScreen(
             DataStep.ExportPassword -> {
                 Header("رمز بکاپ", onBack)
                 Text("یک رمز قوی برای این بکاپ انتخاب کنید. می‌تواند با رمز اصلی فرق داشته باشد. حداقل ${MIN_BACKUP_PASSWORD} نویسه.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Field("رمز بکاپ", pw, { pw = it }, hidden = true)
-                Field("تکرار رمز بکاپ", pw2, { pw2 = it }, hidden = true)
+                Field("رمز بکاپ", pw, { pw = it }, mono = true, hidden = !showPw, trailing = {
+                    IconAction(if (showPw) SolinaIcons.EyeOff else SolinaIcons.Eye, "نمایش رمز") { showPw = !showPw }
+                })
+                Field("تکرار رمز بکاپ", pw2, { pw2 = it }, mono = true, hidden = !showPw)
                 val tooShort = pw.length in 1 until MIN_BACKUP_PASSWORD
                 val mismatch = pw2.isNotEmpty() && pw != pw2
                 if (tooShort) Text("رمز کوتاه است.", color = c.secondary, fontSize = 13.sp)
@@ -196,18 +203,43 @@ fun DataScreen(
             }
 
             DataStep.ImportPassword -> {
-                Header("ورود از فایل رمزشده", onBack)
-                Text("این فایل رمزشده است. رمزی را که هنگام خروجی گرفتن از آن برنامه انتخاب کرده بودید وارد کنید. رمز جایی ذخیره نمی‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Field("رمز فایل", pw, { pw = it }, hidden = true)
-                if (message != null) Text(message, color = c.secondary, fontSize = 14.sp, lineHeight = 24.sp)
+                Header(if (!importSource.isNullOrBlank()) "ورود از $importSource" else "ورود از فایل رمزشده", onBack)
+                if (!importSource.isNullOrBlank() || !importFileName.isNullOrBlank()) {
+                    Card(background = c.primaryContainer) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (!importSource.isNullOrBlank()) {
+                                Text("قالب شناسایی‌شده: $importSource (رمزشده)", color = c.onPrimaryContainer, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                            if (!importFileName.isNullOrBlank()) {
+                                Text("فایل: $importFileName", color = c.onPrimaryContainer, fontSize = 13.sp)
+                            }
+                            if (!importHint.isNullOrBlank()) {
+                                Text(importHint, color = c.onPrimaryContainer, fontSize = 13.sp, lineHeight = 21.sp)
+                            }
+                        }
+                    }
+                }
+                Text("رمزی را که هنگام خروجی گرفتن از این برنامه انتخاب کرده بودید وارد کنید. رمز جایی ذخیره نمی‌شود.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
+                Field("رمز فایل", pw, { pw = it }, mono = true, hidden = !showPw, trailing = {
+                    IconAction(if (showPw) SolinaIcons.EyeOff else SolinaIcons.Eye, "نمایش رمز") { showPw = !showPw }
+                })
+                if (ForeignCrypto.containsNonAsciiDigits(pw)) {
+                    Text(
+                        "توجه: صفحه‌کلید شما روی اعداد فارسی است. اگر رمزتان با اعداد انگلیسی بوده، سولینا هر دو حالت را امتحان می‌کند یا صفحه‌کلید را انگلیسی کنید.",
+                        color = c.muted, fontSize = 12.sp, lineHeight = 20.sp,
+                    )
+                }
+                if (message != null) Text(message, color = c.secondary, fontSize = 14.sp, lineHeight = 22.sp)
                 BigButton(if (busy) "در حال بازگشایی…" else "وارد کردن", enabled = !busy && pw.isNotEmpty(), busy = busy) { onSubmitImport(pw.toCharArray()) }
             }
 
             DataStep.ExportAuthPassword -> {
                 Header("بکاپ مستقل Authenticator", onBack)
                 Text("فقط حساب‌های احراز هویت (TOTP و HOTP) در این فایل با Argon2id و AES-256-GCM رمزگذاری می‌شوند. حداقل ${MIN_BACKUP_PASSWORD} نویسه.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Field("رمز بکاپ Authenticator", pw, { pw = it }, hidden = true)
-                Field("تکرار رمز بکاپ", pw2, { pw2 = it }, hidden = true)
+                Field("رمز بکاپ Authenticator", pw, { pw = it }, mono = true, hidden = !showPw, trailing = {
+                    IconAction(if (showPw) SolinaIcons.EyeOff else SolinaIcons.Eye, "نمایش رمز") { showPw = !showPw }
+                })
+                Field("تکرار رمز بکاپ", pw2, { pw2 = it }, mono = true, hidden = !showPw)
                 val tooShort = pw.length in 1 until MIN_BACKUP_PASSWORD
                 val mismatch = pw2.isNotEmpty() && pw != pw2
                 if (tooShort) Text("رمز کوتاه است.", color = c.secondary, fontSize = 13.sp)
@@ -217,6 +249,7 @@ fun DataScreen(
                     onSubmitAuthExport(pw.toCharArray())
                 }
             }
+
             DataStep.RestorePassword -> {
                 Header("بازیابی بکاپ", onBack)
                 if (restoreHeaderInfo != null) {
@@ -234,8 +267,16 @@ fun DataScreen(
                     }
                 }
                 Text("رمزی را که هنگام ساخت این بکاپ انتخاب کرده بودید وارد کنید.", color = c.muted, fontSize = 14.sp, lineHeight = 24.sp)
-                Field("رمز بکاپ", pw, { pw = it }, hidden = true)
-                if (message != null) Text(message, color = c.secondary, fontSize = 14.sp, lineHeight = 24.sp)
+                Field("رمز بکاپ", pw, { pw = it }, mono = true, hidden = !showPw, trailing = {
+                    IconAction(if (showPw) SolinaIcons.EyeOff else SolinaIcons.Eye, "نمایش رمز") { showPw = !showPw }
+                })
+                if (ForeignCrypto.containsNonAsciiDigits(pw)) {
+                    Text(
+                        "توجه: صفحه‌کلید شما روی اعداد فارسی است؛ در صورت نیاز با آیکون چشم رمز واردشده را بررسی کنید.",
+                        color = c.muted, fontSize = 12.sp, lineHeight = 20.sp,
+                    )
+                }
+                if (message != null) Text(message, color = c.secondary, fontSize = 14.sp)
                 BigButton(if (busy) "در حال بازگشایی…" else "بازیابی", enabled = !busy && pw.isNotEmpty(), busy = busy) { onSubmitRestore(pw.toCharArray()) }
             }
         }

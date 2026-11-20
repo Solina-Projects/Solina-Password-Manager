@@ -997,6 +997,9 @@ private fun MainApp(
     var pendingRestoreInfo by remember { mutableStateOf<BackupHeaderInfo?>(null) }
     var pendingRestoreFileName by remember { mutableStateOf<String?>(null) }
     var pendingImport by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingImportSource by remember { mutableStateOf<String?>(null) }
+    var pendingImportHint by remember { mutableStateOf<String?>(null) }
+    var pendingImportFileName by remember { mutableStateOf<String?>(null) }
     val resolver = activity.contentResolver
 
     fun launchExportFile(fileName: String) {
@@ -1086,15 +1089,22 @@ private fun MainApp(
                 dataStep = DataStep.RestorePassword
                 return
             }
-            val r = withContext(Dispatchers.Default) { Importers.parseBytes(bytes, password) }
+            val effectiveName = displayName ?: pendingImportFileName
+            val r = withContext(Dispatchers.Default) { Importers.parseBytes(bytes, password, effectiveName) }
             val stats = repo.importItems(r.items)
             pendingImport = null
+            pendingImportSource = null
+            pendingImportHint = null
+            pendingImportFileName = null
             dataMessage = null
             dataStep = DataStep.Menu
             toast = "${stats.added.fa()} مورد از ${r.source} وارد شد" +
                 if (stats.skipped + r.skipped > 0) " (${(stats.skipped + r.skipped).fa()} رد شد)" else ""
         } catch (e: app.solina.passwordmanager.core.importer.ImportPasswordRequired) {
             pendingImport = bytes
+            pendingImportSource = e.source
+            pendingImportHint = e.hint
+            pendingImportFileName = displayName ?: pendingImportFileName
             dataMessage = null
             dataStep = DataStep.ImportPassword
         } catch (e: app.solina.passwordmanager.core.importer.WrongImportPasswordException) {
@@ -1309,9 +1319,21 @@ private fun MainApp(
                         authCount = authItemsCount,
                         restoreHeaderInfo = pendingRestoreInfo,
                         restoreFileName = pendingRestoreFileName,
+                        importSource = pendingImportSource,
+                        importHint = pendingImportHint,
+                        importFileName = pendingImportFileName,
                         onBack = {
                             if (dataStep == DataStep.Menu) dataStep = null
-                            else { dataStep = DataStep.Menu; pendingRestore = null; pendingRestoreInfo = null; pendingRestoreFileName = null; pendingImport = null }
+                            else {
+                                dataStep = DataStep.Menu
+                                pendingRestore = null
+                                pendingRestoreInfo = null
+                                pendingRestoreFileName = null
+                                pendingImport = null
+                                pendingImportSource = null
+                                pendingImportHint = null
+                                pendingImportFileName = null
+                            }
                             dataMessage = null
                         },
                         onStartExport = { dataMessage = null; dataStep = DataStep.ExportPassword },
@@ -1389,10 +1411,11 @@ private fun MainApp(
                         onPickImport = { dataMessage = null; launchImportFile() },
                         onSubmitImport = { pw ->
                             val bytes = pendingImport
+                            val name = pendingImportFileName
                             if (bytes != null) {
                                 dataBusy = true
                                 dataMessage = null
-                                scope.launch { try { runImport(bytes, pw) } finally { dataBusy = false } }
+                                scope.launch { try { runImport(bytes, pw, name) } finally { dataBusy = false } }
                             }
                         },
                     )

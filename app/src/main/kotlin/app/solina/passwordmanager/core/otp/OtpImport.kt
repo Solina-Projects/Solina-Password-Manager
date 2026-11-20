@@ -56,20 +56,24 @@ object OtpImport {
         val afterType = rest.substringAfter('/', "")
         val label = percentDecode(afterType.substringBefore('?'), false).trim()
         val q = queryParams(afterType.substringAfter('?', ""))
-        val secret = q["secret"]?.replace(" ", "")?.uppercase() ?: return null
+        val secret = q["secret"]?.replace(" ", "")?.replace("-", "")?.trimEnd('=')?.uppercase() ?: return null
         if (Base32.decode(secret) == null) return null
 
         val labelIssuer = if (':' in label) label.substringBefore(':').trim() else ""
         val account = label.substringAfter(':').trim()
         val issuer = q["issuer"]?.trim().takeUnless { it.isNullOrEmpty() } ?: labelIssuer
-        val algo = when (q["algorithm"]?.uppercase()) {
+        val algo = when (q["algorithm"]?.uppercase()?.replace("-", "")) {
             null, "", "SHA1" -> "SHA1"
             "SHA256" -> "SHA256"
             "SHA512" -> "SHA512"
             else -> return null
         }
         val digits = (q["digits"]?.toIntOrNull() ?: 6).takeIf { it in 6..8 } ?: return null
-        val period = (q["period"]?.toIntOrNull() ?: 30).takeIf { it in 1..300 } ?: return null
+        val period = if (otpType == OtpType.HOTP) {
+            (q["period"]?.toIntOrNull() ?: 30).let { if (it in 1..300) it else 30 }
+        } else {
+            (q["period"]?.toIntOrNull() ?: 30).takeIf { it in 1..300 } ?: return null
+        }
         val counter = if (otpType == OtpType.HOTP) {
             val raw = q["counter"]?.toLongOrNull() ?: 0L
             if (raw < 0L) return null
