@@ -64,6 +64,7 @@ import app.solina.passwordmanager.core.storage.TaskRepeat
 import app.solina.passwordmanager.core.storage.VaultItem
 import app.solina.passwordmanager.ui.components.AnimatedFilterRow
 import app.solina.passwordmanager.ui.components.Card
+import app.solina.passwordmanager.ui.components.distinctById
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.Pill
 import app.solina.passwordmanager.ui.components.SIcon
@@ -291,6 +292,7 @@ private fun NotesList(
         val byTag = if (selectedTag == null) base else base.filter { TagHelper.matchesTag(it.payload, selectedTag) }
         byTag.filter { it.payload.archived == showArchived }
             .sortedWith(compareByDescending<VaultItem> { it.payload.pinned }.thenByDescending { it.payload.editedAt })
+            .distinctById("notes") { it.id }
     }
     if (filtered.isEmpty() && !showArchived) {
         Column(
@@ -387,7 +389,8 @@ private fun TasksList(
     val now = System.currentTimeMillis()
     val searched = remember(tasks, query, selectedTag) {
         val base = searchNotesTasks(emptyList(), tasks, query)
-        if (selectedTag == null) base else base.filter { TagHelper.matchesTag(it.payload, selectedTag) }
+        val list = if (selectedTag == null) base else base.filter { TagHelper.matchesTag(it.payload, selectedTag) }
+        list.distinctById("tasks") { it.id }
     }
     val views = listOf(str.viewToday, str.viewUpcoming, "${str.viewOverdue} (${overdue.fa()})")
     AnimatedFilterRow(views, view) { onView(it) }

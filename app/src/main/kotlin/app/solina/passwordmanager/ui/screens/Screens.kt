@@ -76,6 +76,7 @@ import app.solina.passwordmanager.core.storage.VaultRepository
 import app.solina.passwordmanager.ui.components.AnimatedFilterRow
 import app.solina.passwordmanager.ui.components.CLIPBOARD_CLEAR_MILLIS
 import app.solina.passwordmanager.ui.components.Card
+import app.solina.passwordmanager.ui.components.distinctById
 import app.solina.passwordmanager.ui.components.IconAction
 import app.solina.passwordmanager.ui.components.ItemAvatar
 import app.solina.passwordmanager.ui.components.Mono
@@ -571,7 +572,7 @@ fun VaultScreen(
                 p.email.contains(q, ignoreCase = true) ||
                 p.bankName.contains(q, ignoreCase = true)
             )
-    }.sortedByDescending { it.payload.favorite }
+    }.sortedByDescending { it.payload.favorite }.distinctById("vault") { it.id }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -732,11 +733,12 @@ fun TrashScreen(
             Text(str.trashTitle, color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         }
         Text(str.trashEmptyBody, color = c.muted, fontSize = 13.sp, lineHeight = 20.sp)
-        if (items.isEmpty()) {
+        val distinct = items.distinctById("trash") { it.id }
+        if (distinct.isEmpty()) {
             EmptyState(str.trashEmpty, str.trashEmptyBody)
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(items, key = { it.id }) { trashed ->
+                items(distinct, key = { it.id }) { trashed ->
                     val p = trashed.payload
                     val subtitle = when (p.kind) {
                         ItemKind.Login -> p.username.ifBlank { p.website }
@@ -1222,7 +1224,7 @@ fun CodesScreen(
         val byCat = selectedCategory == null || p.category.trim().equals(selectedCategory, ignoreCase = true)
         val byTag = selectedTag == null || TagHelper.matchesTag(p, selectedTag!!)
         byCat && byTag && (q.isEmpty() || p.title.contains(q, ignoreCase = true) || p.username.contains(q, ignoreCase = true) || p.category.contains(q, ignoreCase = true) || p.tags.any { it.contains(q, ignoreCase = true) })
-    }.sortedByDescending { it.payload.favorite }
+    }.sortedByDescending { it.payload.favorite }.distinctById("codes") { it.id }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
