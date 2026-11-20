@@ -229,8 +229,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // جلوگیری از اسکرین‌شات و نمایش محتوا در پیش‌نمایش اپ‌های اخیر.
-        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         captureOAuthIntent(intent)
         captureNotesLink(intent)
@@ -240,6 +238,15 @@ class MainActivity : FragmentActivity() {
         setContent {
             val themeMode by container.securityPrefs.themeMode.collectAsState()
             val language by container.securityPrefs.language.collectAsState()
+            val screenshotsAllowed by container.securityPrefs.screenshotsAllowed.collectAsState()
+            // اسکرین‌شات پیش‌فرض مسدود است (FLAG_SECURE)؛ کاربر از تنظیمات می‌تواند مجازش کند.
+            LaunchedEffect(screenshotsAllowed) {
+                if (screenshotsAllowed) {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                } else {
+                    window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+                }
+            }
             SolinaTheme(themeMode = themeMode, language = language) {
                 var showDiag by remember { mutableStateOf(intent.getBooleanExtra(EXTRA_SHOW_DIAGNOSTICS, false)) }
                 Box(Modifier.fillMaxSize().background(Solina.colors.bg)) {
@@ -993,6 +1000,7 @@ private fun MainApp(
     val language by container.securityPrefs.language.collectAsState()
     val pinEnabled by container.pinUnlock.pinEnabled.collectAsState()
     val autosaveEnabled by container.securityPrefs.autosaveEnabled.collectAsState()
+    val screenshotsAllowed by container.securityPrefs.screenshotsAllowed.collectAsState()
     val listDensity by container.securityPrefs.listDensity.collectAsState()
     var editing by remember { mutableStateOf(false) }
     var generator by remember { mutableStateOf(false) }
@@ -1902,6 +1910,8 @@ private fun MainApp(
                             },
                             autosaveEnabled = autosaveEnabled,
                             onSetAutosaveEnabled = { container.securityPrefs.setAutosaveEnabled(it) },
+                            screenshotsAllowed = screenshotsAllowed,
+                            onSetScreenshotsAllowed = { container.securityPrefs.setScreenshotsAllowed(it) },
                             density = listDensity,
                             onSetDensity = { container.securityPrefs.setListDensity(it) },
                             onLock = { container.session.lock() },
