@@ -393,7 +393,7 @@ private fun TasksList(
     AnimatedFilterRow(views, view) { onView(it) }
     val shown: List<VaultItem> = remember(searched, view, now) {
         when (view) {
-            1 -> tasksUpcoming(searched, now).flatten()
+            1 -> tasksUpcoming(searched, now).flatMap { it.second }
             2 -> tasksOverdue(searched, now)
             else -> tasksToday(searched, now)
         }
@@ -1030,13 +1030,13 @@ private fun TaskEditor(
                 Card(padding = 14.dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Stepper("سال", jy.toString().fa(), onMinus = { jy-- }, onPlus = { jy++ })
+                            Stepper("سال", jy.fa(), onMinus = { jy-- }, onPlus = { jy++ })
                             Stepper("ماه", JALALI_MONTHS[jm - 1], onMinus = { jm = if (jm == 1) 12 else jm - 1; if (jm == 12) jy-- }, onPlus = { jm = if (jm == 12) 1 else jm + 1; if (jm == 1) jy++ })
-                            Stepper("روز", safeJd.toString().fa(), onMinus = { jd = if (safeJd == 1) dayLen else safeJd - 1 }, onPlus = { jd = if (safeJd == dayLen) 1 else safeJd + 1 })
+                            Stepper("روز", safeJd.fa(), onMinus = { jd = if (safeJd == 1) dayLen else safeJd - 1 }, onPlus = { jd = if (safeJd == dayLen) 1 else safeJd + 1 })
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Stepper(str.dueTime + " (ساعت)", hour.toString().fa(), onMinus = { hour = if (hour == 0) 23 else hour - 1 }, onPlus = { hour = if (hour == 23) 0 else hour + 1 })
-                            Stepper("دقیقه", minute.toString().fa(), onMinus = { minute = if (minute == 0) 55 else minute - 5 }, onPlus = { minute = if (minute >= 55) 0 else minute + 5 })
+                            Stepper(str.dueTime + " (ساعت)", hour.fa(), onMinus = { hour = if (hour == 0) 23 else hour - 1 }, onPlus = { hour = if (hour == 23) 0 else hour + 1 })
+                            Stepper("دقیقه", minute.fa(), onMinus = { minute = if (minute == 0) 55 else minute - 5 }, onPlus = { minute = if (minute >= 55) 0 else minute + 5 })
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             ChipButton("امروز", false) {
