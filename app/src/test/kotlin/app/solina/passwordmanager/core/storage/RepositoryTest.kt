@@ -149,7 +149,9 @@ class RepositoryTest {
         val row = store.items[item.id]!!
         assertTrue(row.deletedAt != null); assertEquals(0, row.blob.size)
         // نسخهٔ فعلی (b) برای بازگردانی از سطل زباله در تاریخچه می‌ماند؛ blob خود tombstone خالی است.
-        assertEquals(1, store.hist.size); assertEquals("b", r.history(item.id).single().payload.title)
+        // تاریخچه دو ورودی دارد: نسخهٔ «a» (بایگانی‌شده موقع ویرایش) و نسخهٔ «b» (بایگانی‌شده موقع حذف).
+        assertEquals(2, store.hist.size)
+        assertEquals("b", r.history(item.id).first().payload.title)
         val r2 = repo(store, session); r2.load()
         assertEquals(0, r2.unreadable.value)
     }
