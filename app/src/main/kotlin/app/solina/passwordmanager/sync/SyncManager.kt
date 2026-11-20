@@ -311,7 +311,7 @@ class SyncManager(
                 _status.value = load()
                 ConnectResult.Ok
             }
-            StageJoinResult.NoVaultInFolder -> ConnectResult.NoVaultInFolder
+            StageJoinResult.NoVaultInFolder, is StageJoinResult.BackupFilesFound -> ConnectResult.NoVaultInFolder
             is StageJoinResult.Failed -> ConnectResult.Failed(r.reason)
         }
     }
