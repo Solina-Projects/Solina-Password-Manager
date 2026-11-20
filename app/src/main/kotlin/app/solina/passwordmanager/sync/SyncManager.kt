@@ -4,8 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import app.solina.passwordmanager.DiagLog
+import app.solina.passwordmanager.core.backup.AutoBackupKey
+import app.solina.passwordmanager.core.backup.Backup
 import app.solina.passwordmanager.core.crypto.AuthenticationFailedException
 import app.solina.passwordmanager.core.crypto.CorruptVaultException
+import app.solina.passwordmanager.core.crypto.KdfParams
 import app.solina.passwordmanager.core.crypto.VaultCrypto
 import app.solina.passwordmanager.core.crypto.VaultHeader
 import app.solina.passwordmanager.core.crypto.wipe
@@ -14,6 +17,7 @@ import app.solina.passwordmanager.core.security.VaultFiles
 import app.solina.passwordmanager.core.security.VaultSession
 import app.solina.passwordmanager.core.storage.ItemStore
 import app.solina.passwordmanager.core.storage.VaultRepository
+import app.solina.passwordmanager.core.sync.BackupRetention
 import app.solina.passwordmanager.core.sync.BackupSchedule
 import app.solina.passwordmanager.core.sync.BackupTrigger
 import app.solina.passwordmanager.core.sync.SyncEngine
@@ -184,6 +188,7 @@ class SyncManager(
             }
             persistFolder(uri, kind)
             _status.value = load()
+            AutoBackupScheduler.reschedule(context, _status.value.schedule, true)
             ConnectResult.Ok
         } catch (e: Exception) {
             DiagLog.logError("CONNECT", e, "connect")
@@ -218,6 +223,7 @@ class SyncManager(
                 }
                 persistWebDav(normalized, username.trim(), password)
                 _status.value = load()
+                AutoBackupScheduler.reschedule(context, _status.value.schedule, true)
                 ConnectResult.Ok
             } catch (e: Exception) {
                 DiagLog.logError("CONNECT", e, "connectWebDav")
@@ -319,6 +325,7 @@ class SyncManager(
     fun setSchedule(schedule: BackupSchedule) {
         prefs.edit().putString("schedule", schedule.name).apply()
         _status.value = _status.value.copy(schedule = schedule)
+        AutoBackupScheduler.reschedule(context, schedule, _status.value.configured)
     }
 
     suspend fun syncIfDue(trigger: BackupTrigger): StatusMessage? {
@@ -328,10 +335,51 @@ class SyncManager(
         return syncNow()
     }
 
+    /**
+     * بکاپ زمان‌بندی‌شده (از WorkManager): همگام‌سازیِ سررسید + اسنپ‌شات نسخه‌دار
+     * در پوشه/سرور. فقط وقتی خزانه باز است؛ در غیر این صورت false و بدون هیچ نوشتن‌ای.
+     */
+    suspend fun runPeriodicBackup(): Boolean {
+        val st = _status.value
+        if (!st.configured) return false
+        if (!shouldRunAutomatically(st.schedule, st.lastSyncAt, System.currentTimeMillis(), BackupTrigger.Periodic)) return false
+        val key = session.keyCopy() ?: return false
+        try {
+            if (syncNow() !is StatusMessage.Done) return false
+            return writeVersionedSnapshot(key)
+        } finally {
+            key.wipe()
+        }
+    }
+
+    /** اسنپ‌شات SLNB v1 با رمز مشتق از کلید خزانه + هرس نسخه‌های قدیمی (نگه‌داشتن ۵ نسخه). */
+    private suspend fun writeVersionedSnapshot(vaultKey: ByteArray): Boolean {
+        val remote = activeRemote() ?: return false
+        val payloads = repository().items.value.map { it.payload }
+        val password = AutoBackupKey.backupPasswordChars(vaultKey)
+        return try {
+            val header = runCatching { files.readHeader().encode() }.getOrNull()
+            val bytes = Backup.encode(payloads, password, System.currentTimeMillis(), KdfParams.DEFAULT, header)
+            val name = BackupRetention.snapshotName(System.currentTimeMillis())
+            remote.write(name, bytes)
+            val names = runCatching { remote.list() }.getOrDefault(emptyList())
+            val old = BackupRetention.selectForDeletion(names)
+            old.forEach { runCatching { remote.delete(it) } }
+            DiagLog.log("AUTOBACKUP", "snapshot $name written, pruned ${old.size}")
+            true
+        } catch (e: Exception) {
+            DiagLog.logError("AUTOBACKUP", e, "writeVersionedSnapshot")
+            false
+        } finally {
+            password.fill('\u0000')
+        }
+    }
+
     fun disconnect() {
         secrets.clearAll()
         prefs.edit().clear().apply()
         _status.value = SyncStatus()
+        AutoBackupScheduler.reschedule(context, BackupSchedule.Manual, false)
     }
 
     private suspend fun writeHeaderToRemote(remote: SyncRemote, bytes: ByteArray) {

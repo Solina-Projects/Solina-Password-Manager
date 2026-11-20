@@ -84,6 +84,7 @@ dependencies {
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.autofill)
     implementation(libs.androidx.credentials)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel)
 
     implementation(libs.androidx.room.runtime)

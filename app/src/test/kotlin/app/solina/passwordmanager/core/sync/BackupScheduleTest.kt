@@ -30,6 +30,13 @@ class BackupScheduleTest {
         assertTrue(shouldRunAutomatically(BackupSchedule.Monthly, 0, now, BackupTrigger.Unlock))
     }
 
+    @Test fun periodicTriggerFollowsScheduleLikeOtherTriggers() {
+        assertFalse(shouldRunAutomatically(BackupSchedule.Manual, 0, now, BackupTrigger.Periodic))
+        assertTrue(shouldRunAutomatically(BackupSchedule.OnChange, now, now, BackupTrigger.Periodic))
+        assertFalse(shouldRunAutomatically(BackupSchedule.Daily, now - day + 1000, now, BackupTrigger.Periodic))
+        assertTrue(shouldRunAutomatically(BackupSchedule.Daily, now - day, now, BackupTrigger.Periodic))
+    }
+
     @Test fun parseFallsBackToOnChange() {
         assertEquals(BackupSchedule.Weekly, BackupSchedule.parse("Weekly"))
         assertEquals(BackupSchedule.OnChange, BackupSchedule.parse("???"))

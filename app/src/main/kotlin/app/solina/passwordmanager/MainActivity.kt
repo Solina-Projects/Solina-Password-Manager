@@ -61,7 +61,11 @@ import app.solina.passwordmanager.core.crypto.CreatedVault
 import app.solina.passwordmanager.core.crypto.InvalidRecoveryPhraseException
 import app.solina.passwordmanager.core.crypto.VaultCrypto
 import app.solina.passwordmanager.core.crypto.VaultHeader
+import app.solina.passwordmanager.core.crypto.wipe
+import app.solina.passwordmanager.core.security.VaultSession
+import app.solina.passwordmanager.core.sync.BackupRetention
 import app.solina.passwordmanager.autofill.DomainMatcher
+import app.solina.passwordmanager.core.backup.AutoBackupKey
 import app.solina.passwordmanager.core.passkey.PasskeyGate
 import app.solina.passwordmanager.core.passkey.PasskeyResult
 import app.solina.passwordmanager.core.security.KdfCalibrator
@@ -392,6 +396,17 @@ internal fun messageForPin(result: PinResult): String? = when (result) {
     is PinResult.Wait -> "به‌خاطر تلاش‌های ناموفق، ${waitText(result.millis)} صبر کنید و دوباره امتحان کنید."
     PinResult.NoPin -> "پینی تنظیم نشده است."
     PinResult.Error -> "باز کردن با پین ممکن نشد."
+}
+
+/** رمز مشتق از کلید خزانه برای اسنپ‌شات خودکار؛ فقط وقتی خزانه باز است و فایل، اسنپ‌شات خودکار است. */
+internal fun autoSnapshotPassword(session: VaultSession, fileName: String?): CharArray? {
+    if (fileName == null || !BackupRetention.isSnapshotName(fileName)) return null
+    val key = session.keyCopy() ?: return null
+    return try {
+        AutoBackupKey.backupPasswordChars(key)
+    } finally {
+        key.wipe()
+    }
 }
 
 @Composable
@@ -1018,6 +1033,12 @@ private fun MainApp(
     }
 
     LaunchedEffect(Unit) { container.sync.syncIfDue(app.solina.passwordmanager.core.sync.BackupTrigger.Unlock) }
+    // مطمئن می‌شویم کار دوره‌ای بکاپ خودکار با زمان‌بندی فعلی هم‌خوان است
+    // (برای زمان‌بندی‌هایی که پیش از این قابلیت تنظیم شده‌اند).
+    LaunchedEffect(Unit) {
+        val st = container.sync.status.value
+        app.solina.passwordmanager.sync.AutoBackupScheduler.reschedule(activity, st.schedule, st.configured)
+    }
     LaunchedEffect(localRev) {
         if (localRev > 0) {
             delay(1500)
@@ -1490,7 +1511,22 @@ private fun MainApp(
                                 dataMessage = null
                                 scope.launch {
                                     try {
-                                        val payloads = withContext(Dispatchers.Default) { Backup.decode(bytes, pw) }
+                                        val payloads = withContext(Dispatchers.Default) {
+                                            // اسنپ‌شات خودکار: رمز آن از کلید خزانه مشتق می‌شود؛
+                                            // وقتی خزانه باز است اول با همان رمز امتحان می‌شود و
+                                            // اگر نشد، رمز واردشدهٔ کاربر (بکاپ دستی) امتحان می‌شود.
+                                            val autoPw = autoSnapshotPassword(container.session, pendingRestoreFileName)
+                                            try {
+                                                if (autoPw != null) {
+                                                    runCatching { Backup.decode(bytes, autoPw) }
+                                                        .getOrElse { Backup.decode(bytes, pw) }
+                                                } else {
+                                                    Backup.decode(bytes, pw)
+                                                }
+                                            } finally {
+                                                autoPw?.fill('\u0000')
+                                            }
+                                        }
                                         val stats = repo.importItems(payloads)
                                         pendingRestore = null
                                         pendingRestoreInfo = null

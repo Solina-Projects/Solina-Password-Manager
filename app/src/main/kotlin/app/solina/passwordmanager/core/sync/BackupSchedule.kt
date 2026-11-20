@@ -16,7 +16,7 @@ enum class BackupSchedule(val periodMillis: Long?) {
     }
 }
 
-enum class BackupTrigger { Unlock, Change }
+enum class BackupTrigger { Unlock, Change, Periodic }
 
 /** آیا اجرای خودکار الان لازم است؟ lastAt = زمان آخرین همگام‌سازی موفق (۰ = هرگز). */
 fun shouldRunAutomatically(schedule: BackupSchedule, lastAt: Long, now: Long, trigger: BackupTrigger): Boolean {
