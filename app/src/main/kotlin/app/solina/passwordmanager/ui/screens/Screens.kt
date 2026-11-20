@@ -251,11 +251,12 @@ fun HomeScreen(
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(str.vaultHealth, color = c.onPrimaryContainer.copy(alpha = 0.8f), fontSize = 13.sp)
                             Text(
-                                if (report.weak == 0 && report.reused == 0 && report.insecureHttp == 0 && report.oldPasswords == 0 && breachedCount == 0) {
+                                if (report.weak == 0 && report.reused == 0 && report.insecureHttp == 0 && report.oldPasswords == 0 && report.commonPasswords == 0 && breachedCount == 0) {
                                     "رمز ضعیف، تکراری، قدیمی یا نشانی ناامن ندارید."
                                 } else {
                                     buildString {
                                         append("${report.reused.fa()} رمز تکراری و ${report.weak.fa()} رمز ضعیف")
+                                        if (report.commonPasswords > 0) append(" و ${report.commonPasswords.fa()} رمز خیلی رایج")
                                         if (report.oldPasswords > 0) append(" و ${report.oldPasswords.fa()} رمز قدیمی")
                                         if (report.insecureHttp > 0) append(" و ${report.insecureHttp.fa()} نشانی HTTP ناامن")
                                         if (breachedCount > 0) append(" و ${breachedCount.fa()} رمز افشاشده")
@@ -267,7 +268,7 @@ fun HomeScreen(
                                 fontWeight = FontWeight.Medium,
                                 lineHeight = 24.sp,
                             )
-                            if (report.weak > 0 || report.reused > 0 || report.insecureHttp > 0 || report.oldPasswords > 0 || breachedCount > 0) {
+                            if (report.weak > 0 || report.reused > 0 || report.insecureHttp > 0 || report.oldPasswords > 0 || report.commonPasswords > 0 || breachedCount > 0) {
                                 Box(
                                     Modifier
                                         .height(38.dp)
@@ -446,6 +447,7 @@ private fun ItemRow(item: VaultItem, flags: Set<Flag>, breached: Boolean = false
         }
         when {
             breached -> Pill(str.breachedBadge, c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
+            Flag.Common in flags -> Pill("رایج", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
             Flag.Weak in flags -> Pill("ضعیف", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
             Flag.Reused in flags -> Pill("تکراری", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Copy)
             Flag.InsecureHttp in flags -> Pill("HTTP", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
@@ -487,7 +489,7 @@ fun VaultScreen(
             2 -> p.kind == ItemKind.Card
             3 -> p.kind == ItemKind.Identity
             4 -> p.kind == ItemKind.Note
-            5 -> Flag.Weak in flags || Flag.Reused in flags || Flag.InsecureHttp in flags || Flag.Old in flags || breached
+            5 -> Flag.Weak in flags || Flag.Reused in flags || Flag.InsecureHttp in flags || Flag.Old in flags || Flag.Common in flags || breached
             else -> true
         }
         val byCat = selectedCategory == null || p.category.trim().equals(selectedCategory, ignoreCase = true)

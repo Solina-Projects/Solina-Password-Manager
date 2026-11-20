@@ -1,8 +1,9 @@
 package app.solina.passwordmanager.core.storage
 
 import app.solina.passwordmanager.core.PasswordGenerator
+import app.solina.passwordmanager.core.security.CommonPasswords
 
-enum class Flag { Weak, Reused, NoTwoFa, InsecureHttp, Old }
+enum class Flag { Weak, Reused, NoTwoFa, InsecureHttp, Old, Common }
 
 data class SecurityReport(
     val flags: Map<String, Set<Flag>>,
@@ -13,6 +14,8 @@ data class SecurityReport(
     val withoutTotp: Int,
     val insecureHttp: Int = 0,
     val oldPasswords: Int = 0,
+    /** تعداد رمزهایی که در فهرست آفلاین رمزهای رایج هستند (فاز ۴). */
+    val commonPasswords: Int = 0,
 )
 
 /** تحلیل محلی؛ هیچ داده‌ای جایی ارسال نمی‌شود. */
@@ -37,12 +40,19 @@ object SecurityAnalyzer {
         var noTotp = 0
         var insecureHttp = 0
         var oldPasswords = 0
+        var commonPasswords = 0
         var clean = 0
         for (i in logins) {
             val f = mutableSetOf<Flag>()
             if (PasswordGenerator.effectiveBits(i.payload.password) < WEAK_BITS) {
                 f += Flag.Weak
                 weak++
+            }
+            // رمز رایج (فاز ۴): بررسی آفلاین با فهرست داخلی؛ رمز هرگز از دستگاه خارج نمی‌شود.
+            // دلیل جدا از Weak نگه داشته شده تا کاربر بداند مشکل «رایج‌بودن» است نه کوتاهی/سادگی.
+            if (CommonPasswords.isCommon(i.payload.password)) {
+                f += Flag.Common
+                commonPasswords++
             }
             if ((counts[i.payload.password] ?: 0) > 1) {
                 f += Flag.Reused
@@ -62,10 +72,11 @@ object SecurityAnalyzer {
                 oldPasswords++
             }
             // نبود 2FA و HTTP هشدار هستند؛ امتیاز اصلی ضعف و تکرار رمز را می‌سنجد.
-            if (Flag.Weak !in f && Flag.Reused !in f) clean++
+            // رمز رایج هم مثل ضعف و تکرار، امتیاز را کم می‌کند.
+            if (Flag.Weak !in f && Flag.Reused !in f && Flag.Common !in f) clean++
             if (f.isNotEmpty()) flags[i.id] = f
         }
         val score = if (logins.isEmpty()) 100 else (clean * 100) / logins.size
-        return SecurityReport(flags, score, weak, reused, noTotp, insecureHttp, oldPasswords)
+        return SecurityReport(flags, score, weak, reused, noTotp, insecureHttp, oldPasswords, commonPasswords)
     }
 }
