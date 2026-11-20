@@ -994,6 +994,7 @@ private fun MainApp(
 
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showSecrets by rememberSaveable { mutableStateOf(false) }
     val autoLock by container.securityPrefs.autoLock.collectAsState()
     val clipboardClear by container.securityPrefs.clipboardClear.collectAsState()
     val themeMode by container.securityPrefs.themeMode.collectAsState()
@@ -1676,6 +1677,8 @@ private fun MainApp(
                         },
                         onToast = { toast = it },
                         clipboardClearMillis = clipboardClear.millis,
+                        startShown = showSecrets,
+                        onGoCodes = { detailId = null; tab = Tab.Codes },
                         passkeySupported = PasskeyGate.isSupported(),
                         onCreatePasskey = {
                             val currentItem = detailItem ?: return@DetailScreen
@@ -1734,6 +1737,8 @@ private fun MainApp(
                             onGoGenerator = { generator = true },
                             onAdd = { detailId = null; prefill = null; editing = true },
                             onScan = { scanning = true },
+                            showSecrets = showSecrets,
+                            onToggleShowSecrets = { showSecrets = !showSecrets },
                         )
                         Tab.Vault -> VaultScreen(
                             items = items,
@@ -1745,6 +1750,8 @@ private fun MainApp(
                             onOpenItem = { detailId = it },
                             onAdd = { detailId = null; prefill = null; editing = true },
                             density = listDensity,
+                            showSecrets = showSecrets,
+                            onToggleShowSecrets = { showSecrets = !showSecrets },
                         )
                         Tab.Codes -> CodesScreen(
                             items = items,
@@ -1763,6 +1770,8 @@ private fun MainApp(
                             onBackupAuth = { dataMessage = null; dataStep = DataStep.ExportAuthPassword },
                             clipboardClearMillis = clipboardClear.millis,
                             density = listDensity,
+                            showSecrets = showSecrets,
+                            onToggleShowSecrets = { showSecrets = !showSecrets },
                         )
                         Tab.NotesTasks -> NotesTasksScreen(
                             items = items,
