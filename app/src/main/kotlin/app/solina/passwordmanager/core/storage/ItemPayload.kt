@@ -127,6 +127,25 @@ data class ItemPayload(
     /** فیلدهای سفارشی (فاز ۴) — برای همهٔ نوع‌های ورودی؛ داخل blob رمز می‌شوند. */
     val customFields: List<CustomField> = emptyList(),
 ) {
+    /**
+     * «فقط‌کد»: فقط راز OTP دارد و هیچ دادهٔ خزانه‌ای ندارد (نه رمز، نه وب‌سایت،
+     * نه کارت، نه هویت، نه یادداشت امن، نه فیلد سفارشی، نه پس‌کی).
+     * ورودی‌های ایمپورت‌شده از Aegis/2FAS/andOTP دقیقاً همین شکل‌اند (kind=Login،
+     * فقط title/username + totpSecret). چنین ورودی‌ای متعلق به بخش «کدها» است و
+     * هرگز نباید در فهرست، جست‌وجو یا جزئیات خزانه دیده شود.
+     */
+    fun isCodeOnly(): Boolean {
+        if (totpSecret.isBlank()) return false
+        if (password.isNotBlank() || website.isNotBlank() || cardNumber.isNotBlank() || bankName.isNotBlank()
+            || cardHolder.isNotBlank() || cardExpiry.isNotBlank() || cardCvv.isNotBlank() || cardPin.isNotBlank()
+            || fullName.isNotBlank() || email.isNotBlank() || phone.isNotBlank() || nationalId.isNotBlank()
+            || address.isNotBlank() || city.isNotBlank() || postalCode.isNotBlank() || country.isNotBlank()
+            || company.isNotBlank() || body.isNotBlank() || customFields.isNotEmpty() || passkeys.isNotEmpty()
+        ) return false
+        if (kind == ItemKind.Note && note.isNotBlank()) return false
+        return true
+    }
+
     fun toBytes(): ByteArray {
         val o = JSONObject()
         o.put("kind", kind.code)

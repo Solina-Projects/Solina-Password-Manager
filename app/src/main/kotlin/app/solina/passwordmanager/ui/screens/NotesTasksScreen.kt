@@ -104,6 +104,10 @@ fun NotesTasksScreen(
     items: List<VaultItem>,
     overdue: Int,
     newNoteSignal: Int,
+    openNoteId: String? = null,
+    openTaskId: String? = null,
+    onOpenNoteConsumed: () -> Unit = {},
+    onOpenTaskConsumed: () -> Unit = {},
     history: List<HistoryEntry>,
     onRequestHistory: (String) -> Unit,
     onRestoreHistory: (String, HistoryEntry) -> Unit,
@@ -146,6 +150,22 @@ fun NotesTasksScreen(
             creatingNote = true
             editingNoteId = null
         }
+    }
+
+    // بازکردن یادداشت/کار از کارت «اخیر» خانه.
+    LaunchedEffect(openNoteId) {
+        val id = openNoteId ?: return@LaunchedEffect
+        subTab = 0
+        editingNoteId = id
+        creatingNote = false
+        onOpenNoteConsumed()
+    }
+    LaunchedEffect(openTaskId) {
+        val id = openTaskId ?: return@LaunchedEffect
+        subTab = 1
+        editingTaskId = id
+        creatingTask = false
+        onOpenTaskConsumed()
     }
 
     val editingNote = editingNoteId?.let { id -> notes.firstOrNull { it.id == id } }

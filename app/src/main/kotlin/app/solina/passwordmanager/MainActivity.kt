@@ -81,6 +81,7 @@ import app.solina.passwordmanager.core.otp.OtpImport
 import app.solina.passwordmanager.core.storage.HistoryEntry
 import app.solina.passwordmanager.core.storage.ItemPayload
 import app.solina.passwordmanager.core.storage.SecurityAnalyzer
+import app.solina.passwordmanager.core.storage.VaultItem
 import app.solina.passwordmanager.sync.ConnectResult
 import app.solina.passwordmanager.sync.StageJoinResult
 import app.solina.passwordmanager.sync.StagedJoin
@@ -1304,6 +1305,26 @@ private fun MainApp(
     // ── یادداشت و کارها (فاز ۳) ──
     var noteHistory by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
     var newNoteSignal by remember { mutableStateOf(0) }
+    // بازکردن یادداشت/کار از کارت «اخیر» خانه (سیگنال یک‌بارمصرف، مثل newNoteSignal).
+    var openNoteId by remember { mutableStateOf<String?>(null) }
+    var openTaskId by remember { mutableStateOf<String?>(null) }
+    // تغییر وضعیت انجام کار — هم در تب «یادداشت و کارها» هم در کارت کار در «اخیر» خانه.
+    val toggleDone: (VaultItem) -> Unit = { item ->
+        scope.launch {
+            val (done, next) = completeTask(item, System.currentTimeMillis())
+            runCatching { repo.update(item.id, done) }
+            if (next != null) {
+                val created = repo.add(next)
+                if (created.payload.dueAt > 0) {
+                    TaskReminderScheduler.scheduleOneTime(activity, created.id, created.payload.dueAt)
+                }
+                toast = "انجام شد؛ نسخهٔ بعدی ساخته شد"
+            } else {
+                TaskReminderScheduler.cancel(activity, item.id)
+                toast = "انجام شد"
+            }
+        }
+    }
     val notesLink by activity.notesLink.collectAsState()
     val overdueNotes = remember(items) {
         overdueCount(items.filter { it.payload.kind == ItemKind.Task }, System.currentTimeMillis())
@@ -1783,6 +1804,11 @@ private fun MainApp(
                             onScan = { scanning = true },
                             showSecrets = showSecrets,
                             onToggleShowSecrets = { showSecrets = !showSecrets },
+                            clipboardClearMillis = clipboardClear.millis,
+                            onToast = { toast = it },
+                            onOpenNote = { tab = Tab.NotesTasks; openNoteId = it },
+                            onOpenTask = { tab = Tab.NotesTasks; openTaskId = it },
+                            onToggleDone = toggleDone,
                         )
                         Tab.Vault -> VaultScreen(
                             items = items,
@@ -1821,6 +1847,10 @@ private fun MainApp(
                             items = items,
                             overdue = overdueNotes,
                             newNoteSignal = newNoteSignal,
+                            openNoteId = openNoteId,
+                            openTaskId = openTaskId,
+                            onOpenNoteConsumed = { openNoteId = null },
+                            onOpenTaskConsumed = { openTaskId = null },
                             history = noteHistory,
                             onRequestHistory = { id ->
                                 scope.launch { noteHistory = runCatching { repo.history(id) }.getOrDefault(emptyList()) }
@@ -1858,22 +1888,7 @@ private fun MainApp(
                                     toast = "به سطل زباله رفت"
                                 }
                             },
-                            onToggleDone = { item ->
-                                scope.launch {
-                                    val (done, next) = completeTask(item, System.currentTimeMillis())
-                                    runCatching { repo.update(item.id, done) }
-                                    if (next != null) {
-                                        val created = repo.add(next)
-                                        if (created.payload.dueAt > 0) {
-                                            TaskReminderScheduler.scheduleOneTime(activity, created.id, created.payload.dueAt)
-                                        }
-                                        toast = "انجام شد؛ نسخهٔ بعدی ساخته شد"
-                                    } else {
-                                        TaskReminderScheduler.cancel(activity, item.id)
-                                        toast = "انجام شد"
-                                    }
-                                }
-                            },
+                            onToggleDone = toggleDone,
                             onSnoozeTask = { item, dueAt ->
                                 scope.launch {
                                     runCatching { repo.update(item.id, item.payload.copy(dueAt = dueAt)) }

@@ -1,6 +1,7 @@
 package app.solina.passwordmanager.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -213,14 +215,19 @@ fun HomeScreen(
     onScan: () -> Unit,
     showSecrets: Boolean = false,
     onToggleShowSecrets: () -> Unit = {},
+    clipboardClearMillis: Long = CLIPBOARD_CLEAR_MILLIS,
+    onToast: (String) -> Unit = {},
+    onOpenNote: (String) -> Unit = {},
+    onOpenTask: (String) -> Unit = {},
+    onToggleDone: (VaultItem) -> Unit = {},
 ) {
     val c = Solina.colors
     val str = Solina.strings
     val now = rememberNow()
     val withTotp = items.filter { secretBytes(it.payload) != null }
-    // «اخیر» فقط ورودی‌های خزانه است؛ یادداشت/کار تب خودشان را دارند.
-    val recent = items.filter { it.payload.kind != ItemKind.QuickNote && it.payload.kind != ItemKind.Task }
-        .sortedByDescending { it.payload.editedAt }.take(3)
+    var revealedRecentIds by remember { mutableStateOf(setOf<String>()) }
+    // «اخیر»: تازه‌ترین ورودی‌های هر چهار بخش، هر کدام با کارت اختصاصی خودش.
+    val recent = items.sortedByDescending { it.payload.editedAt }.take(6)
     val breachedCount = breachState.breachedIds.size
 
     Column(
@@ -375,19 +382,223 @@ fun HomeScreen(
                 QuickAction("اسکن QR", SolinaIcons.Qr, c.container, c.text, Modifier.weight(1f), onScan)
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("اخیر", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 6.dp))
                 recent.forEach { item ->
-                    ItemRow(
-                        item = item,
-                        flags = report.flags[item.id].orEmpty(),
-                        breached = item.id in breachState.breachedIds,
-                        onClick = { onOpenItem(item.id) },
-                    )
+                    val p = item.payload
+                    when {
+                        p.totpSecret.isNotBlank() -> RecentCodeCard(
+                            item = item,
+                            now = now,
+                            revealed = showSecrets || item.id in revealedRecentIds,
+                            onReveal = { revealedRecentIds = revealedRecentIds + item.id },
+                            clipboardClearMillis = clipboardClearMillis,
+                            onToast = onToast,
+                        )
+                        p.kind == ItemKind.QuickNote -> RecentNoteCard(item = item, onClick = { onOpenNote(item.id) })
+                        p.kind == ItemKind.Task -> RecentTaskCard(item = item, now = now, onToggleDone = { onToggleDone(item) }, onClick = { onOpenTask(item.id) })
+                        else -> RecentVaultCard(
+                            item = item,
+                            flags = report.flags[item.id].orEmpty(),
+                            breached = item.id in breachState.breachedIds,
+                            onClick = { onOpenItem(item.id) },
+                        )
+                    }
                 }
             }
         }
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+// ───────────────────────── کارت‌های «اخیر» خانه ─────────────────────────
+// هر دسته کارت اختصاصی خودش را دارد: خزانه (نام سرویس + نام کاربری، بدون هیچ
+// اطلاعات کدی)، کدها (نام + کد فعلی + نوار شمارش معکوس)، یادداشت‌ها (عنوان +
+// خلاصه + تاریخ) و کارها (وضعیت انجام + عنوان + موعد).
+
+/** نوار شمارش معکوس اعتبار کد؛ کسر باقی‌مانده از ساعت دیواری حساب می‌شود، پس با بازسازی UI از اول شروع نمی‌شود. */
+@Composable
+private fun CountdownBar(modifier: Modifier, remainingMillis: Long, periodSeconds: Int, accent: Color, track: Color) {
+    val fraction = (remainingMillis.toFloat() / (periodSeconds * 1000f)).coerceIn(0f, 1f)
+    Box(modifier.height(6.dp).clip(RoundedCornerShape(3.dp)).background(track)) {
+        Box(Modifier.fillMaxWidth(fraction).height(6.dp).clip(RoundedCornerShape(3.dp)).background(accent))
+    }
+}
+
+/** کارت خزانه در «اخیر»: نام سرویس + نام کاربری؛ هیچ اطلاعات کدی نشان نمی‌دهد. */
+@Composable
+private fun RecentVaultCard(item: VaultItem, flags: Set<Flag>, breached: Boolean, onClick: () -> Unit) {
+    val c = Solina.colors
+    val str = Solina.strings
+    val p = item.payload
+    val subtitle = when (p.kind) {
+        ItemKind.Login -> p.username.ifBlank { p.website }
+        ItemKind.Card -> if (p.cardNumber.length >= 4) "•••• " + p.cardNumber.takeLast(4) else p.bankName.ifBlank { str.kindCard }
+        ItemKind.Identity -> p.fullName.ifBlank { p.email.ifBlank { p.phone.ifBlank { str.kindIdentity } } }
+        ItemKind.Note -> p.category.ifBlank { "یادداشت امن" }
+        ItemKind.QuickNote -> p.category.ifBlank { "یادداشت سریع" }
+        ItemKind.Task -> if (p.dueAt > 0) formatJalali(p.dueAt) else str.noDueDate
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(c.surface)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (p.icon.isNotBlank()) {
+                Box(Modifier.size(40.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) {
+                    Text(p.icon, fontSize = 18.sp)
+                }
+            } else {
+                when (p.kind) {
+                    ItemKind.Card -> Box(Modifier.size(40.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Card, c.text) }
+                    ItemKind.Identity -> Box(Modifier.size(40.dp).clip(CircleShape).background(c.primaryContainer), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Shield, c.onPrimaryContainer) }
+                    ItemKind.Note -> Box(Modifier.size(40.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
+                    ItemKind.QuickNote -> Box(Modifier.size(40.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Note, c.text) }
+                    ItemKind.Task -> Box(Modifier.size(40.dp).clip(CircleShape).background(c.container), contentAlignment = Alignment.Center) { SIcon(SolinaIcons.Checklist, c.text) }
+                    ItemKind.Login -> ItemAvatar(p.title.ifBlank { "?" }, 40.dp, website = p.website)
+                }
+            }
+            if (p.favorite) Text("★", color = c.primary, fontSize = 13.sp)
+            if (breached) Pill(str.breachedBadge, c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
+            else if (Flag.Weak in flags || Flag.Common in flags) Pill("!", c.secondaryContainer, c.onSecondaryContainer, SolinaIcons.Warning)
+            Spacer(Modifier.weight(1f))
+            Pill("خزانه", c.primaryContainer, c.onPrimaryContainer)
+        }
+        Text(p.title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        if (subtitle.isNotBlank()) Text(subtitle, color = c.muted, fontSize = 12.sp, fontFamily = Mono, textAlign = TextAlign.Left, maxLines = 1)
+    }
+}
+
+/** کارت کد در «اخیر»: نام سرویس + کد فعلی + نوار شمارش معکوس. لمس: نمایش/کپی کد. */
+@Composable
+private fun RecentCodeCard(
+    item: VaultItem,
+    now: Long,
+    revealed: Boolean,
+    onReveal: () -> Unit,
+    clipboardClearMillis: Long,
+    onToast: (String) -> Unit,
+) {
+    val c = Solina.colors
+    val ctx = LocalContext.current
+    val p = item.payload
+    val code = codeFor(p, now) ?: return
+    val isHotp = p.otpType == OtpType.HOTP
+    val left = if (isHotp) 30_000L else Totp.remainingMillis(now, p.totpPeriod)
+    val urgent = !isHotp && left <= 5000
+    val accent = if (urgent) c.secondary else c.primary
+    val masked = Totp.group("•".repeat(p.totpDigits))
+    val copy = { copySensitive(ctx, "otp", code, clipboardClearMillis); onToast("کد ${p.title} کپی شد") }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (urgent) c.secondaryContainer else c.surface)
+            .clickable(
+                role = Role.Button,
+                onClickLabel = if (revealed) "کپی کد ${p.title}" else "نمایش کد ${p.title}",
+            ) { if (revealed) copy() else onReveal() }
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (p.icon.isNotBlank()) Text(p.icon, fontSize = 16.sp)
+            Text(p.title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
+            Pill("کد", c.secondaryContainer, c.onSecondaryContainer)
+            IconAction(SolinaIcons.Copy, "کپی کد ${p.title}", tint = c.muted) { copy() }
+        }
+        if (p.username.isNotBlank()) Text(p.username, color = c.muted, fontSize = 13.sp, fontFamily = Mono, textAlign = TextAlign.Left, maxLines = 1)
+        if (revealed) {
+            RollingTotpCode(code, accent, 26.sp, letterSpacing = 2.sp, modifier = Modifier.fillMaxWidth())
+        } else {
+            Text(masked, color = accent, fontFamily = Mono, fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, textAlign = TextAlign.Left, modifier = Modifier.fillMaxWidth())
+            Text("برای نمایش، روی کد بزنید", color = c.muted, fontSize = 12.sp)
+        }
+        if (isHotp) {
+            Text("HOTP · شمارنده: ${p.totpCounter.toInt().fa()}", color = c.muted, fontSize = 12.sp)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CountdownBar(Modifier.weight(1f), left, p.totpPeriod, accent, accent.copy(alpha = 0.2f))
+                Text("${faSecondsLeft(now, p.totpPeriod)} ثانیه", color = c.muted, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+/** کارت یادداشت در «اخیر»: عنوان + خلاصهٔ متن + تاریخ ویرایش. */
+@Composable
+private fun RecentNoteCard(item: VaultItem, onClick: () -> Unit) {
+    val c = Solina.colors
+    val p = item.payload
+    val title = p.title.ifBlank { p.body.lineSequence().firstOrNull()?.trim().orEmpty().ifBlank { "یادداشت" } }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(c.surface)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            SIcon(SolinaIcons.Note, c.text, 18.dp)
+            Text(title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
+            Pill("یادداشت", c.container, c.muted)
+        }
+        if (p.body.isNotBlank()) Text(p.body, color = c.muted, fontSize = 13.sp, lineHeight = 20.sp, maxLines = 2)
+        Text(formatJalali(p.editedAt), color = c.muted, fontSize = 12.sp)
+    }
+}
+
+/** کارت کار در «اخیر»: وضعیت انجام + عنوان + موعد. */
+@Composable
+private fun RecentTaskCard(item: VaultItem, now: Long, onToggleDone: () -> Unit, onClick: () -> Unit) {
+    val c = Solina.colors
+    val p = item.payload
+    val overdue = !p.done && p.dueAt > 0 && p.dueAt < now
+    val dueText = when {
+        p.dueAt <= 0 -> "بدون مهلت"
+        overdue -> "سررسید گذشته · ${formatJalali(p.dueAt)}"
+        else -> formatJalali(p.dueAt)
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(c.surface)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier
+                .size(30.dp)
+                .clip(CircleShape)
+                .background(if (p.done) c.primary else c.container)
+                .border(1.5.dp, if (p.done) c.primary else c.divider, CircleShape)
+                .clickable(role = Role.Checkbox) { onToggleDone() },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (p.done) SIcon(SolinaIcons.Check, c.onPrimary, 16.dp)
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                p.title.ifBlank { "کار بدون عنوان" },
+                color = if (p.done) c.muted else c.text,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                textDecoration = if (p.done) TextDecoration.LineThrough else null,
+            )
+            Text(dueText, color = if (overdue) c.secondary else c.muted, fontSize = 12.sp)
+        }
+        Pill("کار", c.container, c.muted)
     }
 }
 
@@ -548,6 +759,8 @@ fun VaultScreen(
         val p = item.payload
         // یادداشت/کار بخش «یادداشت و کارها» تب جداگانه دارند و اینجا نشان داده نمی‌شوند.
         if (p.kind == ItemKind.QuickNote || p.kind == ItemKind.Task) return@filter false
+        // ورودی «فقط‌کد» (مثل ایمپورت Aegis) متعلق به بخش «کدها» است، نه خزانه.
+        if (p.isCodeOnly()) return@filter false
         val flags = report.flags[item.id].orEmpty()
         val breached = item.id in breachState.breachedIds
         val byFilter = when (filter) {
@@ -1133,7 +1346,8 @@ fun DetailScreen(
                             Column(Modifier.weight(1f)) {
                                 Text("ویرایش ${h.rev.toInt().fa()} · ${formatJalali(h.payload.editedAt)}", color = c.muted, fontSize = 12.sp)
                                 Text(h.payload.title, color = c.text, fontSize = 14.sp)
-                                val changed = HistoryDiff.diffFields(h.payload, p)
+                                // تاریخچهٔ کد در خزانه نمایش داده نمی‌شود (تفکیک خزانه/کدها).
+                                val changed = HistoryDiff.diffFields(h.payload, p).filter { it != ChangedField.Totp }
                                 if (changed.isNotEmpty()) {
                                     Text(
                                         (if (str.isFa) "تغییرات: " else "Changed: ") + changed.joinToString(if (str.isFa) "، " else ", ") { changedFieldLabel(it, str.isFa) },
