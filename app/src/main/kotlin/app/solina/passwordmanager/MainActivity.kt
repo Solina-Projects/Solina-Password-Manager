@@ -303,11 +303,9 @@ private fun hasFolderPicker(activity: FragmentActivity): Boolean {
     return activity.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) != null
 }
 
-/**
- * ساخت Intent انتخاب فایل برای هر پسوند (از جمله ‎.slnb‎).
- * نکته: افزودن ‎EXTRA_MIME_TYPES = arrayOf("*/*")‎ روی برخی رام‌های اندروید (MIUI/OneUI/EMUI)
- * باعث غیرفعال شدن فایل‌های با پسوند ناشناخته مانند ‎.slnb‎ می‌شود؛ بنابراین فقط ‎setType("*/*")‎ تنظیم می‌شود.
- */
+// ساخت Intent انتخاب فایل برای هر پسوند (از جمله .slnb).
+// افزودن EXTRA_MIME_TYPES با wildcard روی برخی رام‌های اندروید (MIUI/OneUI/EMUI)
+// باعث غیرفعال شدن فایل‌های با پسوند ناشناخته مانند .slnb می‌شود؛ بنابراین فقط setType تنظیم می‌شود.
 @Suppress("DEPRECATION")
 private fun buildOpenAnyFileIntent(activity: FragmentActivity): Intent {
     val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT)
