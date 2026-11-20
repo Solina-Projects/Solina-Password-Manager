@@ -90,6 +90,10 @@ class SecurityPrefs(context: Context) {
     private val _listDensity = MutableStateFlow(ListDensity.parse(prefs.getString("list_density", null)))
     val listDensity: StateFlow<ListDensity> = _listDensity.asStateFlow()
 
+    /** آنبوردینگ اولین اجرا دیده شده است (فقط نصب تازه، فقط یک‌بار). */
+    private val _onboardingDone = MutableStateFlow(prefs.getBoolean("onboarding_done", false))
+    val onboardingDone: StateFlow<Boolean> = _onboardingDone.asStateFlow()
+
     fun autoLockMillis(): Long = _autoLock.value.millis
     fun clipboardClearMillis(): Long = _clipboardClear.value.millis
 
@@ -128,6 +132,11 @@ class SecurityPrefs(context: Context) {
         _listDensity.value = density
     }
 
+    fun setOnboardingDone(done: Boolean) {
+        prefs.edit().putBoolean("onboarding_done", done).apply()
+        _onboardingDone.value = done
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
         _autoLock.value = AutoLockOption.OneMinute
@@ -137,5 +146,6 @@ class SecurityPrefs(context: Context) {
         _autosaveEnabled.value = true
         _screenshotsAllowed.value = false
         _listDensity.value = ListDensity.Normal
+        _onboardingDone.value = false
     }
 }
