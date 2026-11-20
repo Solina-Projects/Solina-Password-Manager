@@ -94,8 +94,10 @@ class VaultRepository(
 
     /** ثبت اینکه برای این کار یادآوری فرستاده شد (تا دوباره تکرار نشود). */
     suspend fun markTaskNotified(id: String, at: Long) {
-        val due = _items.value.firstOrNull { it.id == id }?.payload?.dueAt ?: return
-        store.saveTaskDue(id, due, at)
+        // عمداً از فهرست حافظه خوانده نمی‌شود: وقتی خزانه قفل است آن فهرست خالی است،
+        // ولی یادآور دقیقاً در همان حالت باید بتواند علامت بزند.
+        val due = store.allTaskDues().firstOrNull { it.id == id } ?: return
+        store.saveTaskDue(id, due.dueAt, at)
     }
 
     /** هم‌خوان‌کردن یک ورودی با جدول موعد: فقط کار ناتمامِ دارای موعد ردیف دارد. */
