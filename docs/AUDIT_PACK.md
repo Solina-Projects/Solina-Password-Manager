@@ -1,4 +1,4 @@
-# بستهٔ ممیزی Solina — AUDIT_PACK
+# بستهٔ ممیزی Solina Refuge — AUDIT_PACK
 
 > **وضعیت: پیش‌آلفا؛ بازبینی مستقل انجام نشده است.** این سند بسته‌ای است که یک
 > بازبین بیرونی برای شروع بررسی لازم دارد — نه گزارش ممیزی و نه تأیید امنیت.
@@ -19,7 +19,7 @@
 | مجوز | GPL-3.0 (فایل `LICENSE`) |
 | اندازهٔ کد | ۷۱ فایل Kotlin در یک ماژول (سبک و تک‌ماژوله، عمدی) |
 | تست | ۲۶۵ تست واحد در CI، ۰ خطا (سرشاخهٔ `10fb3ba`، ران Build شمارهٔ 44715910190) |
-| مخزن | https://github.com/Solina-Projects/Solina-Password-Manager |
+| مخزن | https://github.com/Solina-Projects/Solina Solina-Refuge |
 
 **ساختار محصول — سه ستون:** (۱) رمزها: ورود، کارت بانکی، هویت، یادداشت امن، فیلد سفارشی؛
 (۲) کد دومرحله‌ای: TOTP/HOTP (با QR و ایمپورت `otpauth`) + ذخیره‌سازی Passkey (فراخوانی
@@ -133,7 +133,7 @@ gradle :app:assembleDebug        # نیازمند Gradle 8.10.2 و Java 17
 ## ۹. نقشهٔ فایل برای بازبین
 
 ```
-app/src/main/kotlin/app/solina/passwordmanager/
+app/src/main/kotlin/app/solina/refuge/
 ├── core/crypto/     Primitives.kt, Vault.kt, Bip39.kt, AttachmentCrypto.kt, MultiVaultDesign.kt
 ├── core/auth/       قفل، PIN، بیومتریک، قفل خودکار
 ├── core/storage/    RoomStore.kt, ItemPayload.kt, SecurityAnalyzer.kt, HistoryDiff
@@ -144,6 +144,6 @@ app/src/main/kotlin/app/solina/passwordmanager/
 ├── core/notes/      یادداشت و کارها (فاز ۳)
 ├── core/importer/   CSV/JSON/Aegis/2FAS/andOTP/Raivo/maFile
 ├── core/otp/        TOTP/HOTP (RFC 6238/4226)
-├── autofill/        SolinaAutofillService, AutofillLogic (ضد فیشینگ)
+├── autofill/        RefugeAutofillService, AutofillLogic (ضد فیشینگ)
 └── ui/              Compose، ویجت یادداشت سریع
 ```

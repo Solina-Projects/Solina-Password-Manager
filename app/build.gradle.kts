@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "app.solina.passwordmanager"
+    namespace = "app.solina.refuge"
     compileSdk = 35
 
     defaultConfig {

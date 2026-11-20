@@ -1,20 +1,20 @@
 # معماری سیستم Solina Refuge (Phase 2)
 
-Solina با معماری لایه‌ای (**Clean Architecture + MVVM**) طراحی شده است تا هستهٔ رمزنگاری و منطق دامنه کاملاً مستقل از Android Framework و UI باقی بمانند و روی JVM به‌سرعت تست شوند.
+Solina Refuge با معماری لایه‌ای (**Clean Architecture + MVVM**) طراحی شده است تا هستهٔ رمزنگاری و منطق دامنه کاملاً مستقل از Android Framework و UI باقی بمانند و روی JVM به‌سرعت تست شوند.
 
 ## ۱. لایه‌های معماری
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │ Presentation Layer (Jetpack Compose + Material 3 + MVVM)             │
-│  • SolinaViewModel (StateFlow UI state orchestration)                │
+│  • RefugeViewModel (StateFlow UI state orchestration)                │
 │  • Bilingual i18n (Persian RTL / English LTR)                        │
 │  • Themes: System / Light / Dark / Pure-Black AMOLED                 │
 │  • Screens: Home, Vault, Codes (TOTP/HOTP), Generator, Detail, Edit, │
 │             Data/Backup, External Accounts, Sync/WebDAV, Settings    │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Android Platform & Services Layer                                    │
-│  • Autofill: SolinaAutofillService (Inline API 30+ & Dropdown),      │
+│  • Autofill: RefugeAutofillService (Inline API 30+ & Dropdown),      │
 │              AutofillParser, TrustedBrowsers, AutofillAuthActivity   │
 │  • Auth/OAuth: ExternalAccountManager (Google OIDC & GitHub OAuth    │
 │                2.0 + PKCE, Keystore-encrypted local state)           │
@@ -31,7 +31,7 @@ Solina با معماری لایه‌ای (**Clean Architecture + MVVM**) طرا�
 │  • Backup & Importers: .slnb v1 + pre-restore inspect(), 15+ formats │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Persistence Layer (Room SQLite + Atomic Files)                       │
-│  • SolinaDatabase (PRAGMA secure_delete = ON, VACUUM on wipe)        │
+│  • RefugeDatabase (PRAGMA secure_delete = ON, VACUUM on wipe)        │
 │  • VaultFiles (Atomic write + fsync for vault.hdr & unlock.state)    │
 └──────────────────────────────────────────────────────────────────────┘
 ```

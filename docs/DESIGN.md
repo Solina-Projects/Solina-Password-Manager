@@ -1,4 +1,4 @@
-# طراحی رابط و تجربهٔ کاربری Solina
+# طراحی رابط و تجربهٔ کاربری Solina Refuge
 
 نسخهٔ سند: 0.1 · وضعیت: پیشنهاد برای بازبینی (قبل از ساخت `:core:designsystem`)
 
@@ -167,7 +167,7 @@
 
 ## ۱۲. کامپوننت‌های `:core:designsystem`
 
-`SolinaTheme` (روشن/تیره/AMOLED/Dynamic) · `SolinaTopBar` · `SolinaSearchBar` · `VaultItemRow` · `ItemAvatar` · `SecretField` (مخفی/نمایش/کپی/LTR) · `PasswordStrengthMeter` · `TotpCard` + `TotpRing` · `ScoreRing` · `SecurityBanner` · `EmptyState` · `ConfirmSheet` · `RecoveryWordGrid` · `ColoredPasswordText` · `SettingsRow`.
+`RefugeTheme` (روشن/تیره/AMOLED/Dynamic) · `RefugeTopBar` · `RefugeSearchBar` · `VaultItemRow` · `ItemAvatar` · `SecretField` (مخفی/نمایش/کپی/LTR) · `PasswordStrengthMeter` · `TotpCard` + `TotpRing` · `ScoreRing` · `SecurityBanner` · `EmptyState` · `ConfirmSheet` · `RecoveryWordGrid` · `ColoredPasswordText` · `SettingsRow`.
 
 هر کامپوننت: پیش‌نمایش Compose (روشن/تیره/RTL/فونت بزرگ) و تست اسکرین‌شات.
 

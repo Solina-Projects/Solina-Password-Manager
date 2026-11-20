@@ -1,4 +1,4 @@
-# BouncyCastle Argon2id / SCrypt classes used directly by Solina
+# BouncyCastle Argon2id / SCrypt classes used directly by Solina Refuge
 -keep class org.bouncycastle.crypto.generators.Argon2BytesGenerator { *; }
 -keep class org.bouncycastle.crypto.generators.SCrypt { *; }
 -keep class org.bouncycastle.crypto.generators.PKCS5S2ParametersGenerator { *; }

@@ -6,14 +6,14 @@
 
 مجوز مخزن **Solina Refuge**: **GNU GPL v3.0** (`LICENSE`).
 
-| پروژهٔ مرجع | مخزن | مجوز رسمی (SPDX) | سازگاری با GPL-3.0 در Solina | رویکرد مهندسی در Solina |
+| پروژهٔ مرجع | مخزن | مجوز رسمی (SPDX) | سازگاری با GPL-3.0 در Solina Refuge | رویکرد مهندسی در Solina Refuge |
 |---|---|---|---|---|
 | **Bitwarden Android** | `bitwarden/android` | `GPL-3.0` | سازگار با حفظ copyleft | الگوبرداری از معماری Autofill، Inline Suggestions، تفکیک Vault/Authenticator و سیاست‌های Zero-Knowledge |
 | **Proton Pass Android** | `ProtonPass/android-pass` | `GPL-3.0` | سازگار با حفظ copyleft | الگوبرداری از مدل چندنوعی خزانه (Login/Card/Identity/Note)، تجربهٔ کاربری مدرن Compose و همگام‌سازی آفلاین-محور |
 | **Ente** | `ente-io/ente` | `AGPL-3.0` | **ناسازگار برای کپی مستقیم** در پروژهٔ صرفاً GPL-3.0 | **پیاده‌سازی کاملاً مستقل (Clean-Room)** با الهام از طراحی Zero-Knowledge، کلید خزانهٔ مستقل از رمز اصلی و عبارت بازیابی ۲۴ کلمه‌ای |
 | **Aegis Authenticator** | `beemdevelopment/Aegis` | `GPL-3.0` | سازگار با حفظ copyleft | الگوبرداری از پشتیبانی کامل TOTP/HOTP، شمارش معکوس، گروه‌بندی، ایمپورت/اکسپورت رمزنگاری‌شده و پشتیبانی از فرمت‌های استاندارد |
 
-> **اصل کلیدی حقوقی و فنی:** هیچ فایل یا کد کپی‌شدهٔ مستقیمی از پروژه‌های مرجع وارد Solina نشده است؛ تمام ماژول‌ها به‌صورت مستقل و بومی (Clean-Room Kotlin) متناسب با معماری یکپارچهٔ Solina نوشته و با بردارهای رسمی RFC (RFC 9106، RFC 5869، RFC 6238، RFC 4226، RFC 7636) تست شده‌اند.
+> **اصل کلیدی حقوقی و فنی:** هیچ فایل یا کد کپی‌شدهٔ مستقیمی از پروژه‌های مرجع وارد Solina Refuge نشده است؛ تمام ماژول‌ها به‌صورت مستقل و بومی (Clean-Room Kotlin) متناسب با معماری یکپارچهٔ Solina Refuge نوشته و با بردارهای رسمی RFC (RFC 9106، RFC 5869، RFC 6238، RFC 4226، RFC 7636) تست شده‌اند.
 
 ## ۲. قابلیت‌ها و الگوهای استخراج‌شده از هر مرجع
 

@@ -1,4 +1,4 @@
-# مدل تهدید Solina (نسخهٔ فاز ۵ — شاخهٔ `audit/security-hardening`)
+# مدل تهدید Solina Refuge (نسخهٔ فاز ۵ — شاخهٔ `audit/security-hardening`)
 
 > وضعیت: **بازبینی مستقل انجام نشده است.** این سند صادقانه می‌گوید چه چیزی محافظت می‌شود، با چه مکانیزمی، و کجا محافظت نمی‌شود.
 > هر ادعایی که تست خودکار دارد با نام تست مشخص شده است.
@@ -42,7 +42,7 @@
 | بررسی افشای رمز (Breach Check) | پروتکل اختیاری k-Anonymity (HaveIBeenPwned v3 با `Add-Padding: true`)؛ فقط ۵ کاراکتر اول SHA-1 روی HTTPS ارسال می‌شود | `BreachCheckerTest` |
 | فهرست آفلاین رمزهای رایج (فاز ۴) | ~۳۷۰ رمز عمومی (NordPass Top 200 سال ۲۰۲۴ + بالای SecLists)؛ بررسی کاملاً محلی، هیچ رمزی از دستگاه خارج نمی‌شود | `CommonPasswordsTest` |
 | قفل با PIN (فاز ۲) | مشتق جداگانهٔ Argon2id با salt جدا + HKDF با info جدا؛ فقط VK را باز می‌کند؛ blob با Keystore رمز می‌شود؛ پس از ۵ تلاش ناموفق پاک می‌شود | `PinUnlockTest` |
-| Passkey (فاز ۲) | رکوردها داخل blob رمز می‌نشینند؛ فراخوانی زنده پشت پرچم `LIVE_ENABLED = false` است چون Solina دامنه و Digital Asset Links ندارد | `PasskeyTest` |
+| Passkey (فاز ۲) | رکوردها داخل blob رمز می‌نشینند؛ فراخوانی زنده پشت پرچم `LIVE_ENABLED = false` است چون Solina Refuge دامنه و Digital Asset Links ندارد | `PasskeyTest` |
 | یادداشت و کارها (فاز ۳) | متن و عنوان داخل blob رمز؛ فقط `dueAt` به‌صورت زمانِ خالی آشکار است؛ اعلان در حالت قفل فقط پیام کلی نشان می‌دهد، هرگز عنوان کار | `NotesTasksTest` |
 | سطل زباله (فاز ۱) | حذف با `deletedAt` نگه داشته می‌شود و نسخهٔ فعلی در تاریخچه بایگانی می‌شود؛ حذف خودکار بعد از ۹۰ روز | `TrashTest` |
 | اتصال حساب خارجی (Google / GitHub) | OAuth 2.0 + PKCE (`S256`, RFC 7636) با `state`/`nonce` ضد CSRF؛ هیچ رمز یا کلید خزانه به ارائه‌دهنده ارسال نمی‌شود؛ ذخیره در Keystore | `OAuthPkceTest` |
