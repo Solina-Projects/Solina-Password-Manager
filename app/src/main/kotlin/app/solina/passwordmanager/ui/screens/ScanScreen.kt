@@ -57,6 +57,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * اسکن QR. دوربین فقط وقتی این صفحه باز است روشن است و هیچ تصویری ذخیره یا ارسال نمی‌شود.
  * [onResult] فقط یک‌بار با متن QR صدا زده می‌شود.
+ *
+ * اسکن کارت بانکی (فاز ۴، آیتم ۵) عمداً اضافه نشده است: خواندن شمارهٔ کارت از عکس
+ * نیاز به OCR دارد و در پروژه فقط ZXing هست (بارکد/QR می‌خواند، OCR ندارد)؛
+ * ML Kit Text Recognition هم یک وابستگیِ جدید گوگل است (مدل همراه یا سرویس)، نه
+ * «روش فعلیِ بدون ML Kit». پس تا وقتی OCR آفلاین و سبک انتخاب نشود، اسکن کارت نمی‌آید.
  */
 @Composable
 fun ScanScreen(activity: MainActivity, onResult: (String) -> Unit, onCancel: () -> Unit, onToast: (String) -> Unit) {
