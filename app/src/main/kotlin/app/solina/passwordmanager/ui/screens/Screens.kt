@@ -500,28 +500,27 @@ private fun RecentCodeCard(
                 role = Role.Button,
                 onClickLabel = if (revealed) "کپی کد ${p.title}" else "نمایش کد ${p.title}",
             ) { if (revealed) copy() else onReveal() }
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (p.icon.isNotBlank()) Text(p.icon, fontSize = 16.sp)
-            Text(p.title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(p.title, color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
             Pill("کد", c.secondaryContainer, c.onSecondaryContainer)
             IconAction(SolinaIcons.Copy, "کپی کد ${p.title}", tint = c.muted) { copy() }
         }
-        if (p.username.isNotBlank()) Text(p.username, color = c.muted, fontSize = 13.sp, fontFamily = Mono, textAlign = TextAlign.Left, maxLines = 1)
+        if (p.username.isNotBlank()) Text(p.username, color = c.muted, fontSize = 12.sp, fontFamily = Mono, textAlign = TextAlign.Left, maxLines = 1)
         if (revealed) {
-            RollingTotpCode(code, accent, 26.sp, letterSpacing = 2.sp, modifier = Modifier.fillMaxWidth())
+            RollingTotpCode(code, accent, 20.sp, letterSpacing = 2.sp, modifier = Modifier.fillMaxWidth())
         } else {
-            Text(masked, color = accent, fontFamily = Mono, fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, textAlign = TextAlign.Left, modifier = Modifier.fillMaxWidth())
-            Text("برای نمایش، روی کد بزنید", color = c.muted, fontSize = 12.sp)
+            Text(masked, color = accent, fontFamily = Mono, fontSize = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, textAlign = TextAlign.Left, modifier = Modifier.fillMaxWidth())
         }
         if (isHotp) {
-            Text("HOTP · شمارنده: ${p.totpCounter.toInt().fa()}", color = c.muted, fontSize = 12.sp)
+            Text("HOTP · شمارنده: ${p.totpCounter.toInt().fa()}", color = c.muted, fontSize = 11.sp)
         } else {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CountdownBar(Modifier.weight(1f), left, p.totpPeriod, accent, accent.copy(alpha = 0.2f))
-                Text("${faSecondsLeft(now, p.totpPeriod)} ثانیه", color = c.muted, fontSize = 12.sp)
+                Text("${faSecondsLeft(now, p.totpPeriod)} ثانیه", color = c.muted, fontSize = 11.sp)
             }
         }
     }
@@ -1546,64 +1545,65 @@ fun CodesScreen(
                                 revealedIds = revealedIds + item.id
                             }
                         }
-                        .padding(if (density == ListDensity.Compact) 10.dp else 16.dp),
+                        .padding(if (density == ListDensity.Compact) 8.dp else 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (p.icon.isNotBlank()) Text(p.icon, fontSize = 16.sp)
-                            Text(p.title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text(p.title, color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                             if (p.category.isNotBlank()) Pill(p.category, c.container, c.muted)
                         }
-                        if (p.username.isNotBlank()) Text(p.username, color = c.muted, fontSize = 13.sp, fontFamily = Mono, textAlign = TextAlign.Left)
+                        if (p.username.isNotBlank()) Text(p.username, color = c.muted, fontSize = 12.sp, fontFamily = Mono, textAlign = TextAlign.Left)
                         if (revealed) {
-                            RollingTotpCode(code, accent, if (density == ListDensity.Compact) 26.sp else 32.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 4.dp))
+                            RollingTotpCode(code, accent, if (density == ListDensity.Compact) 22.sp else 26.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 4.dp))
                         } else {
                             Text(
                                 masked,
                                 color = accent,
                                 fontFamily = Mono,
-                                fontSize = if (density == ListDensity.Compact) 26.sp else 32.sp,
+                                fontSize = if (density == ListDensity.Compact) 22.sp else 26.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 2.sp,
                                 textAlign = TextAlign.Left,
                                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                             )
-                            Text("برای نمایش، روی کد بزنید", color = c.muted, fontSize = 12.sp)
                         }
                         if (urgent) {
                             Text(
                                 "بعدی: " + if (revealed) Totp.group(codeFor(p, now, p.totpPeriod * 1000L).orEmpty()) else masked,
                                 color = c.onSecondaryContainer,
                                 fontFamily = Mono,
-                                fontSize = 14.sp,
+                                fontSize = 12.sp,
                                 textAlign = TextAlign.Left,
                             )
                         } else if (isHotp) {
-                            Text("HOTP · ${str.counterLabel}: ${p.totpCounter.toInt().fa()}", color = c.muted, fontSize = 12.sp)
+                            Text("HOTP · ${str.counterLabel}: ${p.totpCounter.toInt().fa()}", color = c.muted, fontSize = 11.sp)
                         }
                     }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (isHotp) {
                             Box(
                                 Modifier
-                                    .size(48.dp)
+                                    .size(if (density == ListDensity.Compact) 36.dp else 40.dp)
                                     .clip(CircleShape)
                                     .background(c.primaryContainer)
                                     .clickable(role = Role.Button, onClickLabel = str.nextHotpCode) { onIncrementHotp(item) },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text("+1", color = c.onPrimaryContainer, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text("+1", color = c.onPrimaryContainer, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         } else {
-                            TotpRing(left, p.totpPeriod, 52.dp, faSecondsLeft(now, p.totpPeriod), accent, accent.copy(alpha = 0.2f), c.text)
+                            TotpRing(left, p.totpPeriod, if (density == ListDensity.Compact) 36.dp else 44.dp, faSecondsLeft(now, p.totpPeriod), accent, accent.copy(alpha = 0.2f), c.text)
                         }
-                        IconAction(SolinaIcons.Copy, "کپی کد ${p.title}", tint = c.muted) {
-                            copySensitive(ctx, "otp", code, clipboardClearMillis)
-                            onToast("کد ${p.title} کپی شد")
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            IconAction(SolinaIcons.Copy, "کپی کد ${p.title}", tint = c.muted) {
+                                copySensitive(ctx, "otp", code, clipboardClearMillis)
+                                onToast("کد ${p.title} کپی شد")
+                            }
+                            IconAction(SolinaIcons.Edit, "جزئیات و ویرایش ${p.title}", tint = c.muted) { onOpenItem(item.id) }
                         }
-                        IconAction(SolinaIcons.Edit, "جزئیات و ویرایش ${p.title}", tint = c.muted) { onOpenItem(item.id) }
                     }
                 }
             }
