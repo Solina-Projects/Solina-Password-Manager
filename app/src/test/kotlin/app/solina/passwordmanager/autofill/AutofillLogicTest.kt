@@ -76,6 +76,15 @@ class AutofillLogicTest {
         assertTrue(DomainMatcher.isSafeWebOrigin("http", "127.0.0.1"))
     }
 
+    @Test fun favoritesComeFirstInSuggestions() {
+        val items = listOf(
+            VaultItem("1", 1, ItemPayload(title = "A", website = "github.com", username = "u", password = "p")),
+            VaultItem("2", 1, ItemPayload(title = "B", website = "github.com", username = "u", password = "p", favorite = true)),
+            VaultItem("3", 1, ItemPayload(title = "C", website = "github.com", username = "u", password = "p")),
+        )
+        assertEquals(listOf("2", "1", "3"), AutofillMatcher.match(items, "github.com", null).map { it.id })
+    }
+
     @Test fun trustedBrowserAllowlistBlocksSpoofingApps() {
         assertTrue(TrustedBrowsers.isTrusted("com.android.chrome"))
         assertTrue(TrustedBrowsers.isTrusted("org.mozilla.firefox"))

@@ -124,12 +124,14 @@ object AutofillMatcher {
      */
     fun match(items: List<VaultItem>, webHost: String?, packageName: String?): List<VaultItem> {
         val all = logins(items)
+        // علاقه‌مندی‌ها اول (مرتب‌سازی پایدار: ترتیب بقیه حفظ می‌شود).
+        val ranked = all.sortedWith(compareByDescending { it.payload.favorite })
         if (!webHost.isNullOrBlank()) {
-            return all.filter { DomainMatcher.hostMatches(it.payload.website, webHost) }.take(MAX_SUGGESTIONS)
+            return ranked.filter { DomainMatcher.hostMatches(it.payload.website, webHost) }.take(MAX_SUGGESTIONS)
         }
         val parts = packageName.orEmpty().lowercase().split('.').filter { it.length >= 4 && it !in GENERIC }
         if (parts.isEmpty()) return emptyList()
-        return all.filter { i ->
+        return ranked.filter { i ->
             val hay = (i.payload.title + " " + i.payload.website).lowercase()
             parts.any { hay.contains(it) }
         }.take(MAX_SUGGESTIONS)
